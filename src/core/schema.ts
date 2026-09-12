@@ -58,4 +58,6 @@ export const exercises = sqliteTable('exercises', {
   name: text('name').notNull(),
   trackingType: text('tracking_type', { enum: trackingTypes }).notNull(),
   muscleGroup: text('muscle_group', { enum: muscleGroups }).notNull(),
+  // Defaults to built-in, so rows inserted by library migrations are protected.
+  isCustom: integer('is_custom', { mode: 'boolean' }).notNull().default(false),
 });

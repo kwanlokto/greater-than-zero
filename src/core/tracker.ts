@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -13,6 +13,7 @@ import {
 export { schema };
 export {
   muscleGroups,
+  trackingTypes,
   weightUnits,
   type MuscleGroup,
   type TrackingType,
@@ -27,6 +28,7 @@ export type Exercise = {
   name: string;
   trackingType: TrackingType;
   muscleGroup: MuscleGroup;
+  isCustom: boolean;
 };
 
 export type ExerciseSearch = {
@@ -36,7 +38,44 @@ export type ExerciseSearch = {
   muscleGroup?: MuscleGroup;
 };
 
+export type NewExercise = {
+  name: string;
+  trackingType: TrackingType;
+  muscleGroup: MuscleGroup;
+};
+
+// The tracking type is fixed once an Exercise is created.
+export type ExerciseChanges = {
+  name: string;
+  muscleGroup: MuscleGroup;
+};
+
+const exerciseColumns = {
+  id: exercises.id,
+  name: exercises.name,
+  trackingType: exercises.trackingType,
+  muscleGroup: exercises.muscleGroup,
+  isCustom: exercises.isCustom,
+};
+
+function exerciseName(typed: string): string {
+  const name = typed.trim();
+  if (!name) throw new Error('An Exercise needs a name');
+  return name;
+}
+
 export function createTracker(db: TrackerDatabase) {
+  // Built-in Exercises are shared across installs and Backup files, so only
+  // custom ones may change.
+  async function changeCustomExercise(id: string, values: Partial<typeof exercises.$inferInsert>) {
+    const changed = await db
+      .update(exercises)
+      .set(values)
+      .where(and(eq(exercises.id, id), eq(exercises.isCustom, true)))
+      .returning({ id: exercises.id });
+    if (changed.length === 0) throw new Error('Only custom Exercises can be changed');
+  }
+
   return {
     async getDisplayUnit(): Promise<WeightUnit> {
       const [row] = await db.select({ displayUnit: settings.displayUnit }).from(settings);
@@ -51,20 +90,41 @@ export function createTracker(db: TrackerDatabase) {
       const words = query.toLowerCase().replace(/-/g, '').split(/\s+/).filter(Boolean);
       const searchableName = sql`replace(lower(${exercises.name}), '-', '')`;
       return db
-        .select({
-          id: exercises.id,
-          name: exercises.name,
-          trackingType: exercises.trackingType,
-          muscleGroup: exercises.muscleGroup,
-        })
+        .select(exerciseColumns)
         .from(exercises)
         .where(
           and(
+            isNull(exercises.deletedAt),
             ...words.map(word => sql`instr(${searchableName}, ${word}) > 0`),
             muscleGroup && eq(exercises.muscleGroup, muscleGroup),
           ),
         )
-        .orderBy(asc(exercises.name));
+        .orderBy(sql`${exercises.name} COLLATE NOCASE`);
+    },
+
+    async createExercise(exercise: NewExercise): Promise<Exercise> {
+      const [created] = await db
+        .insert(exercises)
+        .values({ ...exercise, name: exerciseName(exercise.name), isCustom: true })
+        .returning(exerciseColumns);
+      return created;
+    },
+
+    async editExercise(id: string, changes: ExerciseChanges): Promise<void> {
+      await changeCustomExercise(id, {
+        name: exerciseName(changes.name),
+        muscleGroup: changes.muscleGroup,
+      });
+    },
+
+    // Hidden Exercises leave the library but keep their rows for history.
+    async hideExercise(id: string): Promise<void> {
+      await changeCustomExercise(id, { deletedAt: new Date() });
+    },
+
+    async getExercise(id: string): Promise<Exercise | undefined> {
+      const [exercise] = await db.select(exerciseColumns).from(exercises).where(eq(exercises.id, id));
+      return exercise;
     },
   };
 }

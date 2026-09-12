@@ -60,13 +60,19 @@ describe('Exercise library', () => {
     expect(names(found).slice(0, 3)).toEqual(['Ab Wheel Rollout', 'Barbell Curl', 'Barbell Row']);
   });
 
-  it('describes each Exercise by its name, tracking type and main muscle group', async () => {
+  it('describes each built-in Exercise by its name, tracking type and main muscle group', async () => {
     const tracker = createTracker(createTestDatabase());
 
     const found = await tracker.searchExercises({ query: 'pull-up' });
 
     expect(found).toEqual([
-      { id: expect.any(String), name: 'Pull-up', trackingType: 'bodyweight', muscleGroup: 'back' },
+      {
+        id: expect.any(String),
+        name: 'Pull-up',
+        trackingType: 'bodyweight',
+        muscleGroup: 'back',
+        isCustom: false,
+      },
     ]);
   });
 

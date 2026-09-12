@@ -1,52 +1,26 @@
-import { useTheme } from 'expo-router';
-import { useEffect, useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Link, Stack, useTheme } from 'expo-router';
+import { useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import {
-  muscleGroups,
-  type Exercise,
-  type MuscleGroup,
-  type TrackingType,
-} from '@/core/tracker';
+import { Chip } from '@/components/chip';
+import { muscleGroups, type Exercise, type MuscleGroup } from '@/core/tracker';
 import { tracker } from '@/database';
-
-const muscleGroupLabels: Record<MuscleGroup, string> = {
-  chest: 'Chest',
-  back: 'Back',
-  shoulders: 'Shoulders',
-  biceps: 'Biceps',
-  triceps: 'Triceps',
-  quads: 'Quads',
-  hamstrings: 'Hamstrings',
-  glutes: 'Glutes',
-  calves: 'Calves',
-  core: 'Core',
-};
-
-const trackingTypeLabels: Record<TrackingType, string> = {
-  weighted: 'Weighted',
-  bodyweight: 'Bodyweight',
-};
+import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
+import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function ExerciseLibraryScreen() {
   const { colors } = useTheme();
   const [query, setQuery] = useState('');
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>();
-  const [exercises, setExercises] = useState<Exercise[]>();
-
-  useEffect(() => {
-    // Ignore results that arrive after a newer search has started.
-    let current = true;
-    tracker.searchExercises({ query, muscleGroup }).then(found => {
-      if (current) setExercises(found);
-    });
-    return () => {
-      current = false;
-    };
-  }, [query, muscleGroup]);
+  const exercises = useTrackerQuery(
+    () => tracker.searchExercises({ query, muscleGroup }),
+    [query, muscleGroup],
+  );
 
   return (
     <View style={styles.container}>
+      <Stack.Screen options={{ headerRight: () => <AddExerciseButton /> }} />
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -65,13 +39,13 @@ export default function ExerciseLibraryScreen() {
         style={styles.filterBar}
         contentContainerStyle={styles.filters}
       >
-        <FilterChip
+        <Chip
           label="All"
           selected={muscleGroup === undefined}
           onPress={() => setMuscleGroup(undefined)}
         />
         {muscleGroups.map(group => (
-          <FilterChip
+          <Chip
             key={group}
             label={muscleGroupLabels[group]}
             selected={group === muscleGroup}
@@ -84,14 +58,7 @@ export default function ExerciseLibraryScreen() {
         keyExtractor={exercise => exercise.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
-        renderItem={({ item }) => (
-          <View style={[styles.row, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.name, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.details, { color: colors.text }]}>
-              {muscleGroupLabels[item.muscleGroup]} · {trackingTypeLabels[item.trackingType]}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => <ExerciseRow exercise={item} />}
         ListEmptyComponent={
           exercises && (
             <Text style={[styles.empty, { color: colors.text }]}>No exercises match.</Text>
@@ -102,32 +69,48 @@ export default function ExerciseLibraryScreen() {
   );
 }
 
-type FilterChipProps = {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-};
+// Custom Exercises open for editing; built-in ones can't be changed.
+function ExerciseRow({ exercise }: { exercise: Exercise }) {
+  const { colors } = useTheme();
+  const details = [
+    muscleGroupLabels[exercise.muscleGroup],
+    trackingTypeLabels[exercise.trackingType],
+    exercise.isCustom && 'Custom',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
-function FilterChip({ label, selected, onPress }: FilterChipProps) {
+  const content = (
+    <>
+      <View style={styles.rowText}>
+        <Text style={[styles.name, { color: colors.text }]}>{exercise.name}</Text>
+        <Text style={[styles.details, { color: colors.text }]}>{details}</Text>
+      </View>
+      {exercise.isCustom && <Ionicons name="chevron-forward" size={18} color={colors.text} />}
+    </>
+  );
+
+  const rowStyle = [styles.row, { borderBottomColor: colors.border }];
+  if (!exercise.isCustom) return <View style={rowStyle}>{content}</View>;
+
+  return (
+    <Link href={{ pathname: '/exercises/[id]', params: { id: exercise.id } }} asChild>
+      <Pressable accessibilityRole="button" style={rowStyle}>
+        {content}
+      </Pressable>
+    </Link>
+  );
+}
+
+function AddExerciseButton() {
   const { colors } = useTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[
-        styles.chip,
-        {
-          borderColor: selected ? colors.primary : colors.border,
-          backgroundColor: selected ? colors.primary : 'transparent',
-        },
-      ]}
-    >
-      <Text style={[styles.chipLabel, { color: selected ? '#ffffff' : colors.text }]}>
-        {label}
-      </Text>
-    </Pressable>
+    <Link href="/exercises/new" asChild>
+      <Pressable accessibilityLabel="Add exercise" hitSlop={12} style={styles.addButton}>
+        <Ionicons name="add" size={28} color={colors.text} />
+      </Pressable>
+    </Link>
   );
 }
 
@@ -152,20 +135,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  chip: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  chipLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rowText: {
+    flex: 1,
   },
   name: {
     fontSize: 16,
@@ -179,5 +157,8 @@ const styles = StyleSheet.create({
     padding: 24,
     textAlign: 'center',
     opacity: 0.7,
+  },
+  addButton: {
+    marginRight: 8,
   },
 });

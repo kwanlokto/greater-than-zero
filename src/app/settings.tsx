@@ -1,32 +1,22 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, useTheme } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { UnitPicker } from '@/components/unit-picker';
-import type { WeightUnit } from '@/core/tracker';
 import { tracker } from '@/database';
+import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
-  const [displayUnit, setDisplayUnit] = useState<WeightUnit>();
-
-  useEffect(() => {
-    tracker.getDisplayUnit().then(setDisplayUnit);
-  }, []);
-
-  async function changeDisplayUnit(unit: WeightUnit) {
-    await tracker.setDisplayUnit(unit);
-    setDisplayUnit(unit);
-  }
+  const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
   return (
     <View style={styles.container}>
       <View style={styles.section}>
         <Text style={[styles.heading, { color: colors.text }]}>Display unit</Text>
-        <UnitPicker value={displayUnit} onChange={changeDisplayUnit} />
+        <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
       </View>
-      <Link href="/exercise-library" asChild>
+      <Link href="/exercises" asChild>
         <Pressable
           accessibilityRole="button"
           style={[styles.linkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
