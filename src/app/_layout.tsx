@@ -1,5 +1,5 @@
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -12,7 +12,7 @@ import migrations from '../../drizzle/migrations';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const theme = useColorScheme() === 'dark' ? DarkTheme : DefaultTheme;
   const migration = useMigrations(database, migrations);
   const [onboarded, setOnboarded] = useState<boolean>();
 
@@ -34,11 +34,11 @@ export default function RootLayout() {
   }
 
   // Nothing reads the database until its migrations have been applied.
-  if (migration.error) return <MigrationFailed error={migration.error} />;
+  if (migration.error) return <MigrationFailed error={migration.error} theme={theme} />;
   if (!ready) return null;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={theme}>
       <FinishOnboardingContext value={finishOnboarding}>
         <Stack>
           <Stack.Protected guard={onboarded}>
@@ -55,11 +55,14 @@ export default function RootLayout() {
   );
 }
 
-function MigrationFailed({ error }: { error: Error }) {
+function MigrationFailed({ error, theme }: { error: Error; theme: Theme }) {
+  const { colors } = theme;
+
   return (
-    <View style={styles.error}>
-      <Text style={styles.errorTitle}>Couldn't open your data</Text>
-      <Text>{error.message}</Text>
+    <View style={[styles.error, { backgroundColor: colors.background }]}>
+      <Text style={[styles.errorTitle, { color: colors.text }]}>Couldn't open your data</Text>
+      <Text style={{ color: colors.text }}>{error.message}</Text>
+      <StatusBar style="auto" />
     </View>
   );
 }
@@ -70,7 +73,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
     gap: 8,
-    backgroundColor: '#ffffff',
   },
   errorTitle: {
     fontSize: 18,

@@ -3,8 +3,9 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 const nowMs = sql`(CAST(unixepoch('subsec') * 1000 AS INTEGER))`;
 
-// Every table spreads these in. IDs and timestamps default inside SQLite, so the
-// same rules apply in the app, in Node tests and in hand-written SQL migrations.
+// Every table spreads these in. IDs and timestamps default inside SQLite, so rows
+// inserted by hand-written SQL migrations get them too. Drizzle bumps updated_at
+// on update; a hand-written SQL UPDATE must set it itself.
 const rowColumns = {
   // Random (version 4) UUID.
   id: text('id')

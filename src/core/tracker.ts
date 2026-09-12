@@ -3,12 +3,11 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 import * as schema from './schema';
 import { settings, type WeightUnit } from './schema';
 
+export { schema };
 export { weightUnits, type WeightUnit } from './schema';
 
 // Drizzle over expo-sqlite in the app, over better-sqlite3 in tests.
 export type TrackerDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
-
-export type Tracker = ReturnType<typeof createTracker>;
 
 export function createTracker(db: TrackerDatabase) {
   return {
