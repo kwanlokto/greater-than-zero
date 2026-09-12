@@ -4,21 +4,15 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Chip } from '@/components/chip';
 import { OptionPicker } from '@/components/option-picker';
-import { muscleGroups, trackingTypes, type MuscleGroup, type TrackingType } from '@/core/tracker';
+import { muscleGroups, trackingTypes, type NewExercise, type TrackingType } from '@/core/tracker';
 import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
 
-export type ExerciseFormValues = {
-  name: string;
-  trackingType: TrackingType;
-  muscleGroup: MuscleGroup;
-};
-
 type Props = {
-  initial: Partial<ExerciseFormValues>;
+  initial: Partial<NewExercise>;
   // Once an Exercise exists its tracking type can't change.
   trackingTypeFixed?: boolean;
   submitLabel: string;
-  onSubmit: (values: ExerciseFormValues) => Promise<void>;
+  onSubmit: (values: NewExercise) => Promise<void>;
 };
 
 export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, onSubmit }: Props) {

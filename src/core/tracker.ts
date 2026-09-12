@@ -23,20 +23,7 @@ export {
 // Drizzle over expo-sqlite in the app, over better-sqlite3 in tests.
 export type TrackerDatabase = BaseSQLiteDatabase<'sync', unknown, typeof schema>;
 
-export type Exercise = {
-  id: string;
-  name: string;
-  trackingType: TrackingType;
-  muscleGroup: MuscleGroup;
-  isCustom: boolean;
-};
-
-export type ExerciseSearch = {
-  // Text typed by the lifter: every word must appear somewhere in the name,
-  // ignoring case and hyphens.
-  query?: string;
-  muscleGroup?: MuscleGroup;
-};
+export type Tracker = ReturnType<typeof createTracker>;
 
 export type NewExercise = {
   name: string;
@@ -44,10 +31,19 @@ export type NewExercise = {
   muscleGroup: MuscleGroup;
 };
 
+export type Exercise = NewExercise & {
+  id: string;
+  isCustom: boolean;
+};
+
 // The tracking type is fixed once an Exercise is created.
-export type ExerciseChanges = {
-  name: string;
-  muscleGroup: MuscleGroup;
+export type ExerciseChanges = Omit<NewExercise, 'trackingType'>;
+
+export type ExerciseSearch = {
+  // Text typed by the lifter: every word must appear somewhere in the name,
+  // ignoring case and hyphens.
+  query?: string;
+  muscleGroup?: MuscleGroup;
 };
 
 const exerciseColumns = {
@@ -58,22 +54,27 @@ const exerciseColumns = {
   isCustom: exercises.isCustom,
 };
 
-function exerciseName(typed: string): string {
+function requireExerciseName(typed: string): string {
   const name = typed.trim();
   if (!name) throw new Error('An Exercise needs a name');
   return name;
 }
 
 export function createTracker(db: TrackerDatabase) {
-  // Built-in Exercises are shared across installs and Backup files, so only
-  // custom ones may change.
+  // Built-in Exercises are shared across installs and Backup files, and hidden
+  // ones keep the name history shows, so only custom Exercises still in the
+  // library may change.
   async function changeCustomExercise(id: string, values: Partial<typeof exercises.$inferInsert>) {
     const changed = await db
       .update(exercises)
       .set(values)
-      .where(and(eq(exercises.id, id), eq(exercises.isCustom, true)))
+      .where(
+        and(eq(exercises.id, id), eq(exercises.isCustom, true), isNull(exercises.deletedAt)),
+      )
       .returning({ id: exercises.id });
-    if (changed.length === 0) throw new Error('Only custom Exercises can be changed');
+    if (changed.length === 0) {
+      throw new Error('Only custom Exercises in the library can be changed');
+    }
   }
 
   return {
@@ -105,14 +106,14 @@ export function createTracker(db: TrackerDatabase) {
     async createExercise(exercise: NewExercise): Promise<Exercise> {
       const [created] = await db
         .insert(exercises)
-        .values({ ...exercise, name: exerciseName(exercise.name), isCustom: true })
+        .values({ ...exercise, name: requireExerciseName(exercise.name), isCustom: true })
         .returning(exerciseColumns);
       return created;
     },
 
     async editExercise(id: string, changes: ExerciseChanges): Promise<void> {
       await changeCustomExercise(id, {
-        name: exerciseName(changes.name),
+        name: requireExerciseName(changes.name),
         muscleGroup: changes.muscleGroup,
       });
     },

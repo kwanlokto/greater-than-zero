@@ -1,5 +1,5 @@
 import { createTestDatabase } from './test-database';
-import { createTracker } from './tracker';
+import { createTracker, type Tracker } from './tracker';
 
 describe('Custom Exercises', () => {
   it('appear in search and filters once created', async () => {
@@ -113,6 +113,21 @@ describe('Custom Exercises', () => {
 
     expect((await tracker.getExercise(created.id))?.name).toBe('Arnold Press');
   });
+
+  it("can't be edited once hidden, so history keeps the name they had", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const created = await tracker.createExercise({
+      name: 'Arnold Press',
+      trackingType: 'weighted',
+      muscleGroup: 'shoulders',
+    });
+    await tracker.hideExercise(created.id);
+
+    await expect(
+      tracker.editExercise(created.id, { name: 'Renamed', muscleGroup: 'shoulders' }),
+    ).rejects.toThrow('Only custom Exercises in the library can be changed');
+    expect((await tracker.getExercise(created.id))?.name).toBe('Arnold Press');
+  });
 });
 
 describe('Built-in Exercises', () => {
@@ -122,7 +137,7 @@ describe('Built-in Exercises', () => {
 
     await expect(
       tracker.editExercise(benchPress.id, { name: 'Flat Bench', muscleGroup: 'triceps' }),
-    ).rejects.toThrow('Only custom Exercises can be changed');
+    ).rejects.toThrow('Only custom Exercises in the library can be changed');
     expect(await tracker.getExercise(benchPress.id)).toEqual(benchPress);
   });
 
@@ -131,7 +146,7 @@ describe('Built-in Exercises', () => {
     const benchPress = await findByName(tracker, 'Bench Press');
 
     await expect(tracker.hideExercise(benchPress.id)).rejects.toThrow(
-      'Only custom Exercises can be changed',
+      'Only custom Exercises in the library can be changed',
     );
     expect(names(await tracker.searchExercises({ muscleGroup: 'chest' }))).toContain('Bench Press');
   });
@@ -141,7 +156,7 @@ function names(exercises: { name: string }[]) {
   return exercises.map(exercise => exercise.name);
 }
 
-async function findByName(tracker: ReturnType<typeof createTracker>, name: string) {
+async function findByName(tracker: Tracker, name: string) {
   const found = await tracker.searchExercises({ query: name });
   const exercise = found.find(candidate => candidate.name === name);
   if (!exercise) throw new Error(`No Exercise named ${name}`);

@@ -7,17 +7,20 @@ export function useTrackerQuery<T>(query: () => Promise<T>, deps: DependencyList
   const [result, setResult] = useState<T>();
 
   useEffect(() => {
-    // Ignore results from a query whose inputs have since changed.
-    let current = true;
+    // Only the latest run may set the result, so a slow earlier run can't
+    // overwrite a newer one, and nothing lands after the inputs change.
+    let latestRun = 0;
+    let active = true;
     const run = () => {
+      const thisRun = ++latestRun;
       query().then(value => {
-        if (current) setResult(value);
+        if (active && thisRun === latestRun) setResult(value);
       });
     };
     run();
     const subscription = addDatabaseChangeListener(run);
     return () => {
-      current = false;
+      active = false;
       subscription.remove();
     };
   }, deps);
