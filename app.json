@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Greater Than Zero",
+    "slug": "greater-than-zero",
+    "version": "1.0.0",
+    "platforms": ["android"],
+    "orientation": "portrait",
+    "scheme": "greaterthanzero",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "com.rkwan.greater_than_zero",
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-sqlite",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

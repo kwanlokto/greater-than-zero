@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789248720106,
+      "tag": "0000_create_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789248728117,
+      "tag": "0001_insert_settings_row",
+      "breakpoints": true
+    }
+  ]
+}
