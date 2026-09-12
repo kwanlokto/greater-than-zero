@@ -15,6 +15,20 @@
       "when": 1789248728117,
       "tag": "0001_insert_settings_row",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789250105233,
+      "tag": "0002_create_exercises",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789250105834,
+      "tag": "0003_insert_built_in_exercises",
+      "breakpoints": true
     }
   ]
 }

@@ -30,3 +30,32 @@ export const settings = sqliteTable('settings', {
   ...rowColumns,
   displayUnit: text('display_unit', { enum: weightUnits }).notNull().default('kg'),
 });
+
+// How an Exercise's Sets are recorded. Stored as plain text with no CHECK
+// constraint, so a later type (e.g. timed, cardio) is a new value here plus new
+// nullable Set columns, with no change to existing Sets.
+export const trackingTypes = ['weighted', 'bodyweight'] as const;
+export type TrackingType = (typeof trackingTypes)[number];
+
+export const muscleGroups = [
+  'chest',
+  'back',
+  'shoulders',
+  'biceps',
+  'triceps',
+  'quads',
+  'hamstrings',
+  'glutes',
+  'calves',
+  'core',
+] as const;
+export type MuscleGroup = (typeof muscleGroups)[number];
+
+// Built-in Exercises are inserted by migrations with fixed IDs, so they match
+// across installs and Backup files.
+export const exercises = sqliteTable('exercises', {
+  ...rowColumns,
+  name: text('name').notNull(),
+  trackingType: text('tracking_type', { enum: trackingTypes }).notNull(),
+  muscleGroup: text('muscle_group', { enum: muscleGroups }).notNull(),
+});

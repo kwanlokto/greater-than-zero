@@ -44,6 +44,7 @@ export default function RootLayout() {
           <Stack.Protected guard={onboarded}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+            <Stack.Screen name="exercise-library" options={{ title: 'Exercise library' }} />
           </Stack.Protected>
           <Stack.Protected guard={!onboarded}>
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
