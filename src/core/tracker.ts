@@ -30,8 +30,9 @@ export type Exercise = {
 };
 
 export type ExerciseSearch = {
-  // Every word must appear somewhere in the name, ignoring case.
-  name?: string;
+  // Text typed by the lifter: every word must appear somewhere in the name,
+  // ignoring case and hyphens.
+  query?: string;
   muscleGroup?: MuscleGroup;
 };
 
@@ -46,8 +47,9 @@ export function createTracker(db: TrackerDatabase) {
       await db.update(settings).set({ displayUnit: unit });
     },
 
-    async searchExercises({ name = '', muscleGroup }: ExerciseSearch): Promise<Exercise[]> {
-      const words = name.toLowerCase().split(/\s+/).filter(Boolean);
+    async searchExercises({ query = '', muscleGroup }: ExerciseSearch): Promise<Exercise[]> {
+      const words = query.toLowerCase().replace(/-/g, '').split(/\s+/).filter(Boolean);
+      const searchableName = sql`replace(lower(${exercises.name}), '-', '')`;
       return db
         .select({
           id: exercises.id,
@@ -58,7 +60,7 @@ export function createTracker(db: TrackerDatabase) {
         .from(exercises)
         .where(
           and(
-            ...words.map(word => sql`instr(lower(${exercises.name}), ${word}) > 0`),
+            ...words.map(word => sql`instr(${searchableName}, ${word}) > 0`),
             muscleGroup && eq(exercises.muscleGroup, muscleGroup),
           ),
         )

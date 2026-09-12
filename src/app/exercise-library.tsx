@@ -30,26 +30,26 @@ const trackingTypeLabels: Record<TrackingType, string> = {
 
 export default function ExerciseLibraryScreen() {
   const { colors } = useTheme();
-  const [name, setName] = useState('');
+  const [query, setQuery] = useState('');
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>();
   const [exercises, setExercises] = useState<Exercise[]>();
 
   useEffect(() => {
     // Ignore results that arrive after a newer search has started.
     let current = true;
-    tracker.searchExercises({ name, muscleGroup }).then(found => {
+    tracker.searchExercises({ query, muscleGroup }).then(found => {
       if (current) setExercises(found);
     });
     return () => {
       current = false;
     };
-  }, [name, muscleGroup]);
+  }, [query, muscleGroup]);
 
   return (
     <View style={styles.container}>
       <TextInput
-        value={name}
-        onChangeText={setName}
+        value={query}
+        onChangeText={setQuery}
         placeholder="Search exercises"
         placeholderTextColor="#8e8e93"
         autoCorrect={false}
