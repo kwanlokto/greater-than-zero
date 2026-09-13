@@ -197,6 +197,14 @@ describe('Sets', () => {
     );
   });
 
+  it('can only be logged for an Exercise in a Workout', async () => {
+    const tracker = createTracker(createTestDatabase());
+
+    await expect(tracker.logSet('no-such-entry', { weight: 60, reps: 5 })).rejects.toThrow(
+      'No such Exercise in a Workout',
+    );
+  });
+
   it('of a weighted Exercise need a weight', async () => {
     const tracker = createTracker(createTestDatabase());
     const { entry } = await startWorkoutWith(tracker, 'Bench Press');

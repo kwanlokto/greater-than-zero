@@ -101,17 +101,21 @@ function localDateOf(time: Date): string {
   return `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}`;
 }
 
-function requireValidSet(trackingType: TrackingType, { weight, reps }: NewSet) {
+// Why a Set can't be logged for an Exercise of this tracking type, or undefined
+// when it can. logSet enforces it; screens use it to decide when to allow logging.
+export function problemWithSet(
+  trackingType: TrackingType,
+  { weight, reps }: NewSet,
+): string | undefined {
   if (weight === null) {
-    if (trackingType === 'weighted') throw new Error('A weighted Set needs a weight');
+    if (trackingType === 'weighted') return 'A weighted Set needs a weight';
   } else if (!Number.isFinite(weight)) {
-    throw new Error("A Set's weight must be a number");
+    return "A Set's weight must be a number";
   } else if (weight < 0 && trackingType === 'weighted') {
-    throw new Error('Only bodyweight Sets can have a negative weight');
+    return 'Only bodyweight Sets can have a negative weight';
   }
-  if (!Number.isInteger(reps) || reps < 1) {
-    throw new Error('A Set needs a whole number of reps, at least 1');
-  }
+  if (!Number.isInteger(reps) || reps < 1) return 'A Set needs a whole number of reps, at least 1';
+  return undefined;
 }
 
 function requireExerciseName(typed: string): string {
@@ -262,13 +266,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Saved the moment it's logged, after the entry's earlier Sets. The weight is
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, { weight, reps }: NewSet): Promise<void> {
-      const [entry] = await db
+      const [exercise] = await db
         .select({ trackingType: exercises.trackingType })
         .from(exerciseEntries)
         .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
         .where(eq(exerciseEntries.id, exerciseEntryId));
-      if (!entry) throw new Error('No such Exercise in a Workout');
-      requireValidSet(entry.trackingType, { weight, reps });
+      if (!exercise) throw new Error('No such Exercise in a Workout');
+      const problem = problemWithSet(exercise.trackingType, { weight, reps });
+      if (problem) throw new Error(problem);
 
       await db.insert(sets).values({
         exerciseEntryId,

@@ -1,9 +1,24 @@
 import { Stack, useRouter, useTheme } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type KeyboardTypeOptions,
+} from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
-import type { ExerciseEntry, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
+import {
+  problemWithSet,
+  type ExerciseEntry,
+  type TrackingType,
+  type WeightUnit,
+  type WorkoutSet,
+} from '@/core/tracker';
 import { tracker } from '@/database';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -62,65 +77,87 @@ export default function WorkoutScreen() {
   );
 }
 
+// How the weight field reads for each tracking type.
+const weightFieldFor: Record<
+  TrackingType,
+  (unit: WeightUnit) => {
+    keyboardType: KeyboardTypeOptions;
+    placeholder: string;
+    unitLabel: string;
+    accessibilityLabel: string;
+    hint?: string;
+  }
+> = {
+  weighted: unit => ({
+    keyboardType: 'decimal-pad',
+    placeholder: '0',
+    unitLabel: unit,
+    accessibilityLabel: `Weight in ${unit}`,
+  }),
+  bodyweight: unit => ({
+    // The numeric keyboard has a minus key, for assisted Sets.
+    keyboardType: 'numeric',
+    placeholder: 'none',
+    unitLabel: `${unit} added`,
+    accessibilityLabel: `Added weight in ${unit}: blank for bodyweight, negative if assisted`,
+    hint: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
+  }),
+};
+
 // One Exercise in the Workout: its Sets so far, and a row to log the next one.
 function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: WeightUnit }) {
   const { colors } = useTheme();
   const { trackingType } = entry.exercise;
+  const weightField = weightFieldFor[trackingType](displayUnit);
   // The weight stays after logging; reps clear, so a stray tap can't log a
   // duplicate Set.
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const parsedWeight = parseWeight(weight);
   const parsedReps = parseWholeNumber(reps);
-  // Bodyweight Exercises take optional added weight: blank for plain
-  // bodyweight, negative when assisted. Weighted ones need a weight.
-  const weightAccepted =
-    trackingType === 'bodyweight'
-      ? parsedWeight !== undefined
-      : parsedWeight !== undefined && parsedWeight !== null && parsedWeight >= 0;
+  const set =
+    parsedWeight !== undefined && parsedReps !== undefined
+      ? { weight: parsedWeight, reps: parsedReps }
+      : undefined;
+  // The core's own rule decides, so the screen can't drift from it.
+  const canLog = set !== undefined && problemWithSet(trackingType, set) === undefined;
 
   const inputStyle = [
     styles.input,
     { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
   ];
 
+  async function logSet() {
+    if (!set || !canLog) return;
+    try {
+      await tracker.logSet(entry.id, set);
+      setReps('');
+    } catch (error) {
+      Alert.alert("Couldn't log the Set", error instanceof Error ? error.message : String(error));
+    }
+  }
+
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <Text style={[styles.exerciseName, { color: colors.text }]}>{entry.exercise.name}</Text>
-      {entry.sets.map((set, index) => (
-        <Text key={set.id} style={[styles.set, { color: colors.text }]}>
-          Set {index + 1}: {describeSet(set, trackingType)}
+      {entry.sets.map((loggedSet, index) => (
+        <Text key={loggedSet.id} style={[styles.set, { color: colors.text }]}>
+          Set {index + 1}: {describeSet(loggedSet, trackingType)}
         </Text>
       ))}
       <View style={styles.logRow}>
-        {trackingType === 'bodyweight' ? (
-          <View style={styles.field}>
-            <TextInput
-              value={weight}
-              onChangeText={setWeight}
-              // The numeric keyboard has a minus key, for assisted Sets.
-              keyboardType="numeric"
-              placeholder="none"
-              placeholderTextColor="#8e8e93"
-              accessibilityLabel={`Added weight in ${displayUnit}: blank for bodyweight, negative if assisted`}
-              style={inputStyle}
-            />
-            <Text style={[styles.unit, { color: colors.text }]}>{displayUnit} added</Text>
-          </View>
-        ) : (
-          <View style={styles.field}>
-            <TextInput
-              value={weight}
-              onChangeText={setWeight}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor="#8e8e93"
-              accessibilityLabel={`Weight in ${displayUnit}`}
-              style={inputStyle}
-            />
-            <Text style={[styles.unit, { color: colors.text }]}>{displayUnit}</Text>
-          </View>
-        )}
+        <View style={styles.field}>
+          <TextInput
+            value={weight}
+            onChangeText={setWeight}
+            keyboardType={weightField.keyboardType}
+            placeholder={weightField.placeholder}
+            placeholderTextColor="#8e8e93"
+            accessibilityLabel={weightField.accessibilityLabel}
+            style={inputStyle}
+          />
+          <Text style={[styles.unit, { color: colors.text }]}>{weightField.unitLabel}</Text>
+        </View>
         <View style={styles.field}>
           <TextInput
             value={reps}
@@ -133,23 +170,19 @@ function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: 
           />
           <Text style={[styles.unit, { color: colors.text }]}>reps</Text>
         </View>
-        <PrimaryButton
-          label="Log"
-          disabled={!weightAccepted || parsedReps === undefined}
-          onPress={async () => {
-            if (!weightAccepted || parsedWeight === undefined || parsedReps === undefined) return;
-            await tracker.logSet(entry.id, { weight: parsedWeight, reps: parsedReps });
-            setReps('');
-          }}
-        />
+        <PrimaryButton label="Log" disabled={!canLog} onPress={logSet} />
       </View>
+      {weightField.hint && (
+        <Text style={[styles.hint, { color: colors.text }]}>{weightField.hint}</Text>
+      )}
     </View>
   );
 }
 
 function describeSet(set: WorkoutSet, trackingType: TrackingType): string {
-  if (set.weight === null) return `Bodyweight × ${set.reps}`;
   if (trackingType === 'weighted') return `${set.weight} ${set.weightUnit} × ${set.reps}`;
+  // No added weight, whether left blank or entered as 0, is plain bodyweight.
+  if (!set.weight) return `Bodyweight × ${set.reps}`;
   const sign = set.weight < 0 ? '−' : '+';
   return `Bodyweight ${sign} ${Math.abs(set.weight)} ${set.weightUnit} × ${set.reps}`;
 }
@@ -164,7 +197,7 @@ function parseWeight(text: string): number | null | undefined {
 }
 
 function parseWholeNumber(text: string): number | undefined {
-  return /^\d+$/.test(text.trim()) && Number(text) >= 1 ? Number(text) : undefined;
+  return /^\d+$/.test(text.trim()) ? Number(text) : undefined;
 }
 
 const styles = StyleSheet.create({
@@ -219,6 +252,10 @@ const styles = StyleSheet.create({
   },
   unit: {
     fontSize: 14,
+    opacity: 0.7,
+  },
+  hint: {
+    fontSize: 13,
     opacity: 0.7,
   },
 });
