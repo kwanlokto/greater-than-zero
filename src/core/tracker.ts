@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -59,11 +59,19 @@ export type SetValues = {
   isWarmUp?: boolean;
 };
 
+export type Weight = {
+  value: number;
+  unit: WeightUnit;
+};
+
 export type WorkoutSet = {
   id: string;
-  // As entered, in weightUnit.
+  // As entered, in weightUnit. Never rewritten when the display unit changes.
   weight: number | null;
   weightUnit: WeightUnit;
+  // What to show: the weight in the display unit, to at most one decimal place.
+  // Null when the Set has no weight.
+  displayWeight: Weight | null;
   reps: number;
   isWarmUp: boolean;
   loggedAt: Date;
@@ -86,6 +94,13 @@ export type Workout = {
   entries: ExerciseEntry[];
 };
 
+// An Exercise's working Sets from its most recent finished Workout.
+export type LastTime = {
+  // The local date of the Workout they're from.
+  localDate: string;
+  sets: WorkoutSet[];
+};
+
 export type TrackerOptions = {
   // The clock; tests pass their own.
   now?: () => Date;
@@ -98,6 +113,31 @@ const exerciseColumns = {
   muscleGroup: exercises.muscleGroup,
   isCustom: exercises.isCustom,
 };
+
+const kilogramsPerPound = 0.45359237;
+
+// Converts for showing only; records keep the value and unit as entered.
+function displayWeightOf(
+  weight: number | null,
+  unit: WeightUnit,
+  displayUnit: WeightUnit,
+): Weight | null {
+  if (weight === null) return null;
+  const converted =
+    unit === displayUnit
+      ? weight
+      : unit === 'lb'
+        ? weight * kilogramsPerPound
+        : weight / kilogramsPerPound;
+  return { value: Math.round(converted * 10) / 10, unit: displayUnit };
+}
+
+function withDisplayWeight<T extends { weight: number | null; weightUnit: WeightUnit }>(
+  set: T,
+  displayUnit: WeightUnit,
+): T & { displayWeight: Weight | null } {
+  return { ...set, displayWeight: displayWeightOf(set.weight, set.weightUnit, displayUnit) };
+}
 
 // YYYY-MM-DD in the phone's time zone, so a late-night session counts toward
 // the day it happened.
@@ -274,7 +314,15 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         },
       },
     });
-    return workout;
+    if (!workout) return undefined;
+    const displayUnit = await getDisplayUnit();
+    return {
+      ...workout,
+      entries: workout.entries.map(entry => ({
+        ...entry,
+        sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),
+      })),
+    };
   }
 
   return {
@@ -470,6 +518,49 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     getWorkout,
+
+    // From the most recent finished Workout with a working Set of the Exercise,
+    // so a session where it was only warmed up doesn't hide the one before.
+    async getLastTime(exerciseId: string): Promise<LastTime | null> {
+      const workingSetOfExercise = () =>
+        and(
+          eq(exerciseEntries.exerciseId, exerciseId),
+          isNull(exerciseEntries.deletedAt),
+          isNull(sets.deletedAt),
+          eq(sets.isWarmUp, false),
+        );
+
+      const [latest] = await db
+        .select({ workoutId: workouts.id, localDate: workouts.localDate })
+        .from(sets)
+        .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
+        .where(
+          and(workingSetOfExercise(), isNotNull(workouts.finishedAt), isNull(workouts.deletedAt)),
+        )
+        .orderBy(desc(workouts.startedAt))
+        .limit(1);
+      if (!latest) return null;
+
+      const lastSets = await db
+        .select({
+          id: sets.id,
+          weight: sets.weight,
+          weightUnit: sets.weightUnit,
+          reps: sets.reps,
+          isWarmUp: sets.isWarmUp,
+          loggedAt: sets.loggedAt,
+        })
+        .from(sets)
+        .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+        .where(and(workingSetOfExercise(), eq(exerciseEntries.workoutId, latest.workoutId)))
+        .orderBy(asc(exerciseEntries.position), asc(sets.position));
+      const displayUnit = await getDisplayUnit();
+      return {
+        localDate: latest.localDate,
+        sets: lastSets.map(set => withDisplayWeight(set, displayUnit)),
+      };
+    },
 
     // Null when no Workout is in progress.
     async getWorkoutInProgress(): Promise<Workout | null> {

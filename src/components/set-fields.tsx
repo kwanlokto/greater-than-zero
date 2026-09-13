@@ -6,9 +6,14 @@ import {
   problemWithSet,
   type SetValues,
   type TrackingType,
+  type Weight,
   type WeightUnit,
   type WorkoutSet,
 } from '@/core/tracker';
+
+function formatWeight(weight: Weight | null): string {
+  return weight ? `${weight.value} ${weight.unit}` : '';
+}
 
 type SetPresentation = {
   weightField: (unit: WeightUnit) => {
@@ -31,7 +36,8 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
       unitLabel: unit,
       accessibilityLabel: `Weight in ${unit}`,
     }),
-    describe: set => `${set.weight} ${set.weightUnit} × ${set.reps}`,
+    // In the display unit, whatever unit the Set was entered in.
+    describe: set => `${formatWeight(set.displayWeight)} × ${set.reps}`,
   },
   bodyweight: {
     weightField: unit => ({
@@ -43,10 +49,11 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
     }),
     hint: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
     describe: set => {
+      const added = set.displayWeight;
       // No added weight, whether left blank or entered as 0, is plain bodyweight.
-      if (!set.weight) return `Bodyweight × ${set.reps}`;
-      const sign = set.weight < 0 ? '−' : '+';
-      return `Bodyweight ${sign} ${Math.abs(set.weight)} ${set.weightUnit} × ${set.reps}`;
+      if (!added || added.value === 0) return `Bodyweight × ${set.reps}`;
+      const sign = added.value < 0 ? '−' : '+';
+      return `Bodyweight ${sign} ${formatWeight({ ...added, value: Math.abs(added.value) })} × ${set.reps}`;
     },
   },
 };

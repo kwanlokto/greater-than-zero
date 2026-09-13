@@ -1,5 +1,12 @@
 import { createTestDatabase } from './test-database';
-import { findExerciseByName, names } from './test-helpers';
+import {
+  clockAt,
+  findExerciseByName,
+  names,
+  setsOf,
+  startWorkoutWith,
+  startWorkoutWithEach,
+} from './test-helpers';
 import { createTracker, type Tracker } from './tracker';
 
 describe('Workouts', () => {
@@ -138,6 +145,7 @@ describe('Sets', () => {
         id: expect.any(String),
         weight: 60,
         weightUnit: 'kg',
+        displayWeight: { value: 60, unit: 'kg' },
         reps: 8,
         isWarmUp: false,
         loggedAt: new Date('2026-09-12T18:00:00-04:00'),
@@ -146,6 +154,7 @@ describe('Sets', () => {
         id: expect.any(String),
         weight: 62.5,
         weightUnit: 'kg',
+        displayWeight: { value: 62.5, unit: 'kg' },
         reps: 6,
         isWarmUp: false,
         loggedAt: new Date('2026-09-12T18:03:00-04:00'),
@@ -582,17 +591,6 @@ describe('Discarded Workouts', () => {
   });
 });
 
-// Starts a Workout with these Exercises, in order.
-async function startWorkoutWithEach(tracker: Tracker, exerciseNames: string[]) {
-  const workout = await tracker.startWorkout();
-  const entries = [];
-  for (const name of exerciseNames) {
-    const exercise = await findExerciseByName(tracker, name);
-    entries.push(await tracker.addExerciseToWorkout(workout.id, exercise.id));
-  }
-  return { workout, entries };
-}
-
 async function exerciseNamesOf(tracker: Tracker, workoutId: string) {
   const entries = (await tracker.getWorkout(workoutId))?.entries ?? [];
   return names(entries.map(entry => entry.exercise));
@@ -600,27 +598,4 @@ async function exerciseNamesOf(tracker: Tracker, workoutId: string) {
 
 function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
   return loggedSets.map(set => [set.weight, set.reps]);
-}
-
-// Starts a Workout with one Exercise in it.
-async function startWorkoutWith(tracker: Tracker, exerciseName: string) {
-  const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName]);
-  return { workout, entry: entries[0] };
-}
-
-// The Sets of a Workout's first Exercise.
-async function setsOf(tracker: Tracker, workoutId: string) {
-  const [entry] = (await tracker.getWorkout(workoutId))?.entries ?? [];
-  return entry.sets;
-}
-
-// A clock the test moves by hand.
-function clockAt(time: string) {
-  let current = new Date(time);
-  return {
-    now: () => current,
-    setTime(next: string) {
-      current = new Date(next);
-    },
-  };
 }

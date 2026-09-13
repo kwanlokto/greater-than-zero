@@ -20,7 +20,9 @@ import {
   type WorkoutSet,
 } from '@/core/tracker';
 import { tracker } from '@/database';
+import { formatLocalDate } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
+import { useTrackerQuery } from '@/use-tracker-query';
 
 type Props = {
   entry: ExerciseEntry;
@@ -97,6 +99,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
         </Pressable>
       </View>
+      <LastTimeLine entry={entry} />
       <EntryNotes entry={entry} />
       {entry.sets.map((set, index) =>
         set.id === editingSetId ? (
@@ -212,6 +215,22 @@ function setLabels(sets: WorkoutSet[]): string[] {
   return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
 }
 
+// The Exercise's working Sets from its most recent finished Workout, to beat
+// today. Nothing when it's never been done.
+function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
+  const { colors } = useTheme();
+  const { id, trackingType } = entry.exercise;
+  const lastTime = useTrackerQuery(() => tracker.getLastTime(id), [id]);
+  if (!lastTime) return null;
+
+  const { describe } = setPresentationFor[trackingType];
+  return (
+    <Text style={[styles.lastTime, { color: colors.text }]}>
+      Last time, {formatLocalDate(lastTime.localDate)}: {lastTime.sets.map(describe).join(', ')}
+    </Text>
+  );
+}
+
 // Saved shortly after the lifter stops typing, and when the card goes away, so
 // a note isn't lost if they finish the Workout straight after writing it.
 function EntryNotes({ entry }: { entry: ExerciseEntry }) {
@@ -268,6 +287,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '600',
+  },
+  lastTime: {
+    fontSize: 14,
+    opacity: 0.7,
   },
   notes: {
     borderWidth: StyleSheet.hairlineWidth,
