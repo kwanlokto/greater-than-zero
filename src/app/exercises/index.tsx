@@ -11,20 +11,14 @@ export default function ExerciseLibraryScreen() {
     <>
       <Stack.Screen options={{ headerRight: () => <AddExerciseButton /> }} />
       <ExerciseBrowser
-        renderExercise={exercise =>
-          // Custom Exercises open for editing; built-in ones can't be changed.
-          exercise.isCustom ? (
-            <ExerciseRow
-              exercise={exercise}
-              icon="chevron-forward"
-              onPress={() =>
-                router.push({ pathname: '/exercises/[id]', params: { id: exercise.id } })
-              }
-            />
-          ) : (
-            <ExerciseRow exercise={exercise} />
-          )
-        }
+        renderExercise={exercise => (
+          // Every Exercise opens, for its rest length; custom ones also for editing.
+          <ExerciseRow
+            exercise={exercise}
+            icon="chevron-forward"
+            onPress={() => router.push({ pathname: '/exercises/[id]', params: { id: exercise.id } })}
+          />
+        )}
       />
     </>
   );

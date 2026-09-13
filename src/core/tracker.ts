@@ -37,6 +37,8 @@ export type NewExercise = {
 export type Exercise = NewExercise & {
   id: string;
   isCustom: boolean;
+  // The lifter's own rest after a Set of it, in seconds; null uses the default.
+  defaultRestSeconds: number | null;
 };
 
 // The tracking type is fixed once an Exercise is created.
@@ -91,6 +93,8 @@ export type Workout = {
   localDate: string;
   startedAt: Date;
   finishedAt: Date | null;
+  // When the current rest ends; the timer shows the time left until then.
+  restEndsAt: Date | null;
   entries: ExerciseEntry[];
 };
 
@@ -112,6 +116,7 @@ const exerciseColumns = {
   trackingType: exercises.trackingType,
   muscleGroup: exercises.muscleGroup,
   isCustom: exercises.isCustom,
+  defaultRestSeconds: exercises.defaultRestSeconds,
 };
 
 const kilogramsPerPound = 0.45359237;
@@ -222,6 +227,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId));
   }
 
+  async function getDefaultRestSeconds(): Promise<number> {
+    const [row] = await db
+      .select({ defaultRestSeconds: settings.defaultRestSeconds })
+      .from(settings);
+    return row.defaultRestSeconds;
+  }
+
   async function getDisplayUnit(): Promise<WeightUnit> {
     const [row] = await db.select({ displayUnit: settings.displayUnit }).from(settings);
     return row.displayUnit;
@@ -234,6 +246,22 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .from(workouts)
       .where(inProgress())
       .get()?.id;
+  }
+
+  // Every logged Set starts a new rest, replacing the one before, lasting the
+  // Exercise's own rest length or the default from Settings.
+  async function startRest(exerciseEntryId: string, loggedAt: Date) {
+    const [entry] = await db
+      .select({ workoutId: exerciseEntries.workoutId, restSeconds: exercises.defaultRestSeconds })
+      .from(exerciseEntries)
+      .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
+      .where(eq(exerciseEntries.id, exerciseEntryId));
+    const restSeconds = entry.restSeconds ?? (await getDefaultRestSeconds());
+    // Only during a Workout: Sets added to a finished one don't start a rest.
+    await db
+      .update(workouts)
+      .set({ restEndsAt: new Date(loggedAt.getTime() + restSeconds * 1000) })
+      .where(and(eq(workouts.id, entry.workoutId), inProgress()));
   }
 
   // Soft-deletes the Sets matching `where`, as part of a larger transaction.
@@ -291,7 +319,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const workout = await db.query.workouts.findFirst({
       where: and(eq(workouts.id, id), isNull(workouts.deletedAt)),
-      columns: { id: true, localDate: true, startedAt: true, finishedAt: true },
+      columns: { id: true, localDate: true, startedAt: true, finishedAt: true, restEndsAt: true },
       with: {
         entries: {
           where: isNull(exerciseEntries.deletedAt),
@@ -299,7 +327,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           columns: { id: true, notes: true },
           with: {
             exercise: {
-              columns: { id: true, name: true, trackingType: true, muscleGroup: true, isCustom: true },
+              columns: {
+                id: true,
+                name: true,
+                trackingType: true,
+                muscleGroup: true,
+                isCustom: true,
+                defaultRestSeconds: true,
+              },
             },
             sets: {
               where: isNull(sets.deletedAt),
@@ -330,6 +365,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
   return {
     getDisplayUnit,
+
+    // The rest for Exercises without their own length.
+    getDefaultRestSeconds,
 
     async setDisplayUnit(unit: WeightUnit): Promise<void> {
       await db.update(settings).set({ displayUnit: unit });
@@ -369,6 +407,20 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Hidden Exercises leave the library but keep their rows for history.
     async hideExercise(id: string): Promise<void> {
       await changeCustomExercise(id, { deletedAt: now() });
+    },
+
+    // Any Exercise in the library, built-in ones included: a rest length is the
+    // lifter's preference, not part of the Exercise. Null goes back to the default.
+    async setExerciseRest(exerciseId: string, seconds: number | null): Promise<void> {
+      if (seconds !== null && (!Number.isInteger(seconds) || seconds < 1)) {
+        throw new Error('A rest length is a whole number of seconds, at least 1');
+      }
+      const changed = await db
+        .update(exercises)
+        .set({ defaultRestSeconds: seconds })
+        .where(and(eq(exercises.id, exerciseId), isNull(exercises.deletedAt)))
+        .returning({ id: exercises.id });
+      if (changed.length === 0) throw new Error('No such Exercise in the library');
     },
 
     async getExercise(id: string): Promise<Exercise | undefined> {
@@ -442,6 +494,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, set: SetValues): Promise<void> {
       requireValidSet(await trackingTypeOfEntry(exerciseEntryId), set);
+      const loggedAt = now();
       await db.insert(sets).values({
         exerciseEntryId,
         position: await nextSetPosition(exerciseEntryId),
@@ -449,8 +502,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         weightUnit: await getDisplayUnit(),
         reps: set.reps,
         isWarmUp: set.isWarmUp ?? false,
-        loggedAt: now(),
+        loggedAt,
       });
+      await startRest(exerciseEntryId, loggedAt);
     },
 
     // The weight is in the unit the Set was logged in, which is the unit shown
@@ -474,12 +528,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .orderBy(desc(sets.position))
         .limit(1);
       if (!last) throw new Error('No Set to copy yet');
+      const loggedAt = now();
       await db.insert(sets).values({
         ...last,
         exerciseEntryId,
         position: await nextSetPosition(exerciseEntryId),
-        loggedAt: now(),
+        loggedAt,
       });
+      await startRest(exerciseEntryId, loggedAt);
     },
 
     // Soft delete: the others keep their positions, so their order holds.
@@ -509,6 +565,16 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
           .run();
       });
+    },
+
+    // The ±15 s buttons: moves the current rest's end, earlier or later.
+    async moveRestEnd(workoutId: string, seconds: number): Promise<void> {
+      const moved = await db
+        .update(workouts)
+        .set({ restEndsAt: sql`${workouts.restEndsAt} + ${seconds * 1000}` })
+        .where(and(eq(workouts.id, workoutId), inProgress(), isNotNull(workouts.restEndsAt)))
+        .returning({ id: workouts.id });
+      if (moved.length === 0) throw new Error('No rest is running');
     },
 
     async finishWorkout(id: string): Promise<void> {

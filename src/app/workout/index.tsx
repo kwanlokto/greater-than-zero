@@ -1,8 +1,9 @@
 import { Stack, useRouter, useTheme } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
+import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
@@ -60,28 +61,34 @@ export default function WorkoutScreen() {
           ),
         }}
       />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {workout.entries.length === 0 && (
-          <Text style={[styles.message, { color: colors.text }]}>
-            Add an exercise to start logging sets.
-          </Text>
-        )}
-        {workout.entries.map(entry => (
-          <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
-        ))}
-        <PrimaryButton
-          label="Add exercise"
-          onPress={() =>
-            router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
-          }
-        />
-        <TextButton label="Discard workout" destructive onPress={confirmDiscard} />
-      </ScrollView>
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {workout.entries.length === 0 && (
+            <Text style={[styles.message, { color: colors.text }]}>
+              Add an exercise to start logging sets.
+            </Text>
+          )}
+          {workout.entries.map(entry => (
+            <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
+          ))}
+          <PrimaryButton
+            label="Add exercise"
+            onPress={() =>
+              router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
+            }
+          />
+          <TextButton label="Discard workout" destructive onPress={confirmDiscard} />
+        </ScrollView>
+        <RestTimer workoutId={workout.id} restEndsAt={workout.restEndsAt} />
+      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     padding: 16,
     gap: 16,

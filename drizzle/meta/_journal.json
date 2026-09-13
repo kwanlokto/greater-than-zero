@@ -57,6 +57,13 @@
       "when": 1789314267343,
       "tag": "0007_add_exercise_entries_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789327305812,
+      "tag": "0008_add_rest_timer",
+      "breakpoints": true
     }
   ]
 }

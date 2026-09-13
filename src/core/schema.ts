@@ -29,6 +29,8 @@ export type WeightUnit = (typeof weightUnits)[number];
 export const settings = sqliteTable('settings', {
   ...rowColumns,
   displayUnit: text('display_unit', { enum: weightUnits }).notNull().default('kg'),
+  // The rest after a Set, for Exercises without their own.
+  defaultRestSeconds: integer('default_rest_seconds').notNull().default(120),
 });
 
 // How an Exercise's Sets are recorded. Stored as plain text with no CHECK
@@ -60,6 +62,8 @@ export const exercises = sqliteTable('exercises', {
   muscleGroup: text('muscle_group', { enum: muscleGroups }).notNull(),
   // Defaults to built-in, so rows inserted by library migrations are protected.
   isCustom: integer('is_custom', { mode: 'boolean' }).notNull().default(false),
+  // The lifter's own rest after a Set of this Exercise; empty uses Settings'.
+  defaultRestSeconds: integer('default_rest_seconds'),
 });
 
 export const workouts = sqliteTable('workouts', {
@@ -70,6 +74,8 @@ export const workouts = sqliteTable('workouts', {
   startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
   // Empty while the Workout is in progress.
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  // When the current rest ends. Set by logging a Set; the timer counts down to it.
+  restEndsAt: integer('rest_ends_at', { mode: 'timestamp_ms' }),
 });
 
 // An Exercise within a Workout.

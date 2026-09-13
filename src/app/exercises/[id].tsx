@@ -1,18 +1,23 @@
-import { useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
+import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { ExerciseForm } from '@/components/exercise-form';
+import { RestLengthPicker } from '@/components/rest-length-picker';
+import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
+import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
+import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-export default function EditExerciseScreen() {
+// One Exercise in the library. Every Exercise has a rest length to choose;
+// only custom ones can be edited or hidden.
+export default function ExerciseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { colors } = useTheme();
   const exercise = useTrackerQuery(() => tracker.getExercise(id), [id]);
 
-  // Only custom Exercises can be edited.
-  if (!exercise?.isCustom) return null;
+  if (!exercise) return null;
 
   const confirmHide = () => {
     Alert.alert(
@@ -24,8 +29,9 @@ export default function EditExerciseScreen() {
           text: 'Hide',
           style: 'destructive',
           onPress: async () => {
-            await tracker.hideExercise(id);
-            router.back();
+            if (await runOrAlert("Couldn't hide the exercise", () => tracker.hideExercise(id))) {
+              router.back();
+            }
           },
         },
       ],
@@ -34,18 +40,30 @@ export default function EditExerciseScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <ExerciseForm
-        initial={exercise}
-        trackingTypeFixed
-        submitLabel="Save"
-        onSubmit={async ({ name, muscleGroup }) => {
-          await tracker.editExercise(id, { name, muscleGroup });
-          router.back();
-        }}
-      />
-      <Pressable accessibilityRole="button" onPress={confirmHide} style={styles.hide}>
-        <Text style={[styles.hideLabel, { color: colors.notification }]}>Hide exercise</Text>
-      </Pressable>
+      <Stack.Screen options={{ title: exercise.name }} />
+      {exercise.isCustom ? (
+        <ExerciseForm
+          initial={exercise}
+          trackingTypeFixed
+          submitLabel="Save"
+          onSubmit={async ({ name, muscleGroup }) => {
+            if (
+              await runOrAlert("Couldn't save the exercise", () =>
+                tracker.editExercise(id, { name, muscleGroup }),
+              )
+            ) {
+              router.back();
+            }
+          }}
+        />
+      ) : (
+        <Text style={[styles.details, { color: colors.text }]}>
+          {muscleGroupLabels[exercise.muscleGroup]} · {trackingTypeLabels[exercise.trackingType]} ·
+          Built-in
+        </Text>
+      )}
+      <RestLengthPicker exercise={exercise} />
+      {exercise.isCustom && <TextButton label="Hide exercise" destructive onPress={confirmHide} />}
     </ScrollView>
   );
 }
@@ -53,14 +71,10 @@ export default function EditExerciseScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    gap: 16,
+    gap: 24,
   },
-  hide: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  hideLabel: {
+  details: {
     fontSize: 16,
-    fontWeight: '600',
+    opacity: 0.7,
   },
 });

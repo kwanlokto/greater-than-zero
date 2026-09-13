@@ -69,6 +69,7 @@ describe('Exercise library', () => {
         trackingType: 'bodyweight',
         muscleGroup: 'back',
         isCustom: false,
+        defaultRestSeconds: null,
       },
     ]);
   });

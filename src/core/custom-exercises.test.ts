@@ -19,6 +19,7 @@ describe('Custom Exercises', () => {
         trackingType: 'weighted',
         muscleGroup: 'shoulders',
         isCustom: true,
+        defaultRestSeconds: null,
       },
     ]);
   });
@@ -72,6 +73,7 @@ describe('Custom Exercises', () => {
       trackingType: 'weighted',
       muscleGroup: 'shoulders',
       isCustom: true,
+      defaultRestSeconds: null,
     });
   });
 
