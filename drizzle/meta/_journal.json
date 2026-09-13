@@ -36,6 +36,13 @@
       "when": 1789251930983,
       "tag": "0004_add_exercises_is_custom",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789256351375,
+      "tag": "0005_create_workouts",
+      "breakpoints": true
     }
   ]
 }

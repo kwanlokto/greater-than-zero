@@ -1,5 +1,6 @@
 import { createTestDatabase } from './test-database';
-import { createTracker, type Tracker } from './tracker';
+import { findExerciseByName, names } from './test-helpers';
+import { createTracker } from './tracker';
 
 describe('Custom Exercises', () => {
   it('appear in search and filters once created', async () => {
@@ -133,7 +134,7 @@ describe('Custom Exercises', () => {
 describe('Built-in Exercises', () => {
   it("can't be edited", async () => {
     const tracker = createTracker(createTestDatabase());
-    const benchPress = await findByName(tracker, 'Bench Press');
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
 
     await expect(
       tracker.editExercise(benchPress.id, { name: 'Flat Bench', muscleGroup: 'triceps' }),
@@ -143,7 +144,7 @@ describe('Built-in Exercises', () => {
 
   it("can't be hidden", async () => {
     const tracker = createTracker(createTestDatabase());
-    const benchPress = await findByName(tracker, 'Bench Press');
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
 
     await expect(tracker.hideExercise(benchPress.id)).rejects.toThrow(
       'Only custom Exercises in the library can be changed',
@@ -151,14 +152,3 @@ describe('Built-in Exercises', () => {
     expect(names(await tracker.searchExercises({ muscleGroup: 'chest' }))).toContain('Bench Press');
   });
 });
-
-function names(exercises: { name: string }[]) {
-  return exercises.map(exercise => exercise.name);
-}
-
-async function findByName(tracker: Tracker, name: string) {
-  const found = await tracker.searchExercises({ query: name });
-  const exercise = found.find(candidate => candidate.name === name);
-  if (!exercise) throw new Error(`No Exercise named ${name}`);
-  return exercise;
-}

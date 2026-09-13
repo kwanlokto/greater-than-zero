@@ -1,9 +1,10 @@
 import { useTheme } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Chip } from '@/components/chip';
 import { OptionPicker } from '@/components/option-picker';
+import { PrimaryButton } from '@/components/primary-button';
 import { muscleGroups, trackingTypes, type NewExercise, type TrackingType } from '@/core/tracker';
 import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
 
@@ -22,18 +23,12 @@ export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, 
     initial.trackingType ?? 'weighted',
   );
   const [muscleGroup, setMuscleGroup] = useState(initial.muscleGroup);
-  const [saving, setSaving] = useState(false);
 
-  const canSubmit = !saving && name.trim() !== '' && muscleGroup !== undefined;
+  const canSubmit = name.trim() !== '' && muscleGroup !== undefined;
 
   async function submit() {
     if (!canSubmit) return;
-    setSaving(true);
-    try {
-      await onSubmit({ name, trackingType, muscleGroup });
-    } finally {
-      setSaving(false);
-    }
+    await onSubmit({ name, trackingType, muscleGroup });
   }
 
   return (
@@ -77,15 +72,7 @@ export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, 
           ))}
         </View>
       </Field>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !canSubmit }}
-        disabled={!canSubmit}
-        onPress={submit}
-        style={[styles.submit, { backgroundColor: colors.primary, opacity: canSubmit ? 1 : 0.4 }]}
-      >
-        <Text style={styles.submitLabel}>{submitLabel}</Text>
-      </Pressable>
+      <PrimaryButton label={submitLabel} disabled={!canSubmit} onPress={submit} />
     </View>
   );
 }
@@ -127,15 +114,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  submit: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  submitLabel: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

@@ -1,9 +1,6 @@
 import { createTestDatabase } from './test-database';
+import { names } from './test-helpers';
 import { createTracker } from './tracker';
-
-function names(exercises: { name: string }[]) {
-  return exercises.map(exercise => exercise.name);
-}
 
 describe('Exercise library', () => {
   it('finds Exercises whose name contains the search, ignoring case', async () => {

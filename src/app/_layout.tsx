@@ -47,6 +47,15 @@ export default function RootLayout() {
             <Stack.Screen name="exercises/index" options={{ title: 'Exercise library' }} />
             <Stack.Screen name="exercises/new" options={{ title: 'New exercise' }} />
             <Stack.Screen name="exercises/[id]" options={{ title: 'Edit exercise' }} />
+            {/* The Workout takes over the screen, covering the tabs. */}
+            <Stack.Screen
+              name="workout/index"
+              options={{ title: 'Workout', presentation: 'fullScreenModal' }}
+            />
+            <Stack.Screen
+              name="workout/add-exercise"
+              options={{ title: 'Add exercise', presentation: 'modal' }}
+            />
           </Stack.Protected>
           <Stack.Protected guard={!onboarded}>
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />

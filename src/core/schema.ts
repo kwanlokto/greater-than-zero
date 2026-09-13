@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { relations, sql } from 'drizzle-orm';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 const nowMs = sql`(CAST(unixepoch('subsec') * 1000 AS INTEGER))`;
 
@@ -61,3 +61,56 @@ export const exercises = sqliteTable('exercises', {
   // Defaults to built-in, so rows inserted by library migrations are protected.
   isCustom: integer('is_custom', { mode: 'boolean' }).notNull().default(false),
 });
+
+export const workouts = sqliteTable('workouts', {
+  ...rowColumns,
+  // The phone's local calendar date when the Workout started, as YYYY-MM-DD.
+  // All grouping by day uses it.
+  localDate: text('local_date').notNull(),
+  startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+  // Empty while the Workout is in progress.
+  finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+});
+
+// An Exercise within a Workout.
+export const exerciseEntries = sqliteTable('exercise_entries', {
+  ...rowColumns,
+  workoutId: text('workout_id')
+    .notNull()
+    .references(() => workouts.id),
+  exerciseId: text('exercise_id')
+    .notNull()
+    .references(() => exercises.id),
+  position: integer('position').notNull(),
+});
+
+export const sets = sqliteTable('sets', {
+  ...rowColumns,
+  exerciseEntryId: text('exercise_entry_id')
+    .notNull()
+    .references(() => exerciseEntries.id),
+  position: integer('position').notNull(),
+  // Exactly as entered, in the unit it was entered in; never converted.
+  // Empty for a bodyweight Set with no added weight.
+  weight: real('weight'),
+  weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
+  reps: integer('reps').notNull(),
+  loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const workoutsRelations = relations(workouts, ({ many }) => ({
+  entries: many(exerciseEntries),
+}));
+
+export const exerciseEntriesRelations = relations(exerciseEntries, ({ one, many }) => ({
+  workout: one(workouts, { fields: [exerciseEntries.workoutId], references: [workouts.id] }),
+  exercise: one(exercises, { fields: [exerciseEntries.exerciseId], references: [exercises.id] }),
+  sets: many(sets),
+}));
+
+export const setsRelations = relations(sets, ({ one }) => ({
+  exerciseEntry: one(exerciseEntries, {
+    fields: [sets.exerciseEntryId],
+    references: [exerciseEntries.id],
+  }),
+}));
