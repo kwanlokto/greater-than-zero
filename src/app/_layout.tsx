@@ -7,6 +7,7 @@ import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 import { database } from '@/database';
 import { FinishOnboardingContext, loadOnboardingDone, saveOnboardingDone } from '@/onboarding';
+import { useResumeWorkoutOnLaunch } from '@/use-resume-workout-on-launch';
 import migrations from '../../drizzle/migrations';
 
 SplashScreen.preventAutoHideAsync();
@@ -23,10 +24,14 @@ export default function RootLayout() {
   }, []);
 
   const ready = migration.success && onboarded !== undefined;
+  const resumeChecked = useResumeWorkoutOnLaunch(ready && onboarded === true);
 
+  // Kept up until a Workout left in progress has been reopened, so the lifter
+  // lands straight in it.
+  const splashDone = migration.error || (ready && (!onboarded || resumeChecked));
   useEffect(() => {
-    if (ready || migration.error) SplashScreen.hide();
-  }, [ready, migration.error]);
+    if (splashDone) SplashScreen.hide();
+  }, [splashDone]);
 
   async function finishOnboarding() {
     await saveOnboardingDone();

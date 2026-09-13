@@ -1,8 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, useTheme } from 'expo-router';
-import { Tabs } from 'expo-router/js-tabs';
+import { BottomTabBar, Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
 import type { ComponentProps } from 'react';
-import { Pressable, type ColorValue } from 'react-native';
+import { Pressable, View, type ColorValue } from 'react-native';
+
+import { WorkoutBar } from '@/components/workout-bar';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -12,9 +14,22 @@ function tabIcon(name: IconName) {
   );
 }
 
+// The Workout bar sits just above the tabs, so it shows on every tab.
+function TabBarWithWorkout(props: BottomTabBarProps) {
+  return (
+    <View>
+      <WorkoutBar />
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
+
 export default function TabsLayout() {
   return (
-    <Tabs screenOptions={{ headerRight: () => <SettingsButton /> }}>
+    <Tabs
+      tabBar={props => <TabBarWithWorkout {...props} />}
+      screenOptions={{ headerRight: () => <SettingsButton /> }}
+    >
       <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: tabIcon('today-outline') }} />
       <Tabs.Screen
         name="history"

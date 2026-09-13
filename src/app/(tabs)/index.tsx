@@ -17,12 +17,10 @@ export default function TodayScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Only one Workout can be in progress, so starting gives way to continuing. */}
+      {/* Only one Workout can be in progress; while one is, the Workout bar
+          returns to it. */}
       {workoutInProgress === null && (
         <PrimaryButton label="Start empty workout" onPress={startEmptyWorkout} />
-      )}
-      {workoutInProgress && (
-        <PrimaryButton label="Continue workout" onPress={() => router.push('/workout')} />
       )}
       <Text style={[styles.placeholder, { color: colors.text }]}>
         Your next-up workout, today's food and today's weigh-in will show here.

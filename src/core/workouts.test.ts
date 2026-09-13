@@ -81,6 +81,23 @@ describe('Workouts', () => {
     expect(await tracker.getWorkoutInProgress()).toBeNull();
   });
 
+  it('are still in progress, with every Set, when the app is reopened', async () => {
+    const database = createTestDatabase();
+    const tracker = createTracker(database);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+
+    // A new core on the same database, as after the app is killed and reopened.
+    const reopened = createTracker(database);
+    const resumed = await reopened.getWorkoutInProgress();
+
+    expect(resumed?.id).toBe(workout.id);
+    expect(resumed?.entries.map(resumedEntry => resumedEntry.sets.map(set => set.reps))).toEqual([
+      [8, 7],
+    ]);
+  });
+
   it('can start again once the last one is finished', async () => {
     const tracker = createTracker(createTestDatabase());
     const first = await tracker.startWorkout();
