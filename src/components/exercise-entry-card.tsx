@@ -3,8 +3,14 @@ import { useTheme } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { Chip } from '@/components/chip';
 import { PrimaryButton } from '@/components/primary-button';
-import { fieldTextOf, SetFields, typedSet, weightHintFor } from '@/components/set-fields';
+import {
+  initialFieldsOf,
+  SetFields,
+  setPresentationFor,
+  useSetFields,
+} from '@/components/set-fields';
 import { TextButton } from '@/components/text-button';
 import type { ExerciseEntry, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
 import { tracker } from '@/database';
@@ -20,17 +26,18 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const { colors } = useTheme();
   const { trackingType } = entry.exercise;
   const [editingSetId, setEditingSetId] = useState<string>();
-  // The weight stays after logging; reps clear, so a stray tap can't log a
-  // duplicate Set. "Same as last set" is for repeating one.
-  const [weight, setWeight] = useState('');
-  const [reps, setReps] = useState('');
-  const newSet = typedSet(trackingType, weight, reps);
+  // After logging, the weight and the warm-up mark stay; reps clear, so a stray
+  // tap can't log a duplicate Set. "Same as last set" is for repeating one.
+  const next = useSetFields(trackingType, displayUnit);
   const labels = setLabels(entry.sets);
-  const hint = weightHintFor[trackingType];
+  const { hint } = setPresentationFor[trackingType];
 
   async function logSet() {
-    if (!newSet) return;
-    if (await succeeds("Couldn't log the Set", () => tracker.logSet(entry.id, newSet))) setReps('');
+    const { values } = next;
+    if (!values) return;
+    if (await runOrAlert("Couldn't log the Set", () => tracker.logSet(entry.id, values))) {
+      next.clearReps();
+    }
   }
 
   return (
@@ -55,21 +62,19 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
         ),
       )}
       <View style={styles.row}>
-        <SetFields
-          trackingType={trackingType}
-          unit={displayUnit}
-          weight={weight}
-          reps={reps}
-          onChangeWeight={setWeight}
-          onChangeReps={setReps}
+        <SetFields {...next.fields} />
+        <Chip
+          label="Warm-up"
+          selected={next.isWarmUp}
+          onPress={() => next.setIsWarmUp(!next.isWarmUp)}
         />
-        <PrimaryButton label="Log" disabled={!newSet} onPress={logSet} />
+        <PrimaryButton label="Log" disabled={!next.values} onPress={logSet} />
       </View>
       {entry.sets.length > 0 && (
         <TextButton
           label="Same as last set"
           onPress={async () => {
-            await succeeds("Couldn't copy the last Set", () => tracker.logSameAsLastSet(entry.id));
+            await runOrAlert("Couldn't copy the last Set", () => tracker.logSameAsLastSet(entry.id));
           }}
         />
       )}
@@ -96,7 +101,9 @@ function SetRow({ set, label, trackingType, onPress }: SetRowProps) {
       style={styles.setRow}
     >
       <Text style={[styles.setLabel, { color: colors.text }]}>{label}</Text>
-      <Text style={[styles.setText, { color: colors.text }]}>{describeSet(set, trackingType)}</Text>
+      <Text style={[styles.setText, { color: colors.text }]}>
+        {setPresentationFor[trackingType].describe(set)}
+      </Text>
       <Ionicons name="create-outline" size={18} color={colors.text} style={styles.faint} />
     </Pressable>
   );
@@ -108,58 +115,37 @@ type SetEditorProps = {
   onDone: () => void;
 };
 
-// Corrects a logged Set in its own unit, marks it as a warm-up, or deletes it.
+// Corrects a logged Set in its own unit, including whether it's a warm-up; or
+// deletes it. Nothing changes until Save.
 function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
   const { colors } = useTheme();
-  const [weight, setWeight] = useState(fieldTextOf(set).weight);
-  const [reps, setReps] = useState(fieldTextOf(set).reps);
-  const corrected = typedSet(trackingType, weight, reps);
+  const edit = useSetFields(trackingType, set.weightUnit, initialFieldsOf(set));
 
   async function save() {
-    if (!corrected) return;
-    if (await succeeds("Couldn't correct the Set", () => tracker.editSet(set.id, corrected))) {
+    const { values } = edit;
+    if (!values) return;
+    if (await runOrAlert("Couldn't correct the Set", () => tracker.editSet(set.id, values))) {
       onDone();
     }
   }
 
-  function confirmDelete() {
-    Alert.alert('Delete this set?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (await succeeds("Couldn't delete the Set", () => tracker.deleteSet(set.id))) onDone();
-        },
-      },
-    ]);
+  async function remove() {
+    if (await runOrAlert("Couldn't delete the Set", () => tracker.deleteSet(set.id))) onDone();
   }
 
   return (
     <View style={[styles.editor, { borderColor: colors.border }]}>
       <View style={styles.row}>
-        <SetFields
-          trackingType={trackingType}
-          unit={set.weightUnit}
-          weight={weight}
-          reps={reps}
-          onChangeWeight={setWeight}
-          onChangeReps={setReps}
-        />
+        <SetFields {...edit.fields} />
       </View>
       <View style={styles.row}>
         <Text style={[styles.setText, { color: colors.text }]}>Warm-up</Text>
-        <Switch
-          value={set.isWarmUp}
-          onValueChange={async isWarmUp => {
-            await succeeds("Couldn't change the warm-up", () => tracker.setWarmUp(set.id, isWarmUp));
-          }}
-        />
+        <Switch value={edit.isWarmUp} onValueChange={edit.setIsWarmUp} />
       </View>
       <View style={styles.row}>
-        <PrimaryButton label="Save" disabled={!corrected} onPress={save} />
+        <PrimaryButton label="Save" disabled={!edit.values} onPress={save} />
         <TextButton label="Cancel" onPress={onDone} />
-        <TextButton label="Delete" destructive onPress={confirmDelete} />
+        <TextButton label="Delete" destructive onPress={remove} />
       </View>
     </View>
   );
@@ -171,16 +157,8 @@ function setLabels(sets: WorkoutSet[]): string[] {
   return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
 }
 
-function describeSet(set: WorkoutSet, trackingType: TrackingType): string {
-  if (trackingType === 'weighted') return `${set.weight} ${set.weightUnit} × ${set.reps}`;
-  // No added weight, whether left blank or entered as 0, is plain bodyweight.
-  if (!set.weight) return `Bodyweight × ${set.reps}`;
-  const sign = set.weight < 0 ? '−' : '+';
-  return `Bodyweight ${sign} ${Math.abs(set.weight)} ${set.weightUnit} × ${set.reps}`;
-}
-
-// Runs a core command, telling the lifter why if it's refused.
-async function succeeds(failureTitle: string, command: () => Promise<void>): Promise<boolean> {
+// Runs a core command, telling the lifter why if it's refused. True if it ran.
+async function runOrAlert(failureTitle: string, command: () => Promise<void>): Promise<boolean> {
   try {
     await command();
     return true;

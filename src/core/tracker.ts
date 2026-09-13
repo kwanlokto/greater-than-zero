@@ -49,11 +49,14 @@ export type ExerciseSearch = {
   muscleGroup?: MuscleGroup;
 };
 
-export type NewSet = {
-  // In the display unit. For a bodyweight Exercise it's the added weight: null
-  // for plain bodyweight, positive for a belt or vest, negative when assisted.
+// What the lifter enters for a Set. Each command says which unit the weight is
+// in. For a bodyweight Exercise the weight is the added weight: null for plain
+// bodyweight, positive for a belt or vest, negative when assisted.
+export type SetValues = {
   weight: number | null;
   reps: number;
+  // A working Set unless marked as a warm-up.
+  isWarmUp?: boolean;
 };
 
 export type WorkoutSet = {
@@ -106,7 +109,7 @@ function localDateOf(time: Date): string {
 // when it can. logSet enforces it; screens use it to decide when to allow logging.
 export function problemWithSet(
   trackingType: TrackingType,
-  { weight, reps }: NewSet,
+  { weight, reps }: SetValues,
 ): string | undefined {
   if (weight === null) {
     if (trackingType === 'weighted') return 'A weighted Set needs a weight';
@@ -119,7 +122,7 @@ export function problemWithSet(
   return undefined;
 }
 
-function requireValidSet(trackingType: TrackingType, set: NewSet) {
+function requireValidSet(trackingType: TrackingType, set: SetValues) {
   const problem = problemWithSet(trackingType, set);
   if (problem) throw new Error(problem);
 }
@@ -156,6 +159,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return next;
   }
 
+  // Positions aren't renumbered when a Set is deleted, so new Sets always go
+  // after every earlier one.
+  function nextSetPosition(exerciseEntryId: string) {
+    return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId));
+  }
+
   async function getDisplayUnit(): Promise<WeightUnit> {
     const [row] = await db.select({ displayUnit: settings.displayUnit }).from(settings);
     return row.displayUnit;
@@ -171,7 +180,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   // Deleted Sets can't change.
-  async function changeSet(setId: string, values: Partial<typeof sets.$inferInsert>) {
+  async function updateSet(setId: string, values: Partial<typeof sets.$inferInsert>) {
     const changed = await db
       .update(sets)
       .set(values)
@@ -309,23 +318,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Saved the moment it's logged, after the entry's earlier Sets. The weight is
     // in the display unit the lifter sees while typing it.
-    async logSet(exerciseEntryId: string, { weight, reps }: NewSet): Promise<void> {
-      requireValidSet(await trackingTypeOfEntry(exerciseEntryId), { weight, reps });
+    async logSet(exerciseEntryId: string, set: SetValues): Promise<void> {
+      requireValidSet(await trackingTypeOfEntry(exerciseEntryId), set);
       await db.insert(sets).values({
         exerciseEntryId,
-        position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),
-        weight,
+        position: await nextSetPosition(exerciseEntryId),
+        weight: set.weight,
         weightUnit: await getDisplayUnit(),
-        reps,
+        reps: set.reps,
+        isWarmUp: set.isWarmUp ?? false,
         loggedAt: now(),
       });
     },
 
-    // The weight stays in the unit the Set was logged in, which is the unit
-    // shown while correcting it.
-    async editSet(setId: string, { weight, reps }: NewSet): Promise<void> {
-      requireValidSet(await trackingTypeOfSet(setId), { weight, reps });
-      await changeSet(setId, { weight, reps });
+    // The weight is in the unit the Set was logged in, which is the unit shown
+    // while correcting it; the Set keeps that unit.
+    async editSet(setId: string, set: SetValues): Promise<void> {
+      requireValidSet(await trackingTypeOfSet(setId), set);
+      await updateSet(setId, { weight: set.weight, reps: set.reps, isWarmUp: set.isWarmUp });
     },
 
     // Copies the entry's latest Set, weight unit and warm-up flag included.
@@ -345,18 +355,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       await db.insert(sets).values({
         ...last,
         exerciseEntryId,
-        position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),
+        position: await nextSetPosition(exerciseEntryId),
         loggedAt: now(),
       });
     },
 
     // Soft delete: the others keep their positions, so their order holds.
     async deleteSet(setId: string): Promise<void> {
-      await changeSet(setId, { deletedAt: now() });
-    },
-
-    async setWarmUp(setId: string, isWarmUp: boolean): Promise<void> {
-      await changeSet(setId, { isWarmUp });
+      await updateSet(setId, { deletedAt: now() });
     },
 
     async finishWorkout(id: string): Promise<void> {

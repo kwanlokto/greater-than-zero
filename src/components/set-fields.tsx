@@ -1,44 +1,90 @@
 import { useTheme } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
 
 import {
   problemWithSet,
-  type NewSet,
+  type SetValues,
   type TrackingType,
   type WeightUnit,
   type WorkoutSet,
 } from '@/core/tracker';
 
-// How the weight field reads for each tracking type.
-const weightFieldFor: Record<
-  TrackingType,
-  (unit: WeightUnit) => {
+type SetPresentation = {
+  weightField: (unit: WeightUnit) => {
     keyboardType: KeyboardTypeOptions;
     placeholder: string;
     unitLabel: string;
     accessibilityLabel: string;
-  }
-> = {
-  weighted: unit => ({
-    keyboardType: 'decimal-pad',
-    placeholder: '0',
-    unitLabel: unit,
-    accessibilityLabel: `Weight in ${unit}`,
-  }),
-  bodyweight: unit => ({
-    // The numeric keyboard has a minus key, for assisted Sets.
-    keyboardType: 'numeric',
-    placeholder: 'none',
-    unitLabel: `${unit} added`,
-    accessibilityLabel: `Added weight in ${unit}: blank for bodyweight, negative if assisted`,
-  }),
+  };
+  // Shown once per Exercise, under its fields.
+  hint?: string;
+  describe: (set: WorkoutSet) => string;
 };
 
-// Shown once per Exercise, under its fields.
-export const weightHintFor: Record<TrackingType, string | undefined> = {
-  weighted: undefined,
-  bodyweight: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
+// How Sets of each tracking type are entered and shown.
+export const setPresentationFor: Record<TrackingType, SetPresentation> = {
+  weighted: {
+    weightField: unit => ({
+      keyboardType: 'decimal-pad',
+      placeholder: '0',
+      unitLabel: unit,
+      accessibilityLabel: `Weight in ${unit}`,
+    }),
+    describe: set => `${set.weight} ${set.weightUnit} × ${set.reps}`,
+  },
+  bodyweight: {
+    weightField: unit => ({
+      // The numeric keyboard has a minus key, for assisted Sets.
+      keyboardType: 'numeric',
+      placeholder: 'none',
+      unitLabel: `${unit} added`,
+      accessibilityLabel: `Added weight in ${unit}: blank for bodyweight, negative if assisted`,
+    }),
+    hint: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
+    describe: set => {
+      // No added weight, whether left blank or entered as 0, is plain bodyweight.
+      if (!set.weight) return `Bodyweight × ${set.reps}`;
+      const sign = set.weight < 0 ? '−' : '+';
+      return `Bodyweight ${sign} ${Math.abs(set.weight)} ${set.weightUnit} × ${set.reps}`;
+    },
+  },
 };
+
+type Initial = { weight?: string; reps?: string; isWarmUp?: boolean };
+
+// The text in a Set's fields and its warm-up mark, plus the Set they add up to:
+// undefined while it isn't one the core would accept. The core's own rule
+// decides, so screens can't drift from it.
+export function useSetFields(trackingType: TrackingType, unit: WeightUnit, initial: Initial = {}) {
+  const [weight, setWeight] = useState(initial.weight ?? '');
+  const [reps, setReps] = useState(initial.reps ?? '');
+  const [isWarmUp, setIsWarmUp] = useState(initial.isWarmUp ?? false);
+
+  return {
+    fields: {
+      trackingType,
+      unit,
+      weight,
+      reps,
+      onChangeWeight: setWeight,
+      onChangeReps: setReps,
+    },
+    isWarmUp,
+    setIsWarmUp,
+    values: typedSet(trackingType, weight, reps, isWarmUp),
+    clearReps: () => setReps(''),
+  };
+}
+
+// A logged Set's fields, for correcting it.
+export function initialFieldsOf(set: WorkoutSet): Initial {
+  return {
+    weight: set.weight === null ? '' : String(set.weight),
+    reps: String(set.reps),
+    isWarmUp: set.isWarmUp,
+  };
+}
 
 type Props = {
   trackingType: TrackingType;
@@ -52,7 +98,7 @@ type Props = {
 // Weight and reps inputs for a Set, laid out for the Exercise's tracking type.
 export function SetFields({ trackingType, unit, weight, reps, onChangeWeight, onChangeReps }: Props) {
   const { colors } = useTheme();
-  const weightField = weightFieldFor[trackingType](unit);
+  const weightField = setPresentationFor[trackingType].weightField(unit);
   const inputStyle = [
     styles.input,
     { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
@@ -88,19 +134,17 @@ export function SetFields({ trackingType, unit, weight, reps, onChangeWeight, on
   );
 }
 
-// The Set typed into the fields, or undefined while it isn't one the core would
-// accept. The core's own rule decides, so screens can't drift from it.
-export function typedSet(trackingType: TrackingType, weight: string, reps: string): NewSet | undefined {
+function typedSet(
+  trackingType: TrackingType,
+  weight: string,
+  reps: string,
+  isWarmUp: boolean,
+): SetValues | undefined {
   const parsedWeight = parseWeight(weight);
   const parsedReps = parseWholeNumber(reps);
   if (parsedWeight === undefined || parsedReps === undefined) return undefined;
-  const set = { weight: parsedWeight, reps: parsedReps };
-  return problemWithSet(trackingType, set) === undefined ? set : undefined;
-}
-
-// A logged Set's values as field text, for correcting it.
-export function fieldTextOf(set: WorkoutSet): { weight: string; reps: string } {
-  return { weight: set.weight === null ? '' : String(set.weight), reps: String(set.reps) };
+  const values = { weight: parsedWeight, reps: parsedReps, isWarmUp };
+  return problemWithSet(trackingType, values) === undefined ? values : undefined;
 }
 
 // Null when blank, undefined when it isn't a number. Accepts a comma as the

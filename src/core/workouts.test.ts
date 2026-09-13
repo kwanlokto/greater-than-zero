@@ -301,6 +301,18 @@ describe('Logged Sets', () => {
     expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([[60, 8]]);
   });
 
+  it('of a bodyweight Exercise can be corrected to plain bodyweight or to assisted', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
+    await tracker.logSet(entry.id, { weight: 10, reps: 6 });
+    const [logged] = await setsOf(tracker, workout.id);
+
+    await tracker.editSet(logged.id, { weight: null, reps: 6 });
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([[null, 6]]);
+    await tracker.editSet(logged.id, { weight: -15, reps: 8 });
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([[-15, 8]]);
+  });
+
   it('can be deleted, leaving the rest in order with new Sets after them', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
@@ -389,26 +401,33 @@ describe('Same as last set', () => {
 });
 
 describe('Warm-up Sets', () => {
-  it('are working Sets until marked as warm-ups, and can be marked back', async () => {
+  it('are logged as warm-ups when marked so, and as working Sets otherwise', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+
+    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+
+    expect((await setsOf(tracker, workout.id)).map(set => set.isWarmUp)).toEqual([true, false]);
+  });
+
+  it('can be marked as warm-ups and back when corrected', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
     await tracker.logSet(entry.id, { weight: 40, reps: 10 });
     const [logged] = await setsOf(tracker, workout.id);
     const warmUps = async () => (await setsOf(tracker, workout.id)).map(set => set.isWarmUp);
 
-    expect(await warmUps()).toEqual([false]);
-    await tracker.setWarmUp(logged.id, true);
+    await tracker.editSet(logged.id, { weight: 40, reps: 10, isWarmUp: true });
     expect(await warmUps()).toEqual([true]);
-    await tracker.setWarmUp(logged.id, false);
+    await tracker.editSet(logged.id, { weight: 40, reps: 10, isWarmUp: false });
     expect(await warmUps()).toEqual([false]);
   });
 
   it('are copied as warm-ups by "same as last set"', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 40, reps: 10 });
-    const [warmUp] = await setsOf(tracker, workout.id);
-    await tracker.setWarmUp(warmUp.id, true);
+    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true });
 
     await tracker.logSameAsLastSet(entry.id);
 
