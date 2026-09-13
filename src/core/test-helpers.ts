@@ -1,4 +1,4 @@
-import type { Tracker } from './tracker';
+import type { SetValues, Tracker } from './tracker';
 
 export function names(items: { name: string }[]) {
   return items.map(item => item.name);
@@ -43,4 +43,15 @@ export function clockAt(time: string) {
       current = new Date(next);
     },
   };
+}
+
+// Starts, logs and finishes a Workout with one Exercise.
+export async function doWorkout(tracker: Tracker, exerciseName: string, loggedSets: SetValues[]) {
+  const { workout, entry } = await startWorkoutWith(tracker, exerciseName);
+  for (const set of loggedSets) await tracker.logSet(entry.id, set);
+  await tracker.finishWorkout(workout.id);
+}
+
+export function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
+  return loggedSets.map(set => [set.weight, set.reps]);
 }

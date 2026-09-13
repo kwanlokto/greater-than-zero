@@ -49,11 +49,12 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
     }),
     hint: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
     describe: set => {
-      const added = set.displayWeight;
       // No added weight, whether left blank or entered as 0, is plain bodyweight.
-      if (!added || added.value === 0) return `Bodyweight × ${set.reps}`;
-      const sign = added.value < 0 ? '−' : '+';
-      return `Bodyweight ${sign} ${formatWeight({ ...added, value: Math.abs(added.value) })} × ${set.reps}`;
+      // Judged on the weight as entered, not the rounded one shown.
+      if (!set.weight || !set.displayWeight) return `Bodyweight × ${set.reps}`;
+      const { value, unit } = set.displayWeight;
+      const sign = value < 0 ? '−' : '+';
+      return `Bodyweight ${sign} ${Math.abs(value)} ${unit} × ${set.reps}`;
     },
   },
 };

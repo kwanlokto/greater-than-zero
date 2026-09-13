@@ -6,6 +6,7 @@ import {
   setsOf,
   startWorkoutWith,
   startWorkoutWithEach,
+  weightsAndReps,
 } from './test-helpers';
 import { createTracker, type Tracker } from './tracker';
 
@@ -594,8 +595,4 @@ describe('Discarded Workouts', () => {
 async function exerciseNamesOf(tracker: Tracker, workoutId: string) {
   const entries = (await tracker.getWorkout(workoutId))?.entries ?? [];
   return names(entries.map(entry => entry.exercise));
-}
-
-function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
-  return loggedSets.map(set => [set.weight, set.reps]);
 }

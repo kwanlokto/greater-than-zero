@@ -129,13 +129,16 @@ function displayWeightOf(
       : unit === 'lb'
         ? weight * kilogramsPerPound
         : weight / kilogramsPerPound;
-  return { value: Math.round(converted * 10) / 10, unit: displayUnit };
+  // To one decimal place, halves away from zero, so help from an assisted
+  // machine rounds the same way as added weight.
+  const tenths = Math.round(Math.abs(converted) * 10) / 10;
+  return { value: converted < 0 ? -tenths : tenths, unit: displayUnit };
 }
 
-function withDisplayWeight<T extends { weight: number | null; weightUnit: WeightUnit }>(
-  set: T,
+function withDisplayWeight(
+  set: Omit<WorkoutSet, 'displayWeight'>,
   displayUnit: WeightUnit,
-): T & { displayWeight: Weight | null } {
+): WorkoutSet {
   return { ...set, displayWeight: displayWeightOf(set.weight, set.weightUnit, displayUnit) };
 }
 
@@ -538,7 +541,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .where(
           and(workingSetOfExercise(), isNotNull(workouts.finishedAt), isNull(workouts.deletedAt)),
         )
-        .orderBy(desc(workouts.startedAt))
+        // By calendar day first, so a Workout backfilled onto a past date later
+        // on still counts as that day's.
+        .orderBy(desc(workouts.localDate), desc(workouts.startedAt))
         .limit(1);
       if (!latest) return null;
 

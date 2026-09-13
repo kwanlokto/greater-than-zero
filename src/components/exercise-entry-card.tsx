@@ -14,6 +14,7 @@ import {
 import { TextButton } from '@/components/text-button';
 import {
   canSwapExercise,
+  type Exercise,
   type ExerciseEntry,
   type TrackingType,
   type WeightUnit,
@@ -99,7 +100,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
         </Pressable>
       </View>
-      <LastTimeLine entry={entry} />
+      <LastTimeLine exercise={entry.exercise} />
       <EntryNotes entry={entry} />
       {entry.sets.map((set, index) =>
         set.id === editingSetId ? (
@@ -217,9 +218,9 @@ function setLabels(sets: WorkoutSet[]): string[] {
 
 // The Exercise's working Sets from its most recent finished Workout, to beat
 // today. Nothing when it's never been done.
-function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
+function LastTimeLine({ exercise }: { exercise: Exercise }) {
   const { colors } = useTheme();
-  const { id, trackingType } = entry.exercise;
+  const { id, trackingType } = exercise;
   const lastTime = useTrackerQuery(() => tracker.getLastTime(id), [id]);
   if (!lastTime) return null;
 
