@@ -43,6 +43,13 @@
       "when": 1789256351375,
       "tag": "0005_create_workouts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789309255341,
+      "tag": "0006_add_sets_is_warm_up",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import m0002 from './0002_create_exercises.sql';
 import m0003 from './0003_insert_built_in_exercises.sql';
 import m0004 from './0004_add_exercises_is_custom.sql';
 import m0005 from './0005_create_workouts.sql';
+import m0006 from './0006_add_sets_is_warm_up.sql';
 
   export default {
     journal,
@@ -16,7 +17,8 @@ m0001,
 m0002,
 m0003,
 m0004,
-m0005
+m0005,
+m0006
     }
   }
   

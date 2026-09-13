@@ -6,36 +6,35 @@ import { useGuardedPress } from '@/use-guarded-press';
 type Props = {
   label: string;
   onPress: () => void | Promise<void>;
-  disabled?: boolean;
+  // Shown in the theme's warning colour, for actions like deleting.
+  destructive?: boolean;
 };
 
-export function PrimaryButton({ label, onPress, disabled = false }: Props) {
+// A lighter-weight button: just its label, in the theme's accent colour.
+export function TextButton({ label, onPress, destructive = false }: Props) {
   const { colors } = useTheme();
   const { press, busy } = useGuardedPress(onPress);
-  const inactive = disabled || busy;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: inactive }}
-      disabled={inactive}
+      disabled={busy}
+      hitSlop={8}
       onPress={press}
-      style={[styles.button, { backgroundColor: colors.primary, opacity: inactive ? 0.4 : 1 }]}
+      style={styles.button}
     >
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: destructive ? colors.notification : colors.primary }]}>
+        {label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+    paddingVertical: 8,
   },
   label: {
-    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },

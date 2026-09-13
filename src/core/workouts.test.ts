@@ -139,6 +139,7 @@ describe('Sets', () => {
         weight: 60,
         weightUnit: 'kg',
         reps: 8,
+        isWarmUp: false,
         loggedAt: new Date('2026-09-12T18:00:00-04:00'),
       },
       {
@@ -146,6 +147,7 @@ describe('Sets', () => {
         weight: 62.5,
         weightUnit: 'kg',
         reps: 6,
+        isWarmUp: false,
         loggedAt: new Date('2026-09-12T18:03:00-04:00'),
       },
     ]);
@@ -257,6 +259,166 @@ describe('Bodyweight Sets', () => {
     ]);
   });
 });
+
+describe('Logged Sets', () => {
+  it('can be corrected, keeping their place in the order', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 62.5, reps: 6 });
+    const [first] = await setsOf(tracker, workout.id);
+
+    await tracker.editSet(first.id, { weight: 65, reps: 7 });
+
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([
+      [65, 7],
+      [62.5, 6],
+    ]);
+  });
+
+  it('are corrected in the unit they were logged in, whatever the display unit now', async () => {
+    const tracker = createTracker(createTestDatabase());
+    await tracker.setDisplayUnit('lb');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    const [logged] = await setsOf(tracker, workout.id);
+
+    await tracker.setDisplayUnit('kg');
+    await tracker.editSet(logged.id, { weight: 140, reps: 5 });
+
+    expect(await setsOf(tracker, workout.id)).toMatchObject([{ weight: 140, weightUnit: 'lb' }]);
+  });
+
+  it('follow the same rules when corrected as when logged', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    const [logged] = await setsOf(tracker, workout.id);
+
+    await expect(tracker.editSet(logged.id, { weight: null, reps: 8 })).rejects.toThrow(
+      'A weighted Set needs a weight',
+    );
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([[60, 8]]);
+  });
+
+  it('can be deleted, leaving the rest in order with new Sets after them', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 12 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+    const [, typo] = await setsOf(tracker, workout.id);
+
+    await tracker.deleteSet(typo.id);
+    await tracker.logSet(entry.id, { weight: 60, reps: 6 });
+
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([
+      [60, 8],
+      [60, 7],
+      [60, 6],
+    ]);
+  });
+
+  it("can't be changed once deleted", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    const [logged] = await setsOf(tracker, workout.id);
+    await tracker.deleteSet(logged.id);
+
+    await expect(tracker.editSet(logged.id, { weight: 65, reps: 8 })).rejects.toThrow('No such Set');
+    await expect(tracker.deleteSet(logged.id)).rejects.toThrow('No such Set');
+  });
+});
+
+describe('Same as last set', () => {
+  it("logs a copy of the Exercise's previous Set, at the time it's pressed", async () => {
+    const clock = clockAt('2026-09-13T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+
+    clock.setTime('2026-09-13T18:03:00-04:00');
+    await tracker.logSameAsLastSet(entry.id);
+
+    const logged = await setsOf(tracker, workout.id);
+    expect(logged.map(set => [set.weight, set.weightUnit, set.reps])).toEqual([
+      [60, 'kg', 8],
+      [60, 'kg', 8],
+    ]);
+    expect(logged[1].loggedAt).toEqual(new Date('2026-09-13T18:03:00-04:00'));
+  });
+
+  it('copies the last Set still there, not one that was deleted', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 70, reps: 5 });
+    const [, mistake] = await setsOf(tracker, workout.id);
+    await tracker.deleteSet(mistake.id);
+
+    await tracker.logSameAsLastSet(entry.id);
+
+    expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([
+      [60, 8],
+      [60, 8],
+    ]);
+  });
+
+  it('keeps the unit the copied Set was logged in', async () => {
+    const tracker = createTracker(createTestDatabase());
+    await tracker.setDisplayUnit('lb');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    await tracker.setDisplayUnit('kg');
+
+    await tracker.logSameAsLastSet(entry.id);
+
+    expect(await setsOf(tracker, workout.id)).toMatchObject([
+      { weight: 135, weightUnit: 'lb' },
+      { weight: 135, weightUnit: 'lb' },
+    ]);
+  });
+
+  it('needs a Set to copy', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { entry } = await startWorkoutWith(tracker, 'Squat');
+
+    await expect(tracker.logSameAsLastSet(entry.id)).rejects.toThrow('No Set to copy yet');
+  });
+});
+
+describe('Warm-up Sets', () => {
+  it('are working Sets until marked as warm-ups, and can be marked back', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 40, reps: 10 });
+    const [logged] = await setsOf(tracker, workout.id);
+    const warmUps = async () => (await setsOf(tracker, workout.id)).map(set => set.isWarmUp);
+
+    expect(await warmUps()).toEqual([false]);
+    await tracker.setWarmUp(logged.id, true);
+    expect(await warmUps()).toEqual([true]);
+    await tracker.setWarmUp(logged.id, false);
+    expect(await warmUps()).toEqual([false]);
+  });
+
+  it('are copied as warm-ups by "same as last set"', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 40, reps: 10 });
+    const [warmUp] = await setsOf(tracker, workout.id);
+    await tracker.setWarmUp(warmUp.id, true);
+
+    await tracker.logSameAsLastSet(entry.id);
+
+    expect((await setsOf(tracker, workout.id)).map(set => set.isWarmUp)).toEqual([true, true]);
+  });
+});
+
+function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
+  return loggedSets.map(set => [set.weight, set.reps]);
+}
 
 // Starts a Workout with one Exercise in it.
 async function startWorkoutWith(tracker: Tracker, exerciseName: string) {

@@ -95,6 +95,8 @@ export const sets = sqliteTable('sets', {
   weight: real('weight'),
   weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
   reps: integer('reps').notNull(),
+  // Warm-ups are left out of charts, Targets and "last time".
+  isWarmUp: integer('is_warm_up', { mode: 'boolean' }).notNull().default(false),
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 

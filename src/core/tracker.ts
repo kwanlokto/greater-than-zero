@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -62,6 +62,7 @@ export type WorkoutSet = {
   weight: number | null;
   weightUnit: WeightUnit;
   reps: number;
+  isWarmUp: boolean;
   loggedAt: Date;
 };
 
@@ -118,6 +119,11 @@ export function problemWithSet(
   return undefined;
 }
 
+function requireValidSet(trackingType: TrackingType, set: NewSet) {
+  const problem = problemWithSet(trackingType, set);
+  if (problem) throw new Error(problem);
+}
+
 function requireExerciseName(typed: string): string {
   const name = typed.trim();
   if (!name) throw new Error('An Exercise needs a name');
@@ -164,6 +170,37 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .get()?.id;
   }
 
+  // Deleted Sets can't change.
+  async function changeSet(setId: string, values: Partial<typeof sets.$inferInsert>) {
+    const changed = await db
+      .update(sets)
+      .set(values)
+      .where(and(eq(sets.id, setId), isNull(sets.deletedAt)))
+      .returning({ id: sets.id });
+    if (changed.length === 0) throw new Error('No such Set');
+  }
+
+  async function trackingTypeOfEntry(exerciseEntryId: string): Promise<TrackingType> {
+    const [exercise] = await db
+      .select({ trackingType: exercises.trackingType })
+      .from(exerciseEntries)
+      .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
+      .where(eq(exerciseEntries.id, exerciseEntryId));
+    if (!exercise) throw new Error('No such Exercise in a Workout');
+    return exercise.trackingType;
+  }
+
+  async function trackingTypeOfSet(setId: string): Promise<TrackingType> {
+    const [exercise] = await db
+      .select({ trackingType: exercises.trackingType })
+      .from(sets)
+      .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+      .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
+      .where(and(eq(sets.id, setId), isNull(sets.deletedAt)));
+    if (!exercise) throw new Error('No such Set');
+    return exercise.trackingType;
+  }
+
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const workout = await db.query.workouts.findFirst({
       where: eq(workouts.id, id),
@@ -180,7 +217,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
             sets: {
               where: isNull(sets.deletedAt),
               orderBy: asc(sets.position),
-              columns: { id: true, weight: true, weightUnit: true, reps: true, loggedAt: true },
+              columns: {
+                id: true,
+                weight: true,
+                weightUnit: true,
+                reps: true,
+                isWarmUp: true,
+                loggedAt: true,
+              },
             },
           },
         },
@@ -266,15 +310,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Saved the moment it's logged, after the entry's earlier Sets. The weight is
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, { weight, reps }: NewSet): Promise<void> {
-      const [exercise] = await db
-        .select({ trackingType: exercises.trackingType })
-        .from(exerciseEntries)
-        .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
-        .where(eq(exerciseEntries.id, exerciseEntryId));
-      if (!exercise) throw new Error('No such Exercise in a Workout');
-      const problem = problemWithSet(exercise.trackingType, { weight, reps });
-      if (problem) throw new Error(problem);
-
+      requireValidSet(await trackingTypeOfEntry(exerciseEntryId), { weight, reps });
       await db.insert(sets).values({
         exerciseEntryId,
         position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),
@@ -283,6 +319,44 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         reps,
         loggedAt: now(),
       });
+    },
+
+    // The weight stays in the unit the Set was logged in, which is the unit
+    // shown while correcting it.
+    async editSet(setId: string, { weight, reps }: NewSet): Promise<void> {
+      requireValidSet(await trackingTypeOfSet(setId), { weight, reps });
+      await changeSet(setId, { weight, reps });
+    },
+
+    // Copies the entry's latest Set, weight unit and warm-up flag included.
+    async logSameAsLastSet(exerciseEntryId: string): Promise<void> {
+      const [last] = await db
+        .select({
+          weight: sets.weight,
+          weightUnit: sets.weightUnit,
+          reps: sets.reps,
+          isWarmUp: sets.isWarmUp,
+        })
+        .from(sets)
+        .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+        .orderBy(desc(sets.position))
+        .limit(1);
+      if (!last) throw new Error('No Set to copy yet');
+      await db.insert(sets).values({
+        ...last,
+        exerciseEntryId,
+        position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),
+        loggedAt: now(),
+      });
+    },
+
+    // Soft delete: the others keep their positions, so their order holds.
+    async deleteSet(setId: string): Promise<void> {
+      await changeSet(setId, { deletedAt: now() });
+    },
+
+    async setWarmUp(setId: string, isWarmUp: boolean): Promise<void> {
+      await changeSet(setId, { isWarmUp });
     },
 
     async finishWorkout(id: string): Promise<void> {
