@@ -123,6 +123,19 @@ export function problemWithSet(
   return undefined;
 }
 
+// Swapping an Exercise in a Workout is allowed only while no Set is logged for
+// it, since Sets belong to the Exercise they were done on. swapExercise
+// enforces it; screens use it to decide whether to offer a swap.
+export function canSwapExercise(entry: Pick<ExerciseEntry, 'sets'>): boolean {
+  return entry.sets.length === 0;
+}
+
+// A Workout that's neither finished nor discarded. Starting, finishing and
+// discarding all go by this, so a discarded Workout can never be finished.
+function inProgress() {
+  return and(isNull(workouts.finishedAt), isNull(workouts.deletedAt));
+}
+
 function requireValidSet(trackingType: TrackingType, set: SetValues) {
   const problem = problemWithSet(trackingType, set);
   if (problem) throw new Error(problem);
@@ -176,8 +189,16 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return db
       .select({ id: workouts.id })
       .from(workouts)
-      .where(and(isNull(workouts.finishedAt), isNull(workouts.deletedAt)))
+      .where(inProgress())
       .get()?.id;
+  }
+
+  // Soft-deletes the Sets matching `where`, as part of a larger transaction.
+  function softDeleteSets(tx: TrackerDatabase, where: SQL, deletedAt: Date) {
+    tx.update(sets)
+      .set({ deletedAt })
+      .where(and(where, isNull(sets.deletedAt)))
+      .run();
   }
 
   // Removed entries can't change.
@@ -316,12 +337,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .get();
     },
 
-    async saveNotes(exerciseEntryId: string, notes: string): Promise<void> {
+    async saveEntryNotes(exerciseEntryId: string, notes: string): Promise<void> {
       await updateEntry(exerciseEntryId, { notes });
     },
 
-    // The new Exercise takes the old one's place in the Workout. Only while no
-    // Set is logged for it, since Sets belong to the Exercise they were done on.
+    // The new Exercise takes the old one's place in the Workout, keeping its
+    // notes. Enforces canSwapExercise's rule against the saved Sets.
     async swapExercise(exerciseEntryId: string, exerciseId: string): Promise<void> {
       const [logged] = await db
         .select({ id: sets.id })
@@ -343,15 +364,17 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .returning({ id: exerciseEntries.id })
           .all();
         if (removed.length === 0) throw new Error('No such Exercise in a Workout');
-        tx.update(sets)
-          .set({ deletedAt })
-          .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
-          .run();
+        softDeleteSets(tx, eq(sets.exerciseEntryId, exerciseEntryId), deletedAt);
       });
     },
 
     // Appends the Exercise after the ones already in the Workout.
     async addExerciseToWorkout(workoutId: string, exerciseId: string): Promise<{ id: string }> {
+      const [workout] = await db
+        .select({ id: workouts.id })
+        .from(workouts)
+        .where(and(eq(workouts.id, workoutId), isNull(workouts.deletedAt)));
+      if (!workout) throw new Error('No such Workout');
       const position = await nextPosition(
         exerciseEntries,
         exerciseEntries.position,
@@ -421,7 +444,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const discarded = tx
           .update(workouts)
           .set({ deletedAt })
-          .where(and(eq(workouts.id, id), isNull(workouts.finishedAt), isNull(workouts.deletedAt)))
+          .where(and(eq(workouts.id, id), inProgress()))
           .returning({ id: workouts.id })
           .all();
         if (discarded.length === 0) throw new Error('That Workout is not in progress');
@@ -429,10 +452,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .select({ id: exerciseEntries.id })
           .from(exerciseEntries)
           .where(eq(exerciseEntries.workoutId, id));
-        tx.update(sets)
-          .set({ deletedAt })
-          .where(and(inArray(sets.exerciseEntryId, entryIds), isNull(sets.deletedAt)))
-          .run();
+        softDeleteSets(tx, inArray(sets.exerciseEntryId, entryIds), deletedAt);
         tx.update(exerciseEntries)
           .set({ deletedAt })
           .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
@@ -444,7 +464,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const finished = await db
         .update(workouts)
         .set({ finishedAt: now() })
-        .where(and(eq(workouts.id, id), isNull(workouts.finishedAt)))
+        .where(and(eq(workouts.id, id), inProgress()))
         .returning({ id: workouts.id });
       if (finished.length === 0) throw new Error('That Workout is not in progress');
     },

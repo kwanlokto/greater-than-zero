@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useTheme } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { Chip } from '@/components/chip';
@@ -12,8 +12,15 @@ import {
   useSetFields,
 } from '@/components/set-fields';
 import { TextButton } from '@/components/text-button';
-import type { ExerciseEntry, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
+import {
+  canSwapExercise,
+  type ExerciseEntry,
+  type TrackingType,
+  type WeightUnit,
+  type WorkoutSet,
+} from '@/core/tracker';
 import { tracker } from '@/database';
+import { runOrAlert } from '@/run-or-alert';
 
 type Props = {
   entry: ExerciseEntry;
@@ -27,7 +34,6 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const { colors } = useTheme();
   const { trackingType } = entry.exercise;
   const [editingSetId, setEditingSetId] = useState<string>();
-  const [notes, setNotes] = useState(entry.notes);
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
   const next = useSetFields(trackingType, displayUnit);
@@ -42,12 +48,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
     }
   }
 
-  async function saveNotes() {
-    if (notes === entry.notes) return;
-    await runOrAlert("Couldn't save the notes", () => tracker.saveNotes(entry.id, notes));
-  }
-
-  function remove() {
+  function confirmRemove() {
     const removeNow = () =>
       runOrAlert("Couldn't remove the exercise", () =>
         tracker.removeExerciseFromWorkout(entry.id),
@@ -64,10 +65,9 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
     ]);
   }
 
-  // Swapping is only offered while no Set is logged for the Exercise.
   function showActions() {
     Alert.alert(entry.exercise.name, undefined, [
-      ...(entry.sets.length === 0
+      ...(canSwapExercise(entry)
         ? [
             {
               text: 'Swap exercise',
@@ -79,7 +79,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
             },
           ]
         : []),
-      { text: 'Remove exercise', style: 'destructive' as const, onPress: remove },
+      { text: 'Remove exercise', style: 'destructive' as const, onPress: confirmRemove },
       { text: 'Cancel', style: 'cancel' as const },
     ]);
   }
@@ -97,16 +97,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
         </Pressable>
       </View>
-      <TextInput
-        value={notes}
-        onChangeText={setNotes}
-        onEndEditing={saveNotes}
-        placeholder="Notes"
-        placeholderTextColor="#8e8e93"
-        multiline
-        accessibilityLabel={`Notes for ${entry.exercise.name}`}
-        style={[styles.notes, { color: colors.text, borderColor: colors.border }]}
-      />
+      <EntryNotes entry={entry} />
       {entry.sets.map((set, index) =>
         set.id === editingSetId ? (
           <SetEditor
@@ -221,15 +212,44 @@ function setLabels(sets: WorkoutSet[]): string[] {
   return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
 }
 
-// Runs a core command, telling the lifter why if it's refused. True if it ran.
-async function runOrAlert(failureTitle: string, command: () => Promise<void>): Promise<boolean> {
-  try {
-    await command();
-    return true;
-  } catch (error) {
-    Alert.alert(failureTitle, error instanceof Error ? error.message : String(error));
-    return false;
-  }
+// Saved shortly after the lifter stops typing, and when the card goes away, so
+// a note isn't lost if they finish the Workout straight after writing it.
+function EntryNotes({ entry }: { entry: ExerciseEntry }) {
+  const { colors } = useTheme();
+  const [notes, setNotes] = useState(entry.notes);
+  const latest = useRef(entry.notes);
+  const saved = useRef(entry.notes);
+
+  const save = useCallback(() => {
+    if (latest.current === saved.current) return;
+    saved.current = latest.current;
+    tracker
+      .saveEntryNotes(entry.id, latest.current)
+      // Only fails once the Exercise has been removed or the Workout discarded.
+      .catch(error => console.warn('Could not save notes', error));
+  }, [entry.id]);
+
+  useEffect(() => {
+    const timer = setTimeout(save, 600);
+    return () => clearTimeout(timer);
+  }, [notes, save]);
+  useEffect(() => save, [save]);
+
+  return (
+    <TextInput
+      value={notes}
+      onChangeText={text => {
+        latest.current = text;
+        setNotes(text);
+      }}
+      onEndEditing={save}
+      placeholder="Notes"
+      placeholderTextColor="#8e8e93"
+      multiline
+      accessibilityLabel={`Notes for ${entry.exercise.name}`}
+      style={[styles.notes, { color: colors.text, borderColor: colors.border }]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

@@ -1,48 +1,56 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useRef } from 'react';
-import { Alert } from 'react-native';
 
 import { ExerciseBrowser, ExerciseRow } from '@/components/exercise-browser';
 import type { Exercise } from '@/core/tracker';
 import { tracker } from '@/database';
+import { runOrAlert } from '@/run-or-alert';
 
-// Picks an Exercise from the library, either to add to a Workout (workoutId)
-// or to swap in for one already there (swapEntryId).
+type Params = { workoutId?: string; swapEntryId?: string };
+
+// What choosing an Exercise does: add it to a Workout (workoutId) or swap it in
+// for one already there (swapEntryId).
+function choiceFor({ workoutId, swapEntryId }: Params) {
+  if (swapEntryId) {
+    return {
+      title: 'Swap exercise',
+      icon: 'swap-horizontal',
+      failure: "Couldn't swap the exercise",
+      run: (exercise: Exercise) => tracker.swapExercise(swapEntryId, exercise.id),
+    } as const;
+  }
+  if (workoutId) {
+    return {
+      title: 'Add exercise',
+      icon: 'add-circle-outline',
+      failure: "Couldn't add the exercise",
+      run: (exercise: Exercise) => tracker.addExerciseToWorkout(workoutId, exercise.id),
+    } as const;
+  }
+  return undefined;
+}
+
 export default function ChooseExerciseScreen() {
-  const { workoutId, swapEntryId } = useLocalSearchParams<{
-    workoutId?: string;
-    swapEntryId?: string;
-  }>();
+  const choice = choiceFor(useLocalSearchParams<Params>());
   const router = useRouter();
   // One tap picks one Exercise, even if the lifter taps again while leaving.
   const choosing = useRef(false);
 
+  if (!choice) return null;
+
   async function choose(exercise: Exercise) {
-    if (choosing.current) return;
+    if (!choice || choosing.current) return;
     choosing.current = true;
-    try {
-      if (swapEntryId) await tracker.swapExercise(swapEntryId, exercise.id);
-      else if (workoutId) await tracker.addExerciseToWorkout(workoutId, exercise.id);
-      router.back();
-    } catch (error) {
-      choosing.current = false;
-      Alert.alert(
-        swapEntryId ? "Couldn't swap the exercise" : "Couldn't add the exercise",
-        error instanceof Error ? error.message : String(error),
-      );
-    }
+    if (await runOrAlert(choice.failure, () => choice.run(exercise))) router.back();
+    else choosing.current = false;
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: swapEntryId ? 'Swap exercise' : 'Add exercise' }} />
+      <Stack.Screen options={{ title: choice.title }} />
       <ExerciseBrowser
         renderExercise={exercise => (
-          <ExerciseRow
-            exercise={exercise}
-            icon={swapEntryId ? 'swap-horizontal' : 'add-circle-outline'}
-            onPress={() => choose(exercise)}
-          />
+          <ExerciseRow exercise={exercise} icon={choice.icon} onPress={() => choose(exercise)} />
         )}
       />
     </>

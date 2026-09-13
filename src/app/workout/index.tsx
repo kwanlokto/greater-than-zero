@@ -5,6 +5,7 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
+import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function WorkoutScreen() {
@@ -24,8 +25,9 @@ export default function WorkoutScreen() {
       {
         text: 'Finish',
         onPress: async () => {
-          await tracker.finishWorkout(workout.id);
-          router.back();
+          if (await runOrAlert("Couldn't finish the workout", () => tracker.finishWorkout(workout.id))) {
+            router.back();
+          }
         },
       },
     ]);
@@ -39,8 +41,9 @@ export default function WorkoutScreen() {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
-          await tracker.discardWorkout(workout.id);
-          router.back();
+          if (await runOrAlert("Couldn't discard the workout", () => tracker.discardWorkout(workout.id))) {
+            router.back();
+          }
         },
       },
     ]);

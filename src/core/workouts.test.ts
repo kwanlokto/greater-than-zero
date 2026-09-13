@@ -442,7 +442,7 @@ describe('Exercises in a Workout', () => {
     const notes = async () => (await tracker.getWorkout(workout.id))?.entries.map(e => e.notes);
 
     expect(await notes()).toEqual(['']);
-    await tracker.saveNotes(entry.id, 'Seat on 4, feet high');
+    await tracker.saveEntryNotes(entry.id, 'Seat on 4, feet high');
     expect(await notes()).toEqual(['Seat on 4, feet high']);
   });
 
@@ -490,6 +490,19 @@ describe('Exercises in a Workout', () => {
       'Dumbbell Bench Press',
       'Barbell Row',
     ]);
+  });
+
+  it('keep their notes when swapped, so nothing the lifter wrote is lost', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Leg Press');
+    await tracker.saveEntryNotes(entry.id, 'Leg press taken, back in 10 min');
+    const squat = await findExerciseByName(tracker, 'Squat');
+
+    await tracker.swapExercise(entry.id, squat.id);
+
+    expect((await tracker.getWorkout(workout.id))?.entries[0].notes).toBe(
+      'Leg press taken, back in 10 min',
+    );
   });
 
   it("can't be swapped once a Set is logged for them", async () => {
@@ -550,6 +563,23 @@ describe('Discarded Workouts', () => {
     await expect(tracker.discardWorkout(workout.id)).rejects.toThrow('That Workout is not in progress');
     expect(await tracker.getWorkout(workout.id)).toBeDefined();
   });
+
+  it("can't be finished afterwards, so they never reach History", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const workout = await tracker.startWorkout();
+    await tracker.discardWorkout(workout.id);
+
+    await expect(tracker.finishWorkout(workout.id)).rejects.toThrow('That Workout is not in progress');
+  });
+
+  it("can't have Exercises added afterwards", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const workout = await tracker.startWorkout();
+    await tracker.discardWorkout(workout.id);
+    const squat = await findExerciseByName(tracker, 'Squat');
+
+    await expect(tracker.addExerciseToWorkout(workout.id, squat.id)).rejects.toThrow('No such Workout');
+  });
 });
 
 // Starts a Workout with these Exercises, in order.
@@ -574,10 +604,8 @@ function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
 
 // Starts a Workout with one Exercise in it.
 async function startWorkoutWith(tracker: Tracker, exerciseName: string) {
-  const workout = await tracker.startWorkout();
-  const exercise = await findExerciseByName(tracker, exerciseName);
-  const entry = await tracker.addExerciseToWorkout(workout.id, exercise.id);
-  return { workout, entry };
+  const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName]);
+  return { workout, entry: entries[0] };
 }
 
 // The Sets of a Workout's first Exercise.
