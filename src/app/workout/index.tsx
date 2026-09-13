@@ -65,7 +65,8 @@ export default function WorkoutScreen() {
 // One Exercise in the Workout: its Sets so far, and a row to log the next one.
 function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: WeightUnit }) {
   const { colors } = useTheme();
-  // Kept after logging, so repeating a Set is one tap.
+  // The weight stays after logging; reps clear, so a stray tap can't log a
+  // duplicate Set.
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const parsedWeight = parseDecimal(weight);
@@ -115,6 +116,7 @@ function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: 
           onPress={async () => {
             if (parsedWeight === undefined || parsedReps === undefined) return;
             await tracker.logSet(entry.id, { weight: parsedWeight, reps: parsedReps });
+            setReps('');
           }}
         />
       </View>

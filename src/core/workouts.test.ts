@@ -1,6 +1,6 @@
 import { createTestDatabase } from './test-database';
 import { findExerciseByName, names } from './test-helpers';
-import { createTracker } from './tracker';
+import { createTracker, type Tracker } from './tracker';
 
 describe('Workouts', () => {
   it('start empty and stay in progress until finished', async () => {
@@ -35,6 +35,14 @@ describe('Workouts', () => {
     await expect(tracker.startWorkout()).rejects.toThrow('A Workout is already in progress');
   });
 
+  it('start only once when Start is pressed twice at the same moment', async () => {
+    const tracker = createTracker(createTestDatabase());
+
+    const results = await Promise.allSettled([tracker.startWorkout(), tracker.startWorkout()]);
+
+    expect(results.map(result => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+  });
+
   it('record the finish time, keeping the start time and the date they started on', async () => {
     const clock = clockAt('2026-09-12T23:30:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
@@ -48,6 +56,20 @@ describe('Workouts', () => {
       startedAt: new Date('2026-09-12T23:30:00-04:00'),
       finishedAt: new Date('2026-09-13T00:45:00-04:00'),
     });
+  });
+
+  it('keep their first finish time if finished again', async () => {
+    const clock = clockAt('2026-09-12T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    const started = await tracker.startWorkout();
+    clock.setTime('2026-09-12T19:00:00-04:00');
+    await tracker.finishWorkout(started.id);
+
+    clock.setTime('2026-09-12T21:00:00-04:00');
+    await expect(tracker.finishWorkout(started.id)).rejects.toThrow('That Workout is not in progress');
+    expect((await tracker.getWorkout(started.id))?.finishedAt).toEqual(
+      new Date('2026-09-12T19:00:00-04:00'),
+    );
   });
 
   it('are found as the Workout in progress until finished', async () => {
@@ -87,16 +109,13 @@ describe('Sets', () => {
   it('are logged in order, each with its weight, reps and time', async () => {
     const clock = clockAt('2026-09-12T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
-    const workout = await tracker.startWorkout();
-    const benchPress = await findExerciseByName(tracker, 'Bench Press');
-    const entry = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
     await tracker.logSet(entry.id, { weight: 60, reps: 8 });
     clock.setTime('2026-09-12T18:03:00-04:00');
     await tracker.logSet(entry.id, { weight: 62.5, reps: 6 });
 
-    const [logged] = (await tracker.getWorkout(workout.id))?.entries ?? [];
-    expect(logged.sets).toEqual([
+    expect(await setsOf(tracker, workout.id)).toEqual([
       {
         id: expect.any(String),
         weight: 60,
@@ -116,42 +135,35 @@ describe('Sets', () => {
 
   it('keep the weight exactly as entered, in the display unit at that moment', async () => {
     const tracker = createTracker(createTestDatabase());
-    const workout = await tracker.startWorkout();
-    const squat = await findExerciseByName(tracker, 'Squat');
-    const entry = await tracker.addExerciseToWorkout(workout.id, squat.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
 
     await tracker.setDisplayUnit('lb');
     await tracker.logSet(entry.id, { weight: 135, reps: 5 });
     await tracker.setDisplayUnit('kg');
     await tracker.logSet(entry.id, { weight: 60, reps: 5 });
 
-    const [logged] = (await tracker.getWorkout(workout.id))?.entries ?? [];
-    expect(logged.sets.map(set => [set.weight, set.weightUnit])).toEqual([
+    const logged = await setsOf(tracker, workout.id);
+    expect(logged.map(set => [set.weight, set.weightUnit])).toEqual([
       [135, 'lb'],
       [60, 'kg'],
     ]);
   });
 
-  it('are saved to the database the moment they are logged', async () => {
+  it('survive the app closing straight after they are logged', async () => {
     const database = createTestDatabase();
     const tracker = createTracker(database);
-    const workout = await tracker.startWorkout();
-    const deadlift = await findExerciseByName(tracker, 'Deadlift');
-    const entry = await tracker.addExerciseToWorkout(workout.id, deadlift.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Deadlift');
 
     await tracker.logSet(entry.id, { weight: 140, reps: 3 });
 
     // Another core on the same database, as if the app were reopened.
     const reopened = createTracker(database);
-    const [logged] = (await reopened.getWorkout(workout.id))?.entries ?? [];
-    expect(logged.sets).toMatchObject([{ weight: 140, reps: 3 }]);
+    expect(await setsOf(reopened, workout.id)).toMatchObject([{ weight: 140, reps: 3 }]);
   });
 
   it('need at least one rep', async () => {
     const tracker = createTracker(createTestDatabase());
-    const workout = await tracker.startWorkout();
-    const squat = await findExerciseByName(tracker, 'Squat');
-    const entry = await tracker.addExerciseToWorkout(workout.id, squat.id);
+    const { entry } = await startWorkoutWith(tracker, 'Squat');
 
     await expect(tracker.logSet(entry.id, { weight: 100, reps: 0 })).rejects.toThrow(
       'A Set needs a whole number of reps, at least 1',
@@ -160,15 +172,27 @@ describe('Sets', () => {
 
   it('need a weight that is a number', async () => {
     const tracker = createTracker(createTestDatabase());
-    const workout = await tracker.startWorkout();
-    const squat = await findExerciseByName(tracker, 'Squat');
-    const entry = await tracker.addExerciseToWorkout(workout.id, squat.id);
+    const { entry } = await startWorkoutWith(tracker, 'Squat');
 
     await expect(tracker.logSet(entry.id, { weight: Number.NaN, reps: 5 })).rejects.toThrow(
       'A weighted Set needs a weight',
     );
   });
 });
+
+// Starts a Workout with one Exercise in it.
+async function startWorkoutWith(tracker: Tracker, exerciseName: string) {
+  const workout = await tracker.startWorkout();
+  const exercise = await findExerciseByName(tracker, exerciseName);
+  const entry = await tracker.addExerciseToWorkout(workout.id, exercise.id);
+  return { workout, entry };
+}
+
+// The Sets of a Workout's first Exercise.
+async function setsOf(tracker: Tracker, workoutId: string) {
+  const [entry] = (await tracker.getWorkout(workoutId))?.entries ?? [];
+  return entry.sets;
+}
 
 // A clock the test moves by hand.
 function clockAt(time: string) {

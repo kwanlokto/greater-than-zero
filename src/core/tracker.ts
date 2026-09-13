@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
+import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
 import {
@@ -122,20 +122,30 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     }
   }
 
-  async function readDisplayUnit(): Promise<WeightUnit> {
+  // The position after the last one in use, so a new row goes at the end.
+  async function nextPosition(table: SQLiteTable, position: SQLiteColumn, where: SQL) {
+    const [{ next }] = await db
+      .select({ next: sql<number>`coalesce(max(${position}), -1) + 1` })
+      .from(table)
+      .where(where);
+    return next;
+  }
+
+  async function getDisplayUnit(): Promise<WeightUnit> {
     const [row] = await db.select({ displayUnit: settings.displayUnit }).from(settings);
     return row.displayUnit;
   }
 
-  async function findWorkoutInProgress(): Promise<{ id: string } | undefined> {
-    const [inProgress] = await db
+  // Synchronous, so startWorkout can check and insert without yielding.
+  function idOfWorkoutInProgress(): string | undefined {
+    return db
       .select({ id: workouts.id })
       .from(workouts)
-      .where(and(isNull(workouts.finishedAt), isNull(workouts.deletedAt)));
-    return inProgress;
+      .where(and(isNull(workouts.finishedAt), isNull(workouts.deletedAt)))
+      .get()?.id;
   }
 
-  async function loadWorkout(id: string): Promise<Workout | undefined> {
+  async function getWorkout(id: string): Promise<Workout | undefined> {
     const workout = await db.query.workouts.findFirst({
       where: eq(workouts.id, id),
       columns: { id: true, localDate: true, startedAt: true, finishedAt: true },
@@ -161,7 +171,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   return {
-    getDisplayUnit: readDisplayUnit,
+    getDisplayUnit,
 
     async setDisplayUnit(unit: WeightUnit): Promise<void> {
       await db.update(settings).set({ displayUnit: unit });
@@ -209,25 +219,27 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     async startWorkout(): Promise<{ id: string }> {
-      if (await findWorkoutInProgress()) throw new Error('A Workout is already in progress');
-
+      // Checked and inserted without awaiting in between, so two presses at the
+      // same moment can't both start one.
+      if (idOfWorkoutInProgress()) throw new Error('A Workout is already in progress');
       const startedAt = now();
-      const [started] = await db
+      return db
         .insert(workouts)
         .values({ startedAt, localDate: localDateOf(startedAt) })
-        .returning({ id: workouts.id });
-      return started;
+        .returning({ id: workouts.id })
+        .get();
     },
 
     // Appends the Exercise after the ones already in the Workout.
     async addExerciseToWorkout(workoutId: string, exerciseId: string): Promise<{ id: string }> {
-      const [{ nextPosition }] = await db
-        .select({ nextPosition: sql<number>`coalesce(max(${exerciseEntries.position}), -1) + 1` })
-        .from(exerciseEntries)
-        .where(eq(exerciseEntries.workoutId, workoutId));
+      const position = await nextPosition(
+        exerciseEntries,
+        exerciseEntries.position,
+        eq(exerciseEntries.workoutId, workoutId),
+      );
       const [entry] = await db
         .insert(exerciseEntries)
-        .values({ workoutId, exerciseId, position: nextPosition })
+        .values({ workoutId, exerciseId, position })
         .returning({ id: exerciseEntries.id });
       return entry;
     },
@@ -239,30 +251,32 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       if (!Number.isInteger(reps) || reps < 1) {
         throw new Error('A Set needs a whole number of reps, at least 1');
       }
-      const [{ nextPosition }] = await db
-        .select({ nextPosition: sql<number>`coalesce(max(${sets.position}), -1) + 1` })
-        .from(sets)
-        .where(eq(sets.exerciseEntryId, exerciseEntryId));
       await db.insert(sets).values({
         exerciseEntryId,
-        position: nextPosition,
+        position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),
         weight,
-        weightUnit: await readDisplayUnit(),
+        weightUnit: await getDisplayUnit(),
         reps,
         loggedAt: now(),
       });
     },
 
     async finishWorkout(id: string): Promise<void> {
-      await db.update(workouts).set({ finishedAt: now() }).where(eq(workouts.id, id));
+      const finished = await db
+        .update(workouts)
+        .set({ finishedAt: now() })
+        .where(and(eq(workouts.id, id), isNull(workouts.finishedAt)))
+        .returning({ id: workouts.id });
+      if (finished.length === 0) throw new Error('That Workout is not in progress');
     },
 
-    getWorkout: loadWorkout,
+    getWorkout,
 
     // Null when no Workout is in progress.
     async getWorkoutInProgress(): Promise<Workout | null> {
-      const inProgress = await findWorkoutInProgress();
-      return (inProgress && (await loadWorkout(inProgress.id))) ?? null;
+      const id = idOfWorkoutInProgress();
+      if (id === undefined) return null;
+      return (await getWorkout(id)) ?? null;
     },
   };
 }
