@@ -57,10 +57,7 @@ export default function RootLayout() {
               name="workout/index"
               options={{ title: 'Workout', presentation: 'fullScreenModal' }}
             />
-            <Stack.Screen
-              name="workout/add-exercise"
-              options={{ title: 'Add exercise', presentation: 'modal' }}
-            />
+            <Stack.Screen name="workout/choose-exercise" options={{ presentation: 'modal' }} />
           </Stack.Protected>
           <Stack.Protected guard={!onboarded}>
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />

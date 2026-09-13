@@ -82,6 +82,8 @@ export const exerciseEntries = sqliteTable('exercise_entries', {
     .notNull()
     .references(() => exercises.id),
   position: integer('position').notNull(),
+  // Free text, e.g. cues, pain or machine settings.
+  notes: text('notes').notNull().default(''),
 });
 
 export const sets = sqliteTable('sets', {

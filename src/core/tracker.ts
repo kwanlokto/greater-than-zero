@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -73,6 +73,7 @@ export type WorkoutSet = {
 export type ExerciseEntry = {
   id: string;
   exercise: Exercise;
+  notes: string;
   sets: WorkoutSet[];
 };
 
@@ -179,6 +180,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .get()?.id;
   }
 
+  // Removed entries can't change.
+  async function updateEntry(
+    exerciseEntryId: string,
+    values: Partial<typeof exerciseEntries.$inferInsert>,
+  ) {
+    const changed = await db
+      .update(exerciseEntries)
+      .set(values)
+      .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
+      .returning({ id: exerciseEntries.id });
+    if (changed.length === 0) throw new Error('No such Exercise in a Workout');
+  }
+
   // Deleted Sets can't change.
   async function updateSet(setId: string, values: Partial<typeof sets.$inferInsert>) {
     const changed = await db
@@ -194,7 +208,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .select({ trackingType: exercises.trackingType })
       .from(exerciseEntries)
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
-      .where(eq(exerciseEntries.id, exerciseEntryId));
+      .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)));
     if (!exercise) throw new Error('No such Exercise in a Workout');
     return exercise.trackingType;
   }
@@ -212,13 +226,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const workout = await db.query.workouts.findFirst({
-      where: eq(workouts.id, id),
+      where: and(eq(workouts.id, id), isNull(workouts.deletedAt)),
       columns: { id: true, localDate: true, startedAt: true, finishedAt: true },
       with: {
         entries: {
           where: isNull(exerciseEntries.deletedAt),
           orderBy: asc(exerciseEntries.position),
-          columns: { id: true },
+          columns: { id: true, notes: true },
           with: {
             exercise: {
               columns: { id: true, name: true, trackingType: true, muscleGroup: true, isCustom: true },
@@ -302,6 +316,40 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .get();
     },
 
+    async saveNotes(exerciseEntryId: string, notes: string): Promise<void> {
+      await updateEntry(exerciseEntryId, { notes });
+    },
+
+    // The new Exercise takes the old one's place in the Workout. Only while no
+    // Set is logged for it, since Sets belong to the Exercise they were done on.
+    async swapExercise(exerciseEntryId: string, exerciseId: string): Promise<void> {
+      const [logged] = await db
+        .select({ id: sets.id })
+        .from(sets)
+        .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+        .limit(1);
+      if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
+      await updateEntry(exerciseEntryId, { exerciseId });
+    },
+
+    // Soft-deletes the entry and its Sets together.
+    async removeExerciseFromWorkout(exerciseEntryId: string): Promise<void> {
+      const deletedAt = now();
+      db.transaction(tx => {
+        const removed = tx
+          .update(exerciseEntries)
+          .set({ deletedAt })
+          .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
+          .returning({ id: exerciseEntries.id })
+          .all();
+        if (removed.length === 0) throw new Error('No such Exercise in a Workout');
+        tx.update(sets)
+          .set({ deletedAt })
+          .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+          .run();
+      });
+    },
+
     // Appends the Exercise after the ones already in the Workout.
     async addExerciseToWorkout(workoutId: string, exerciseId: string): Promise<{ id: string }> {
       const position = await nextPosition(
@@ -363,6 +411,33 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Soft delete: the others keep their positions, so their order holds.
     async deleteSet(setId: string): Promise<void> {
       await updateSet(setId, { deletedAt: now() });
+    },
+
+    // Soft-deletes the Workout with its Exercises and Sets, so it's never
+    // recorded: it doesn't reach History, "last time" or charts.
+    async discardWorkout(id: string): Promise<void> {
+      const deletedAt = now();
+      db.transaction(tx => {
+        const discarded = tx
+          .update(workouts)
+          .set({ deletedAt })
+          .where(and(eq(workouts.id, id), isNull(workouts.finishedAt), isNull(workouts.deletedAt)))
+          .returning({ id: workouts.id })
+          .all();
+        if (discarded.length === 0) throw new Error('That Workout is not in progress');
+        const entryIds = tx
+          .select({ id: exerciseEntries.id })
+          .from(exerciseEntries)
+          .where(eq(exerciseEntries.workoutId, id));
+        tx.update(sets)
+          .set({ deletedAt })
+          .where(and(inArray(sets.exerciseEntryId, entryIds), isNull(sets.deletedAt)))
+          .run();
+        tx.update(exerciseEntries)
+          .set({ deletedAt })
+          .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
+          .run();
+      });
     },
 
     async finishWorkout(id: string): Promise<void> {

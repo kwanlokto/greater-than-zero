@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -24,6 +25,21 @@ export default function WorkoutScreen() {
         text: 'Finish',
         onPress: async () => {
           await tracker.finishWorkout(workout.id);
+          router.back();
+        },
+      },
+    ]);
+  };
+
+  // A discarded Workout is never recorded, so it won't appear in History.
+  const confirmDiscard = () => {
+    Alert.alert('Discard this workout?', 'Its exercises and sets will not be saved.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Discard',
+        style: 'destructive',
+        onPress: async () => {
+          await tracker.discardWorkout(workout.id);
           router.back();
         },
       },
@@ -53,9 +69,10 @@ export default function WorkoutScreen() {
         <PrimaryButton
           label="Add exercise"
           onPress={() =>
-            router.push({ pathname: '/workout/add-exercise', params: { workoutId: workout.id } })
+            router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
           }
         />
+        <TextButton label="Discard workout" destructive onPress={confirmDiscard} />
       </ScrollView>
     </>
   );

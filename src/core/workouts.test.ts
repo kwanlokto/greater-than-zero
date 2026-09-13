@@ -435,6 +435,139 @@ describe('Warm-up Sets', () => {
   });
 });
 
+describe('Exercises in a Workout', () => {
+  it('start with no notes and keep the notes written for them', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Leg Press');
+    const notes = async () => (await tracker.getWorkout(workout.id))?.entries.map(e => e.notes);
+
+    expect(await notes()).toEqual(['']);
+    await tracker.saveNotes(entry.id, 'Seat on 4, feet high');
+    expect(await notes()).toEqual(['Seat on 4, feet high']);
+  });
+
+  it('can be removed, leaving the others in order', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entries } = await startWorkoutWithEach(tracker, [
+      'Squat',
+      'Bench Press',
+      'Barbell Row',
+    ]);
+    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 });
+
+    await tracker.removeExerciseFromWorkout(entries[1].id);
+
+    expect(await exerciseNamesOf(tracker, workout.id)).toEqual(['Squat', 'Barbell Row']);
+  });
+
+  it('take their Sets with them when removed', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    const [logged] = await setsOf(tracker, workout.id);
+
+    await tracker.removeExerciseFromWorkout(entry.id);
+
+    await expect(tracker.editSet(logged.id, { weight: 65, reps: 8 })).rejects.toThrow('No such Set');
+    await expect(tracker.logSet(entry.id, { weight: 60, reps: 8 })).rejects.toThrow(
+      'No such Exercise in a Workout',
+    );
+  });
+
+  it('can be swapped for another Exercise in the same place', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entries } = await startWorkoutWithEach(tracker, [
+      'Squat',
+      'Bench Press',
+      'Barbell Row',
+    ]);
+    const dumbbellBench = await findExerciseByName(tracker, 'Dumbbell Bench Press');
+
+    await tracker.swapExercise(entries[1].id, dumbbellBench.id);
+
+    expect(await exerciseNamesOf(tracker, workout.id)).toEqual([
+      'Squat',
+      'Dumbbell Bench Press',
+      'Barbell Row',
+    ]);
+  });
+
+  it("can't be swapped once a Set is logged for them", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    const dumbbellBench = await findExerciseByName(tracker, 'Dumbbell Bench Press');
+
+    await expect(tracker.swapExercise(entry.id, dumbbellBench.id)).rejects.toThrow(
+      "An Exercise with logged Sets can't be swapped",
+    );
+    expect(await exerciseNamesOf(tracker, workout.id)).toEqual(['Bench Press']);
+  });
+
+  it('can be swapped again once their Sets are all deleted', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    const [mistake] = await setsOf(tracker, workout.id);
+    await tracker.deleteSet(mistake.id);
+    const dumbbellBench = await findExerciseByName(tracker, 'Dumbbell Bench Press');
+
+    await tracker.swapExercise(entry.id, dumbbellBench.id);
+
+    expect(await exerciseNamesOf(tracker, workout.id)).toEqual(['Dumbbell Bench Press']);
+  });
+});
+
+describe('Discarded Workouts', () => {
+  it('are no longer in progress and are never found again', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    const [logged] = await setsOf(tracker, workout.id);
+
+    await tracker.discardWorkout(workout.id);
+
+    expect(await tracker.getWorkoutInProgress()).toBeNull();
+    expect(await tracker.getWorkout(workout.id)).toBeUndefined();
+    await expect(tracker.editSet(logged.id, { weight: 105, reps: 5 })).rejects.toThrow('No such Set');
+  });
+
+  it('make way for a new Workout', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const discarded = await tracker.startWorkout();
+    await tracker.discardWorkout(discarded.id);
+
+    const next = await tracker.startWorkout();
+
+    expect((await tracker.getWorkoutInProgress())?.id).toBe(next.id);
+  });
+
+  it('must still be in progress, so a finished one is never discarded', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const workout = await tracker.startWorkout();
+    await tracker.finishWorkout(workout.id);
+
+    await expect(tracker.discardWorkout(workout.id)).rejects.toThrow('That Workout is not in progress');
+    expect(await tracker.getWorkout(workout.id)).toBeDefined();
+  });
+});
+
+// Starts a Workout with these Exercises, in order.
+async function startWorkoutWithEach(tracker: Tracker, exerciseNames: string[]) {
+  const workout = await tracker.startWorkout();
+  const entries = [];
+  for (const name of exerciseNames) {
+    const exercise = await findExerciseByName(tracker, name);
+    entries.push(await tracker.addExerciseToWorkout(workout.id, exercise.id));
+  }
+  return { workout, entries };
+}
+
+async function exerciseNamesOf(tracker: Tracker, workoutId: string) {
+  const entries = (await tracker.getWorkout(workoutId))?.entries ?? [];
+  return names(entries.map(entry => entry.exercise));
+}
+
 function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
   return loggedSets.map(set => [set.weight, set.reps]);
 }

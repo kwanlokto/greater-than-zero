@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme } from 'expo-router';
+import { useRouter, useTheme } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { Chip } from '@/components/chip';
 import { PrimaryButton } from '@/components/primary-button';
@@ -20,12 +20,14 @@ type Props = {
   displayUnit: WeightUnit;
 };
 
-// One Exercise in a Workout: its Sets, each open to correction, and a row to
-// log the next one.
+// One Exercise in a Workout: its notes, its Sets, each open to correction, and
+// a row to log the next one.
 export function ExerciseEntryCard({ entry, displayUnit }: Props) {
+  const router = useRouter();
   const { colors } = useTheme();
   const { trackingType } = entry.exercise;
   const [editingSetId, setEditingSetId] = useState<string>();
+  const [notes, setNotes] = useState(entry.notes);
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
   const next = useSetFields(trackingType, displayUnit);
@@ -40,9 +42,71 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
     }
   }
 
+  async function saveNotes() {
+    if (notes === entry.notes) return;
+    await runOrAlert("Couldn't save the notes", () => tracker.saveNotes(entry.id, notes));
+  }
+
+  function remove() {
+    const removeNow = () =>
+      runOrAlert("Couldn't remove the exercise", () =>
+        tracker.removeExerciseFromWorkout(entry.id),
+      );
+    if (entry.sets.length === 0) {
+      removeNow();
+      return;
+    }
+    // Its Sets go with it, so check first.
+    const setCount = entry.sets.length === 1 ? '1 set' : `${entry.sets.length} sets`;
+    Alert.alert(`Remove ${entry.exercise.name} and its ${setCount}?`, undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: removeNow },
+    ]);
+  }
+
+  // Swapping is only offered while no Set is logged for the Exercise.
+  function showActions() {
+    Alert.alert(entry.exercise.name, undefined, [
+      ...(entry.sets.length === 0
+        ? [
+            {
+              text: 'Swap exercise',
+              onPress: () =>
+                router.push({
+                  pathname: '/workout/choose-exercise',
+                  params: { swapEntryId: entry.id },
+                }),
+            },
+          ]
+        : []),
+      { text: 'Remove exercise', style: 'destructive' as const, onPress: remove },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
+
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.exerciseName, { color: colors.text }]}>{entry.exercise.name}</Text>
+      <View style={styles.header}>
+        <Text style={[styles.exerciseName, { color: colors.text }]}>{entry.exercise.name}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`More for ${entry.exercise.name}`}
+          hitSlop={12}
+          onPress={showActions}
+        >
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+        </Pressable>
+      </View>
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        onEndEditing={saveNotes}
+        placeholder="Notes"
+        placeholderTextColor="#8e8e93"
+        multiline
+        accessibilityLabel={`Notes for ${entry.exercise.name}`}
+        style={[styles.notes, { color: colors.text, borderColor: colors.border }]}
+      />
       {entry.sets.map((set, index) =>
         set.id === editingSetId ? (
           <SetEditor
@@ -175,9 +239,22 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   exerciseName: {
+    flex: 1,
     fontSize: 18,
     fontWeight: '600',
+  },
+  notes: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 14,
   },
   setRow: {
     flexDirection: 'row',

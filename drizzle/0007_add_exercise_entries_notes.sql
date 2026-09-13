@@ -1,0 +1,1 @@
+ALTER TABLE `exercise_entries` ADD `notes` text DEFAULT '' NOT NULL;
