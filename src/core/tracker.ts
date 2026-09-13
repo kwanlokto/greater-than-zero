@@ -50,7 +50,9 @@ export type ExerciseSearch = {
 };
 
 export type NewSet = {
-  weight: number;
+  // In the display unit. For a bodyweight Exercise it's the added weight: null
+  // for plain bodyweight, positive for a belt or vest, negative when assisted.
+  weight: number | null;
   reps: number;
 };
 
@@ -97,6 +99,19 @@ const exerciseColumns = {
 function localDateOf(time: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}`;
+}
+
+function requireValidSet(trackingType: TrackingType, { weight, reps }: NewSet) {
+  if (weight === null) {
+    if (trackingType === 'weighted') throw new Error('A weighted Set needs a weight');
+  } else if (!Number.isFinite(weight)) {
+    throw new Error("A Set's weight must be a number");
+  } else if (weight < 0 && trackingType === 'weighted') {
+    throw new Error('Only bodyweight Sets can have a negative weight');
+  }
+  if (!Number.isInteger(reps) || reps < 1) {
+    throw new Error('A Set needs a whole number of reps, at least 1');
+  }
 }
 
 function requireExerciseName(typed: string): string {
@@ -247,10 +262,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Saved the moment it's logged, after the entry's earlier Sets. The weight is
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, { weight, reps }: NewSet): Promise<void> {
-      if (!Number.isFinite(weight)) throw new Error('A weighted Set needs a weight');
-      if (!Number.isInteger(reps) || reps < 1) {
-        throw new Error('A Set needs a whole number of reps, at least 1');
-      }
+      const [entry] = await db
+        .select({ trackingType: exercises.trackingType })
+        .from(exerciseEntries)
+        .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
+        .where(eq(exerciseEntries.id, exerciseEntryId));
+      if (!entry) throw new Error('No such Exercise in a Workout');
+      requireValidSet(entry.trackingType, { weight, reps });
+
       await db.insert(sets).values({
         exerciseEntryId,
         position: await nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId)),

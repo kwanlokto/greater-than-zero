@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
-import type { ExerciseEntry, WeightUnit, WorkoutSet } from '@/core/tracker';
+import type { ExerciseEntry, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
 import { tracker } from '@/database';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -65,12 +65,19 @@ export default function WorkoutScreen() {
 // One Exercise in the Workout: its Sets so far, and a row to log the next one.
 function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: WeightUnit }) {
   const { colors } = useTheme();
+  const { trackingType } = entry.exercise;
   // The weight stays after logging; reps clear, so a stray tap can't log a
   // duplicate Set.
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
-  const parsedWeight = parseDecimal(weight);
+  const parsedWeight = parseWeight(weight);
   const parsedReps = parseWholeNumber(reps);
+  // Bodyweight Exercises take optional added weight: blank for plain
+  // bodyweight, negative when assisted. Weighted ones need a weight.
+  const weightAccepted =
+    trackingType === 'bodyweight'
+      ? parsedWeight !== undefined
+      : parsedWeight !== undefined && parsedWeight !== null && parsedWeight >= 0;
 
   const inputStyle = [
     styles.input,
@@ -82,22 +89,38 @@ function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: 
       <Text style={[styles.exerciseName, { color: colors.text }]}>{entry.exercise.name}</Text>
       {entry.sets.map((set, index) => (
         <Text key={set.id} style={[styles.set, { color: colors.text }]}>
-          Set {index + 1}: {describeSet(set)}
+          Set {index + 1}: {describeSet(set, trackingType)}
         </Text>
       ))}
       <View style={styles.logRow}>
-        <View style={styles.field}>
-          <TextInput
-            value={weight}
-            onChangeText={setWeight}
-            keyboardType="decimal-pad"
-            placeholder="0"
-            placeholderTextColor="#8e8e93"
-            accessibilityLabel={`Weight in ${displayUnit}`}
-            style={inputStyle}
-          />
-          <Text style={[styles.unit, { color: colors.text }]}>{displayUnit}</Text>
-        </View>
+        {trackingType === 'bodyweight' ? (
+          <View style={styles.field}>
+            <TextInput
+              value={weight}
+              onChangeText={setWeight}
+              // The numeric keyboard has a minus key, for assisted Sets.
+              keyboardType="numeric"
+              placeholder="none"
+              placeholderTextColor="#8e8e93"
+              accessibilityLabel={`Added weight in ${displayUnit}: blank for bodyweight, negative if assisted`}
+              style={inputStyle}
+            />
+            <Text style={[styles.unit, { color: colors.text }]}>{displayUnit} added</Text>
+          </View>
+        ) : (
+          <View style={styles.field}>
+            <TextInput
+              value={weight}
+              onChangeText={setWeight}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor="#8e8e93"
+              accessibilityLabel={`Weight in ${displayUnit}`}
+              style={inputStyle}
+            />
+            <Text style={[styles.unit, { color: colors.text }]}>{displayUnit}</Text>
+          </View>
+        )}
         <View style={styles.field}>
           <TextInput
             value={reps}
@@ -112,9 +135,9 @@ function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: 
         </View>
         <PrimaryButton
           label="Log"
-          disabled={parsedWeight === undefined || parsedReps === undefined}
+          disabled={!weightAccepted || parsedReps === undefined}
           onPress={async () => {
-            if (parsedWeight === undefined || parsedReps === undefined) return;
+            if (!weightAccepted || parsedWeight === undefined || parsedReps === undefined) return;
             await tracker.logSet(entry.id, { weight: parsedWeight, reps: parsedReps });
             setReps('');
           }}
@@ -124,16 +147,20 @@ function EntryCard({ entry, displayUnit }: { entry: ExerciseEntry; displayUnit: 
   );
 }
 
-function describeSet(set: WorkoutSet): string {
-  return set.weight === null
-    ? `${set.reps} reps`
-    : `${set.weight} ${set.weightUnit} × ${set.reps}`;
+function describeSet(set: WorkoutSet, trackingType: TrackingType): string {
+  if (set.weight === null) return `Bodyweight × ${set.reps}`;
+  if (trackingType === 'weighted') return `${set.weight} ${set.weightUnit} × ${set.reps}`;
+  const sign = set.weight < 0 ? '−' : '+';
+  return `Bodyweight ${sign} ${Math.abs(set.weight)} ${set.weightUnit} × ${set.reps}`;
 }
 
-// Accepts a comma as the decimal separator too, as some keyboards type one.
-function parseDecimal(text: string): number | undefined {
-  const value = Number(text.trim().replace(',', '.'));
-  return text.trim() !== '' && Number.isFinite(value) ? value : undefined;
+// Null when blank, undefined when it isn't a number. Accepts a comma as the
+// decimal separator too, as some keyboards type one.
+function parseWeight(text: string): number | null | undefined {
+  const trimmed = text.trim();
+  if (trimmed === '') return null;
+  const value = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(value) ? value : undefined;
 }
 
 function parseWholeNumber(text: string): number | undefined {
@@ -171,6 +198,7 @@ const styles = StyleSheet.create({
   },
   logRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 12,
     marginTop: 4,

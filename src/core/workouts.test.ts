@@ -193,8 +193,60 @@ describe('Sets', () => {
     const { entry } = await startWorkoutWith(tracker, 'Squat');
 
     await expect(tracker.logSet(entry.id, { weight: Number.NaN, reps: 5 })).rejects.toThrow(
+      "A Set's weight must be a number",
+    );
+  });
+
+  it('of a weighted Exercise need a weight', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    await expect(tracker.logSet(entry.id, { weight: null, reps: 5 })).rejects.toThrow(
       'A weighted Set needs a weight',
     );
+  });
+
+  it("of a weighted Exercise can't have a negative weight", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    await expect(tracker.logSet(entry.id, { weight: -20, reps: 5 })).rejects.toThrow(
+      'Only bodyweight Sets can have a negative weight',
+    );
+  });
+});
+
+describe('Bodyweight Sets', () => {
+  it('can be plain bodyweight, with no added weight', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
+
+    await tracker.logSet(entry.id, { weight: null, reps: 8 });
+
+    expect(await setsOf(tracker, workout.id)).toMatchObject([{ weight: null, reps: 8 }]);
+  });
+
+  it('keep weight added with a belt or vest as entered, with its unit', async () => {
+    const tracker = createTracker(createTestDatabase());
+    await tracker.setDisplayUnit('lb');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Dip');
+
+    await tracker.logSet(entry.id, { weight: 25, reps: 6 });
+
+    expect(await setsOf(tracker, workout.id)).toMatchObject([
+      { weight: 25, weightUnit: 'lb', reps: 6 },
+    ]);
+  });
+
+  it('keep the help from an assisted machine as a negative weight', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
+
+    await tracker.logSet(entry.id, { weight: -20, reps: 10 });
+
+    expect(await setsOf(tracker, workout.id)).toMatchObject([
+      { weight: -20, weightUnit: 'kg', reps: 10 },
+    ]);
   });
 });
 
