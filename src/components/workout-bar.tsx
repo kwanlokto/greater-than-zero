@@ -19,7 +19,8 @@ export function WorkoutBar() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Return to workout in progress"
-      onPress={() => router.push('/workout')}
+      // navigate, not push, so a double tap can't open the Workout twice.
+      onPress={() => router.navigate('/workout')}
       style={[styles.bar, { backgroundColor: colors.primary }]}
     >
       <View style={styles.text}>

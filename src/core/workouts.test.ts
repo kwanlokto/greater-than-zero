@@ -93,8 +93,9 @@ describe('Workouts', () => {
     const resumed = await reopened.getWorkoutInProgress();
 
     expect(resumed?.id).toBe(workout.id);
-    expect(resumed?.entries.map(resumedEntry => resumedEntry.sets.map(set => set.reps))).toEqual([
-      [8, 7],
+    expect(resumed?.entries[0].sets).toMatchObject([
+      { weight: 60, weightUnit: 'kg', reps: 8 },
+      { weight: 60, weightUnit: 'kg', reps: 7 },
     ]);
   });
 

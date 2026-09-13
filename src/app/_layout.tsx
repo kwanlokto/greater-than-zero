@@ -26,12 +26,12 @@ export default function RootLayout() {
   const ready = migration.success && onboarded !== undefined;
   const resumeChecked = useResumeWorkoutOnLaunch(ready && onboarded === true);
 
-  // Kept up until a Workout left in progress has been reopened, so the lifter
-  // lands straight in it.
-  const splashDone = migration.error || (ready && (!onboarded || resumeChecked));
+  // Kept up until any Workout left in progress is on its way back, rather than
+  // showing Today first.
+  const canHideSplash = migration.error || (ready && (!onboarded || resumeChecked));
   useEffect(() => {
-    if (splashDone) SplashScreen.hide();
-  }, [splashDone]);
+    if (canHideSplash) SplashScreen.hide();
+  }, [canHideSplash]);
 
   async function finishOnboarding() {
     await saveOnboardingDone();
