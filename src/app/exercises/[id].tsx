@@ -5,7 +5,7 @@ import { ExerciseForm } from '@/components/exercise-form';
 import { RestLengthPicker } from '@/components/rest-length-picker';
 import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
-import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
+import { exerciseDetails } from '@/exercise-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -58,8 +58,7 @@ export default function ExerciseScreen() {
         />
       ) : (
         <Text style={[styles.details, { color: colors.text }]}>
-          {muscleGroupLabels[exercise.muscleGroup]} · {trackingTypeLabels[exercise.trackingType]} ·
-          Built-in
+          {exerciseDetails(exercise)} · Built-in
         </Text>
       )}
       <RestLengthPicker exercise={exercise} />

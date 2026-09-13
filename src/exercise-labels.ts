@@ -1,4 +1,4 @@
-import type { MuscleGroup, TrackingType } from '@/core/tracker';
+import type { Exercise, MuscleGroup, TrackingType } from '@/core/tracker';
 
 export const muscleGroupLabels: Record<MuscleGroup, string> = {
   chest: 'Chest',
@@ -17,3 +17,8 @@ export const trackingTypeLabels: Record<TrackingType, string> = {
   weighted: 'Weighted',
   bodyweight: 'Bodyweight',
 };
+
+// "Chest · Weighted", the line under an Exercise's name.
+export function exerciseDetails(exercise: Pick<Exercise, 'muscleGroup' | 'trackingType'>): string {
+  return `${muscleGroupLabels[exercise.muscleGroup]} · ${trackingTypeLabels[exercise.trackingType]}`;
+}

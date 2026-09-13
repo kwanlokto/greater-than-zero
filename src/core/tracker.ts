@@ -178,6 +178,14 @@ export function canSwapExercise(entry: Pick<ExerciseEntry, 'sets'>): boolean {
   return entry.sets.length === 0;
 }
 
+// The time left to rest, in seconds, worked out from the rest's end time so
+// it's right whenever it's asked, even after the app has been in the
+// background. Zero once the rest is over or when none has started.
+export function restSecondsLeft(restEndsAt: Date | null, now: Date): number {
+  if (!restEndsAt) return 0;
+  return Math.max(0, (restEndsAt.getTime() - now.getTime()) / 1000);
+}
+
 // A Workout that's neither finished nor discarded. Starting, finishing and
 // discarding all go by this, so a discarded Workout can never be finished.
 function inProgress() {
@@ -227,7 +235,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId));
   }
 
-  async function getDefaultRestSeconds(): Promise<number> {
+  async function getFallbackRestSeconds(): Promise<number> {
     const [row] = await db
       .select({ defaultRestSeconds: settings.defaultRestSeconds })
       .from(settings);
@@ -248,6 +256,21 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .get()?.id;
   }
 
+  // Adds a Set after the entry's earlier ones, logged now, and starts its rest.
+  async function insertSet(
+    exerciseEntryId: string,
+    values: Pick<typeof sets.$inferInsert, 'weight' | 'weightUnit' | 'reps' | 'isWarmUp'>,
+  ) {
+    const loggedAt = now();
+    await db.insert(sets).values({
+      ...values,
+      exerciseEntryId,
+      position: await nextSetPosition(exerciseEntryId),
+      loggedAt,
+    });
+    await startRest(exerciseEntryId, loggedAt);
+  }
+
   // Every logged Set starts a new rest, replacing the one before, lasting the
   // Exercise's own rest length or the default from Settings.
   async function startRest(exerciseEntryId: string, loggedAt: Date) {
@@ -256,7 +279,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .from(exerciseEntries)
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
       .where(eq(exerciseEntries.id, exerciseEntryId));
-    const restSeconds = entry.restSeconds ?? (await getDefaultRestSeconds());
+    const restSeconds = entry.restSeconds ?? (await getFallbackRestSeconds());
     // Only during a Workout: Sets added to a finished one don't start a rest.
     await db
       .update(workouts)
@@ -367,7 +390,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     getDisplayUnit,
 
     // The rest for Exercises without their own length.
-    getDefaultRestSeconds,
+    getFallbackRestSeconds,
 
     async setDisplayUnit(unit: WeightUnit): Promise<void> {
       await db.update(settings).set({ displayUnit: unit });
@@ -411,7 +434,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Any Exercise in the library, built-in ones included: a rest length is the
     // lifter's preference, not part of the Exercise. Null goes back to the default.
-    async setExerciseRest(exerciseId: string, seconds: number | null): Promise<void> {
+    async setExerciseDefaultRest(exerciseId: string, seconds: number | null): Promise<void> {
       if (seconds !== null && (!Number.isInteger(seconds) || seconds < 1)) {
         throw new Error('A rest length is a whole number of seconds, at least 1');
       }
@@ -494,17 +517,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, set: SetValues): Promise<void> {
       requireValidSet(await trackingTypeOfEntry(exerciseEntryId), set);
-      const loggedAt = now();
-      await db.insert(sets).values({
-        exerciseEntryId,
-        position: await nextSetPosition(exerciseEntryId),
+      await insertSet(exerciseEntryId, {
         weight: set.weight,
         weightUnit: await getDisplayUnit(),
         reps: set.reps,
         isWarmUp: set.isWarmUp ?? false,
-        loggedAt,
       });
-      await startRest(exerciseEntryId, loggedAt);
     },
 
     // The weight is in the unit the Set was logged in, which is the unit shown
@@ -528,14 +546,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .orderBy(desc(sets.position))
         .limit(1);
       if (!last) throw new Error('No Set to copy yet');
-      const loggedAt = now();
-      await db.insert(sets).values({
-        ...last,
-        exerciseEntryId,
-        position: await nextSetPosition(exerciseEntryId),
-        loggedAt,
-      });
-      await startRest(exerciseEntryId, loggedAt);
+      await insertSet(exerciseEntryId, last);
     },
 
     // Soft delete: the others keep their positions, so their order holds.
@@ -550,7 +561,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       db.transaction(tx => {
         const discarded = tx
           .update(workouts)
-          .set({ deletedAt })
+          .set({ deletedAt, restEndsAt: null })
           .where(and(eq(workouts.id, id), inProgress()))
           .returning({ id: workouts.id })
           .all();
@@ -567,20 +578,22 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       });
     },
 
-    // The ±15 s buttons: moves the current rest's end, earlier or later.
+    // Moves the current rest's end by `seconds`: later when positive, earlier
+    // when negative. Works even once the rest is over, to add a little more.
     async moveRestEnd(workoutId: string, seconds: number): Promise<void> {
       const moved = await db
         .update(workouts)
         .set({ restEndsAt: sql`${workouts.restEndsAt} + ${seconds * 1000}` })
         .where(and(eq(workouts.id, workoutId), inProgress(), isNotNull(workouts.restEndsAt)))
         .returning({ id: workouts.id });
-      if (moved.length === 0) throw new Error('No rest is running');
+      if (moved.length === 0) throw new Error('No rest has started');
     },
 
     async finishWorkout(id: string): Promise<void> {
       const finished = await db
         .update(workouts)
-        .set({ finishedAt: now() })
+        // The rest belongs to the Workout in progress, so it ends here too.
+        .set({ finishedAt: now(), restEndsAt: null })
         .where(and(eq(workouts.id, id), inProgress()))
         .returning({ id: workouts.id });
       if (finished.length === 0) throw new Error('That Workout is not in progress');

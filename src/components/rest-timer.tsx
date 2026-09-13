@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { TextButton } from '@/components/text-button';
+import { restSecondsLeft } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatDuration } from '@/durations';
 import { runOrAlert } from '@/run-or-alert';
@@ -12,17 +13,18 @@ type Props = {
   restEndsAt: Date | null;
 };
 
-// Counts down to the end of the current rest. The time left is worked out from
-// the end time on every tick, so it's right after the app has been in the
-// background.
+// Counts down to the end of the current rest, asking the core for the time
+// left on every tick, so it's right after the app has been in the background.
 export function RestTimer({ workoutId, restEndsAt }: Props) {
   const { colors } = useTheme();
   const now = useNowUntil(restEndsAt);
   if (!restEndsAt) return null;
 
-  const secondsLeft = (restEndsAt.getTime() - now) / 1000;
+  const secondsLeft = restSecondsLeft(restEndsAt, new Date(now));
   const move = async (seconds: number) => {
-    await runOrAlert("Couldn't change the rest", () => tracker.moveRestEnd(workoutId, seconds));
+    await runOrAlert("Couldn't move the end of the rest", () =>
+      tracker.moveRestEnd(workoutId, seconds),
+    );
   };
 
   return (

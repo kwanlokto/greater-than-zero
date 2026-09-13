@@ -6,7 +6,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { Chip } from '@/components/chip';
 import { muscleGroups, type Exercise, type MuscleGroup } from '@/core/tracker';
 import { tracker } from '@/database';
-import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
+import { exerciseDetails, muscleGroupLabels } from '@/exercise-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 type Props = {
@@ -81,13 +81,7 @@ type RowProps = {
 
 export function ExerciseRow({ exercise, onPress, icon }: RowProps) {
   const { colors } = useTheme();
-  const details = [
-    muscleGroupLabels[exercise.muscleGroup],
-    trackingTypeLabels[exercise.trackingType],
-    exercise.isCustom && 'Custom',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const details = exercise.isCustom ? `${exerciseDetails(exercise)} · Custom` : exerciseDetails(exercise);
 
   return (
     <Pressable

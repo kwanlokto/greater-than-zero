@@ -13,10 +13,12 @@ const restChoices = [30, 45, 60, 90, 120, 150, 180, 240, 300];
 // The rest after a Set of this Exercise. Saved as soon as it's chosen.
 export function RestLengthPicker({ exercise }: { exercise: Exercise }) {
   const { colors } = useTheme();
-  const defaultSeconds = useTrackerQuery(() => tracker.getDefaultRestSeconds(), []);
+  const defaultSeconds = useTrackerQuery(() => tracker.getFallbackRestSeconds(), []);
 
   function choose(seconds: number | null) {
-    runOrAlert("Couldn't change the rest", () => tracker.setExerciseRest(exercise.id, seconds));
+    runOrAlert("Couldn't change the rest length", () =>
+      tracker.setExerciseDefaultRest(exercise.id, seconds),
+    );
   }
 
   return (

@@ -54,7 +54,8 @@ export const muscleGroups = [
 export type MuscleGroup = (typeof muscleGroups)[number];
 
 // Built-in Exercises are inserted by migrations with fixed IDs, so they match
-// across installs and Backup files.
+// across installs and Backup files. Later library migrations must UPDATE those
+// rows, never delete and re-insert them, or the lifter's rest lengths are lost.
 export const exercises = sqliteTable('exercises', {
   ...rowColumns,
   name: text('name').notNull(),
