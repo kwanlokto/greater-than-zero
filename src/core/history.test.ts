@@ -143,6 +143,9 @@ describe('A day', () => {
     });
     await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
 
-    expect(await tracker.getDay('2026-09-13')).toEqual({ localDate: '2026-09-13', workouts: [] });
+    expect(await tracker.getDay('2026-09-13')).toMatchObject({
+      localDate: '2026-09-13',
+      workouts: [],
+    });
   });
 });

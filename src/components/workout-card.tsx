@@ -19,13 +19,13 @@ export function WorkoutCard({ workout }: { workout: Workout }) {
           : formatTimeOfDay(startedAt)}
       </Text>
       {workout.entries.map(entry => (
-        <EntryRecord key={entry.id} entry={entry} />
+        <RecordedExerciseEntry key={entry.id} entry={entry} />
       ))}
     </View>
   );
 }
 
-function EntryRecord({ entry }: { entry: ExerciseEntry }) {
+function RecordedExerciseEntry({ entry }: { entry: ExerciseEntry }) {
   const { colors } = useTheme();
   const { describe } = setPresentationFor[entry.exercise.trackingType];
   const labels = setLabels(entry.sets);

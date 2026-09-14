@@ -4,12 +4,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   calendarWeeks,
+  dayOfMonth,
   formatLocalDateWithWeekday,
   formatMonth,
   shiftMonth,
+  weekdayInitials,
 } from '@/dates';
-
-const weekdayInitials = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 type Props = {
   // YYYY-MM.
@@ -115,7 +115,7 @@ function CalendarDay({ localDate, trained, isToday, onPress }: CalendarDayProps)
             isToday && styles.today,
           ]}
         >
-          {Number(localDate.slice(8))}
+          {dayOfMonth(localDate)}
         </Text>
       </View>
     </Pressable>

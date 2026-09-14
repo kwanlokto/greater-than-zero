@@ -213,6 +213,12 @@ function finished() {
   return and(isNotNull(workouts.finishedAt), isNull(workouts.deletedAt));
 }
 
+// A Set that hasn't been deleted, on its own or with its Exercise. For queries
+// joining Sets to their Exercise entries.
+function setStillLogged() {
+  return and(isNull(sets.deletedAt), isNull(exerciseEntries.deletedAt));
+}
+
 function requireValidSet(trackingType: TrackingType, set: SetValues) {
   const problem = problemWithSet(trackingType, set);
   if (problem) throw new Error(problem);
@@ -361,10 +367,11 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   // The Workouts matching `where`, in the order they started, each with its
-  // Exercises and Sets in order; removed Exercises and deleted Sets left out.
+  // Exercises and Sets in order. Deleted Workouts, removed Exercises and
+  // deleted Sets are left out.
   async function findWorkouts(where: SQL | undefined): Promise<Workout[]> {
     const found = await db.query.workouts.findMany({
-      where,
+      where: and(where, isNull(workouts.deletedAt)),
       orderBy: asc(workouts.startedAt),
       columns: { id: true, localDate: true, startedAt: true, finishedAt: true, restEndsAt: true },
       with: {
@@ -410,7 +417,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   async function getWorkout(id: string): Promise<Workout | undefined> {
-    const [workout] = await findWorkouts(and(eq(workouts.id, id), isNull(workouts.deletedAt)));
+    const [workout] = await findWorkouts(eq(workouts.id, id));
     return workout;
   }
 
@@ -631,13 +638,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .select({ id: sets.id })
           .from(sets)
           .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-          .where(
-            and(
-              eq(exerciseEntries.workoutId, id),
-              isNull(exerciseEntries.deletedAt),
-              isNull(sets.deletedAt),
-            ),
-          )
+          .where(and(eq(exerciseEntries.workoutId, id), setStillLogged()))
           .get();
         if (!logged) throw new Error('A Workout needs at least one Set to be finished');
         tx.update(workouts)
@@ -654,21 +655,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // so a session where it was only warmed up doesn't hide the one before.
     async getLastTime(exerciseId: string): Promise<LastTime | null> {
       const workingSetOfExercise = () =>
-        and(
-          eq(exerciseEntries.exerciseId, exerciseId),
-          isNull(exerciseEntries.deletedAt),
-          isNull(sets.deletedAt),
-          eq(sets.isWarmUp, false),
-        );
+        and(eq(exerciseEntries.exerciseId, exerciseId), setStillLogged(), eq(sets.isWarmUp, false));
 
       const [latest] = await db
         .select({ workoutId: workouts.id, localDate: workouts.localDate })
         .from(sets)
         .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(
-          and(workingSetOfExercise(), isNotNull(workouts.finishedAt), isNull(workouts.deletedAt)),
-        )
+        .where(and(workingSetOfExercise(), finished()))
         // By calendar day first, so a Workout backfilled onto a past date later
         // on still counts as that day's.
         .orderBy(desc(workouts.localDate), desc(workouts.startedAt))

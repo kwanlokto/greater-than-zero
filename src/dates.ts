@@ -38,6 +38,11 @@ export function monthOf(localDate: string): string {
   return localDate.slice(0, 7);
 }
 
+// The day of the month of a YYYY-MM-DD local date, e.g. 11.
+export function dayOfMonth(localDate: string): number {
+  return Number(localDate.slice(8));
+}
+
 // A YYYY-MM month as "September 2026".
 export function formatMonth(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number);
@@ -51,6 +56,9 @@ export function shiftMonth(month: string, by: number): string {
   const shifted = new Date(year, monthNumber - 1 + by, 1);
   return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}`;
 }
+
+// Headings for calendarWeeks' columns: S, M, T…
+export const weekdayInitials = weekdayNames.map(name => name[0]);
 
 // A YYYY-MM month's local dates in rows of a week, Sunday to Saturday, with
 // null for the places before its first day and after its last.
