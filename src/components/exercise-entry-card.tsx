@@ -8,6 +8,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import {
   initialFieldsOf,
   SetFields,
+  setLabels,
   setPresentationFor,
   useSetFields,
 } from '@/components/set-fields';
@@ -208,12 +209,6 @@ function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
       </View>
     </View>
   );
-}
-
-// Warm-ups are marked W; working Sets are numbered among themselves.
-function setLabels(sets: WorkoutSet[]): string[] {
-  let working = 0;
-  return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
 }
 
 // The Exercise's working Sets from its most recent finished Workout, to beat

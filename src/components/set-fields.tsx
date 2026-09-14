@@ -59,6 +59,12 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
   },
 };
 
+// Warm-ups are marked W; working Sets are numbered among themselves.
+export function setLabels(sets: WorkoutSet[]): string[] {
+  let working = 0;
+  return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
+}
+
 type Initial = { weight?: string; reps?: string; isWarmUp?: boolean };
 
 // The text in a Set's fields and its warm-up mark, plus the Set they add up to:

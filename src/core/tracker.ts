@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, like, sql, type SQL } from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -98,6 +98,14 @@ export type Workout = {
   entries: ExerciseEntry[];
 };
 
+// What was recorded on one of the phone's local calendar dates.
+export type Day = {
+  // As YYYY-MM-DD.
+  localDate: string;
+  // Its finished Workouts, in the order they started.
+  workouts: Workout[];
+};
+
 // An Exercise's working Sets from its most recent finished Workout.
 export type LastTime = {
   // The local date of the Workout they're from.
@@ -148,8 +156,8 @@ function withDisplayWeight(
 }
 
 // YYYY-MM-DD in the phone's time zone, so a late-night session counts toward
-// the day it happened.
-function localDateOf(time: Date): string {
+// the day it happened. Screens use it for today's date.
+export function localDateOf(time: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}`;
 }
@@ -178,6 +186,14 @@ export function canSwapExercise(entry: Pick<ExerciseEntry, 'sets'>): boolean {
   return entry.sets.length === 0;
 }
 
+// A Workout can be finished only once a Set is logged in it, warm-ups
+// included; one with nothing logged is discarded instead, so History never
+// marks a day with nothing done. finishWorkout enforces it; screens use it to
+// decide whether to offer Finish or Discard.
+export function canFinishWorkout(workout: Pick<Workout, 'entries'>): boolean {
+  return workout.entries.some(entry => entry.sets.length > 0);
+}
+
 // The time left to rest, in seconds, worked out from the rest's end time so
 // it's right whenever it's asked, even after the app has been in the
 // background. Zero once the rest is over or when none has started.
@@ -190,6 +206,11 @@ export function restSecondsLeft(restEndsAt: Date | null, now: Date): number {
 // discarding all go by this, so a discarded Workout can never be finished.
 function inProgress() {
   return and(isNull(workouts.finishedAt), isNull(workouts.deletedAt));
+}
+
+// A Workout that's been finished and not deleted since: one that's recorded.
+function finished() {
+  return and(isNotNull(workouts.finishedAt), isNull(workouts.deletedAt));
 }
 
 function requireValidSet(trackingType: TrackingType, set: SetValues) {
@@ -339,9 +360,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return exercise.trackingType;
   }
 
-  async function getWorkout(id: string): Promise<Workout | undefined> {
-    const workout = await db.query.workouts.findFirst({
-      where: and(eq(workouts.id, id), isNull(workouts.deletedAt)),
+  // The Workouts matching `where`, in the order they started, each with its
+  // Exercises and Sets in order; removed Exercises and deleted Sets left out.
+  async function findWorkouts(where: SQL | undefined): Promise<Workout[]> {
+    const found = await db.query.workouts.findMany({
+      where,
+      orderBy: asc(workouts.startedAt),
       columns: { id: true, localDate: true, startedAt: true, finishedAt: true, restEndsAt: true },
       with: {
         entries: {
@@ -375,15 +399,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         },
       },
     });
-    if (!workout) return undefined;
     const displayUnit = await getDisplayUnit();
-    return {
+    return found.map(workout => ({
       ...workout,
       entries: workout.entries.map(entry => ({
         ...entry,
         sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),
       })),
-    };
+    }));
+  }
+
+  async function getWorkout(id: string): Promise<Workout | undefined> {
+    const [workout] = await findWorkouts(and(eq(workouts.id, id), isNull(workouts.deletedAt)));
+    return workout;
   }
 
   return {
@@ -589,14 +617,35 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       if (moved.length === 0) throw new Error('No rest has started');
     },
 
+    // Enforces canFinishWorkout's rule against the saved Sets.
     async finishWorkout(id: string): Promise<void> {
-      const finished = await db
-        .update(workouts)
-        // The rest belongs to the Workout in progress, so it ends here too.
-        .set({ finishedAt: now(), restEndsAt: null })
-        .where(and(eq(workouts.id, id), inProgress()))
-        .returning({ id: workouts.id });
-      if (finished.length === 0) throw new Error('That Workout is not in progress');
+      const finishedAt = now();
+      db.transaction(tx => {
+        const workout = tx
+          .select({ id: workouts.id })
+          .from(workouts)
+          .where(and(eq(workouts.id, id), inProgress()))
+          .get();
+        if (!workout) throw new Error('That Workout is not in progress');
+        const logged = tx
+          .select({ id: sets.id })
+          .from(sets)
+          .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+          .where(
+            and(
+              eq(exerciseEntries.workoutId, id),
+              isNull(exerciseEntries.deletedAt),
+              isNull(sets.deletedAt),
+            ),
+          )
+          .get();
+        if (!logged) throw new Error('A Workout needs at least one Set to be finished');
+        tx.update(workouts)
+          // The rest belongs to the Workout in progress, so it ends here too.
+          .set({ finishedAt, restEndsAt: null })
+          .where(eq(workouts.id, id))
+          .run();
+      });
     },
 
     getWorkout,
@@ -643,6 +692,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return {
         localDate: latest.localDate,
         sets: lastSets.map(set => withDisplayWeight(set, displayUnit)),
+      };
+    },
+
+    // The local dates in a month, given as YYYY-MM, with at least one finished
+    // Workout, in order.
+    async getTrainingDays(month: string): Promise<string[]> {
+      const days = await db
+        .selectDistinct({ localDate: workouts.localDate })
+        .from(workouts)
+        .where(and(finished(), like(workouts.localDate, `${month}-%`)))
+        .orderBy(asc(workouts.localDate));
+      return days.map(day => day.localDate);
+    },
+
+    async getDay(localDate: string): Promise<Day> {
+      return {
+        localDate,
+        workouts: await findWorkouts(and(eq(workouts.localDate, localDate), finished())),
       };
     },
 

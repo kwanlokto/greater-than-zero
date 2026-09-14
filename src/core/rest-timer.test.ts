@@ -75,9 +75,10 @@ describe('Rest', () => {
   it("doesn't start for a Set added to a finished Workout", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
     await tracker.finishWorkout(workout.id);
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toBeNull();
   });

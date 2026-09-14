@@ -50,6 +50,7 @@ export async function doWorkout(tracker: Tracker, exerciseName: string, loggedSe
   const { workout, entry } = await startWorkoutWith(tracker, exerciseName);
   for (const set of loggedSets) await tracker.logSet(entry.id, set);
   await tracker.finishWorkout(workout.id);
+  return workout;
 }
 
 export function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {

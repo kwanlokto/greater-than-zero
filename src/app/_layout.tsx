@@ -53,6 +53,7 @@ export default function RootLayout() {
             <Stack.Screen name="exercises/index" options={{ title: 'Exercise library' }} />
             <Stack.Screen name="exercises/new" options={{ title: 'New exercise' }} />
             <Stack.Screen name="exercises/[id]" options={{ title: 'Edit exercise' }} />
+            <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
             {/* The Workout takes over the screen, covering the tabs. */}
             <Stack.Screen
               name="workout/index"

@@ -5,6 +5,7 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
+import { canFinishWorkout } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -21,7 +22,22 @@ export default function WorkoutScreen() {
     return <Text style={[styles.message, { color: colors.text }]}>No workout in progress.</Text>;
   }
 
+  // A discarded Workout is never recorded, so it won't appear in History.
+  const discard = async () => {
+    if (await runOrAlert("Couldn't discard the workout", () => tracker.discardWorkout(workout.id))) {
+      router.back();
+    }
+  };
+
   const confirmFinish = () => {
+    // With nothing logged there's nothing to record, so the way out is Discard.
+    if (!canFinishWorkout(workout)) {
+      Alert.alert('No sets logged yet', 'Log a set to finish this workout, or discard it.', [
+        { text: 'Keep going', style: 'cancel' },
+        { text: 'Discard', style: 'destructive', onPress: discard },
+      ]);
+      return;
+    }
     Alert.alert('Finish workout?', undefined, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -35,19 +51,10 @@ export default function WorkoutScreen() {
     ]);
   };
 
-  // A discarded Workout is never recorded, so it won't appear in History.
   const confirmDiscard = () => {
     Alert.alert('Discard this workout?', 'Its exercises and sets will not be saved.', [
       { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Discard',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't discard the workout", () => tracker.discardWorkout(workout.id))) {
-            router.back();
-          }
-        },
-      },
+      { text: 'Discard', style: 'destructive', onPress: discard },
     ]);
   };
 

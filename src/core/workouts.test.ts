@@ -1,6 +1,7 @@
 import { createTestDatabase } from './test-database';
 import {
   clockAt,
+  doWorkout,
   findExerciseByName,
   names,
   setsOf,
@@ -55,12 +56,13 @@ describe('Workouts', () => {
   it('record the finish time, keeping the start time and the date they started on', async () => {
     const clock = clockAt('2026-09-12T23:30:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
-    const started = await tracker.startWorkout();
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
 
     clock.setTime('2026-09-13T00:45:00-04:00');
-    await tracker.finishWorkout(started.id);
+    await tracker.finishWorkout(workout.id);
 
-    expect(await tracker.getWorkout(started.id)).toMatchObject({
+    expect(await tracker.getWorkout(workout.id)).toMatchObject({
       localDate: '2026-09-12',
       startedAt: new Date('2026-09-12T23:30:00-04:00'),
       finishedAt: new Date('2026-09-13T00:45:00-04:00'),
@@ -70,23 +72,59 @@ describe('Workouts', () => {
   it('keep their first finish time if finished again', async () => {
     const clock = clockAt('2026-09-12T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
-    const started = await tracker.startWorkout();
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
     clock.setTime('2026-09-12T19:00:00-04:00');
-    await tracker.finishWorkout(started.id);
+    await tracker.finishWorkout(workout.id);
 
     clock.setTime('2026-09-12T21:00:00-04:00');
-    await expect(tracker.finishWorkout(started.id)).rejects.toThrow('That Workout is not in progress');
-    expect((await tracker.getWorkout(started.id))?.finishedAt).toEqual(
+    await expect(tracker.finishWorkout(workout.id)).rejects.toThrow('That Workout is not in progress');
+    expect((await tracker.getWorkout(workout.id))?.finishedAt).toEqual(
       new Date('2026-09-12T19:00:00-04:00'),
     );
   });
 
+  it("can't be finished until a Set is logged, and stay in progress", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout } = await startWorkoutWith(tracker, 'Squat');
+
+    await expect(tracker.finishWorkout(workout.id)).rejects.toThrow(
+      'A Workout needs at least one Set to be finished',
+    );
+    expect((await tracker.getWorkoutInProgress())?.id).toBe(workout.id);
+  });
+
+  it("can't be finished once every Set logged has been deleted or gone with its Exercise", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entries } = await startWorkoutWithEach(tracker, ['Squat', 'Bench Press']);
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
+    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 });
+    const [squatSet] = await setsOf(tracker, workout.id);
+    await tracker.deleteSet(squatSet.id);
+    await tracker.removeExerciseFromWorkout(entries[1].id);
+
+    await expect(tracker.finishWorkout(workout.id)).rejects.toThrow(
+      'A Workout needs at least one Set to be finished',
+    );
+  });
+
+  it('can be finished with only warm-ups logged', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 60, reps: 10, isWarmUp: true });
+
+    await tracker.finishWorkout(workout.id);
+
+    expect(await tracker.getWorkoutInProgress()).toBeNull();
+  });
+
   it('are found as the Workout in progress until finished', async () => {
     const tracker = createTracker(createTestDatabase());
-    const started = await tracker.startWorkout();
+    const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
 
-    expect((await tracker.getWorkoutInProgress())?.id).toBe(started.id);
-    await tracker.finishWorkout(started.id);
+    expect((await tracker.getWorkoutInProgress())?.id).toBe(workout.id);
+    await tracker.finishWorkout(workout.id);
     expect(await tracker.getWorkoutInProgress()).toBeNull();
   });
 
@@ -110,8 +148,7 @@ describe('Workouts', () => {
 
   it('can start again once the last one is finished', async () => {
     const tracker = createTracker(createTestDatabase());
-    const first = await tracker.startWorkout();
-    await tracker.finishWorkout(first.id);
+    await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
 
     const second = await tracker.startWorkout();
 
@@ -568,8 +605,7 @@ describe('Discarded Workouts', () => {
 
   it('must still be in progress, so a finished one is never discarded', async () => {
     const tracker = createTracker(createTestDatabase());
-    const workout = await tracker.startWorkout();
-    await tracker.finishWorkout(workout.id);
+    const workout = await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
 
     await expect(tracker.discardWorkout(workout.id)).rejects.toThrow('That Workout is not in progress');
     expect(await tracker.getWorkout(workout.id)).toBeDefined();
