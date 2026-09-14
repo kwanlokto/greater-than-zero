@@ -64,6 +64,13 @@
       "when": 1789327305812,
       "tag": "0008_add_rest_timer",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789410189370,
+      "tag": "0009_add_workouts_is_backfilled",
+      "breakpoints": true
     }
   ]
 }

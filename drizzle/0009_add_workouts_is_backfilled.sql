@@ -1,0 +1,1 @@
+ALTER TABLE `workouts` ADD `is_backfilled` integer DEFAULT false NOT NULL;

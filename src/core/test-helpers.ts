@@ -1,4 +1,4 @@
-import type { SetValues, Tracker } from './tracker';
+import type { NewWorkout, SetValues, Tracker } from './tracker';
 
 export function names(items: { name: string }[]) {
   return items.map(item => item.name);
@@ -11,13 +11,11 @@ export async function findExerciseByName(tracker: Tracker, name: string) {
   return exercise;
 }
 
-type StartOptions = Parameters<Tracker['startWorkout']>[0];
-
 // Starts a Workout with these Exercises, in order.
 export async function startWorkoutWithEach(
   tracker: Tracker,
   exerciseNames: string[],
-  start?: StartOptions,
+  start?: NewWorkout,
 ) {
   const workout = await tracker.startWorkout(start);
   const entries = [];
@@ -32,7 +30,7 @@ export async function startWorkoutWithEach(
 export async function startWorkoutWith(
   tracker: Tracker,
   exerciseName: string,
-  start?: StartOptions,
+  start?: NewWorkout,
 ) {
   const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName], start);
   return { workout, entry: entries[0] };

@@ -104,24 +104,35 @@ export type ExerciseEntry = {
 
 export type Workout = {
   id: string;
-  // The phone's local calendar date the Workout started on, as YYYY-MM-DD.
+  // The phone's local calendar date the Workout counts toward, as YYYY-MM-DD:
+  // the date it started on, or the earlier one it was backfilled onto.
   localDate: string;
   startedAt: Date;
   finishedAt: Date | null;
+  // Added afterwards onto an earlier date, to backfill a session that wasn't
+  // logged at the time. It's not being done as it's logged, so it has no rest,
+  // and its start and finish times are only when it was entered.
+  isBackfilled: boolean;
   // When the current rest ends; the timer shows the time left until then.
   restEndsAt: Date | null;
   entries: ExerciseEntry[];
+};
+
+// Where a new Workout goes: today, unless it's backfilling an earlier date.
+export type NewWorkout = {
+  localDate?: string;
 };
 
 // What was recorded on one of the phone's local calendar dates.
 export type Day = {
   // As YYYY-MM-DD.
   localDate: string;
-  // Its finished Workouts, in the order they started.
+  // Its finished Workouts, in the order Workouts go in.
   workouts: Workout[];
 };
 
-// An Exercise's working Sets from its most recent finished Workout.
+// An Exercise's working Sets from the most recent finished Workout before the
+// one it's asked from.
 export type LastTime = {
   // The local date of the Workout they're from.
   localDate: string;
@@ -209,12 +220,11 @@ export function canFinishWorkout(workout: Pick<Workout, 'entries'>): boolean {
   return workout.entries.some(entry => entry.sets.length > 0);
 }
 
-// A Workout recorded on an earlier date than the one it was started on: added
-// afterwards to backfill a session that wasn't logged at the time. It's not
-// being done as it's logged, so it has no rest, and its start and finish
-// times are when it was entered.
-export function isBackfilled(workout: Pick<Workout, 'localDate' | 'startedAt'>): boolean {
-  return workout.localDate < localDateOf(workout.startedAt);
+// A Workout can be added to a date before today's, to backfill a session that
+// wasn't logged; today's are started as they happen. startWorkout enforces it;
+// screens use it to decide whether to offer adding one.
+export function canAddWorkoutOn(localDate: string, now: Date): boolean {
+  return localDate < localDateOf(now);
 }
 
 // The time left to rest, in seconds, worked out from the rest's end time so
@@ -236,13 +246,26 @@ function finished() {
   return and(isNotNull(workouts.finishedAt), isNull(workouts.deletedAt));
 }
 
-// The other Workouts that come before this one: on an earlier date, or
-// started no later the same day. By date first, so a Workout backfilled onto a
-// past date counts as that day's.
-function cameBefore({ id, localDate, startedAt }: Pick<Workout, 'id' | 'localDate' | 'startedAt'>) {
+// Workouts go in order by date. Within a date the backfilled ones come first,
+// in the order they were added, since when they happened isn't known; then
+// the rest by start time. latestWorkoutFirst and cameBefore follow it too.
+const workoutOrder = [asc(workouts.localDate), desc(workouts.isBackfilled), asc(workouts.startedAt)];
+const latestWorkoutFirst = [
+  desc(workouts.localDate),
+  asc(workouts.isBackfilled),
+  desc(workouts.startedAt),
+];
+
+// The other Workouts that come before this one in that order. Those started at
+// the same moment count too, so it doesn't hang on a millisecond.
+function cameBefore(workout: Pick<Workout, 'id' | 'localDate' | 'startedAt' | 'isBackfilled'>) {
+  const startedNoLater = lte(workouts.startedAt, workout.startedAt);
+  const earlierThatDay = workout.isBackfilled
+    ? and(eq(workouts.isBackfilled, true), startedNoLater)
+    : or(eq(workouts.isBackfilled, true), startedNoLater);
   return or(
-    lt(workouts.localDate, localDate),
-    and(eq(workouts.localDate, localDate), lte(workouts.startedAt, startedAt), ne(workouts.id, id)),
+    lt(workouts.localDate, workout.localDate),
+    and(eq(workouts.localDate, workout.localDate), earlierThatDay, ne(workouts.id, workout.id)),
   );
 }
 
@@ -257,15 +280,17 @@ function requireValidSet(trackingType: TrackingType, set: SetValues) {
   if (problem) throw new Error(problem);
 }
 
-// A YYYY-MM-DD date that's on the calendar and before today's.
-function requirePastDate(localDate: string, today: string) {
+// A YYYY-MM-DD date on the calendar that canAddWorkoutOn allows.
+function requireBackfillDate(localDate: string, now: Date) {
   const [year, month, day] = localDate.split('-').map(Number);
   // Anything else doesn't come back the same: a day past its month's end rolls
   // into the next month, and text that isn't a date isn't one.
   if (localDateOf(new Date(year, month - 1, day)) !== localDate) {
     throw new Error(`No such date as ${localDate}`);
   }
-  if (localDate >= today) throw new Error('A Workout can only be added to a past date');
+  if (!canAddWorkoutOn(localDate, now)) {
+    throw new Error('A Workout can only be added to a past date');
+  }
 }
 
 function requireExerciseName(typed: string): string {
@@ -349,14 +374,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .select({
         workoutId: exerciseEntries.workoutId,
         restSeconds: exercises.defaultRestSeconds,
-        localDate: workouts.localDate,
-        startedAt: workouts.startedAt,
+        isBackfilled: workouts.isBackfilled,
       })
       .from(exerciseEntries)
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
       .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
       .where(eq(exerciseEntries.id, exerciseEntryId));
-    if (isBackfilled(entry)) return;
+    // A backfilled Workout isn't being done as it's logged.
+    if (entry.isBackfilled) return;
     const restSeconds = entry.restSeconds ?? (await getFallbackRestSeconds());
     // Only during a Workout: Sets added to a finished one don't start a rest.
     await db
@@ -399,14 +424,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   // Soft-deletes the Workout with its Exercise entries and Sets, all together,
-  // if it's in the given state. Returns whether it was.
-  function softDeleteWorkout(id: string, state: SQL | undefined): boolean {
+  // if it also matches `where`. Returns whether it did.
+  function softDeleteWorkout(id: string, where: SQL | undefined): boolean {
     const deletedAt = now();
     return db.transaction(tx => {
       const deleted = tx
         .update(workouts)
         .set({ deletedAt, restEndsAt: null })
-        .where(and(eq(workouts.id, id), state))
+        .where(and(eq(workouts.id, id), where))
         .returning({ id: workouts.id })
         .all();
       if (deleted.length === 0) return false;
@@ -467,14 +492,21 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return exercise.trackingType;
   }
 
-  // The Workouts matching `where`, in the order they started, each with its
+  // The Workouts matching `where`, in the order Workouts go in, each with its
   // Exercises and Sets in order. Deleted Workouts, removed Exercises and
   // deleted Sets are left out.
   async function findWorkouts(where: SQL | undefined): Promise<Workout[]> {
     const found = await db.query.workouts.findMany({
       where: and(where, isNull(workouts.deletedAt)),
-      orderBy: asc(workouts.startedAt),
-      columns: { id: true, localDate: true, startedAt: true, finishedAt: true, restEndsAt: true },
+      orderBy: workoutOrder,
+      columns: {
+        id: true,
+        localDate: true,
+        startedAt: true,
+        finishedAt: true,
+        isBackfilled: true,
+        restEndsAt: true,
+      },
       with: {
         entries: {
           where: isNull(exerciseEntries.deletedAt),
@@ -589,16 +621,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Starts a Workout now, recorded on today's date, or on an earlier
     // `localDate` to backfill a session that wasn't logged at the time.
-    async startWorkout({ localDate }: { localDate?: string } = {}): Promise<{ id: string }> {
+    async startWorkout({ localDate }: NewWorkout = {}): Promise<{ id: string }> {
       const startedAt = now();
-      const today = localDateOf(startedAt);
-      if (localDate !== undefined) requirePastDate(localDate, today);
+      if (localDate !== undefined) requireBackfillDate(localDate, startedAt);
       // Checked and inserted without awaiting in between, so two presses at the
       // same moment can't both start one.
       if (idOfWorkoutInProgress()) throw new Error('A Workout is already in progress');
       return db
         .insert(workouts)
-        .values({ startedAt, localDate: localDate ?? today })
+        .values({
+          startedAt,
+          localDate: localDate ?? localDateOf(startedAt),
+          isBackfilled: localDate !== undefined,
+        })
         .returning({ id: workouts.id })
         .get();
     },
@@ -752,18 +787,23 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // before it. From one with a working Set of the Exercise, so a session
     // where it was only warmed up doesn't hide the one before.
     async getLastTime(exerciseEntryId: string): Promise<LastTime | null> {
-      const [asking] = await db
+      const [entry] = await db
         .select({
           exerciseId: exerciseEntries.exerciseId,
-          workout: { id: workouts.id, localDate: workouts.localDate, startedAt: workouts.startedAt },
+          workout: {
+            id: workouts.id,
+            localDate: workouts.localDate,
+            startedAt: workouts.startedAt,
+            isBackfilled: workouts.isBackfilled,
+          },
         })
         .from(exerciseEntries)
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
         .where(eq(exerciseEntries.id, exerciseEntryId));
-      if (!asking) return null;
+      if (!entry) return null;
       const workingSetOfExercise = () =>
         and(
-          eq(exerciseEntries.exerciseId, asking.exerciseId),
+          eq(exerciseEntries.exerciseId, entry.exerciseId),
           setStillLogged(),
           eq(sets.isWarmUp, false),
         );
@@ -773,10 +813,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .from(sets)
         .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(and(workingSetOfExercise(), finished(), cameBefore(asking.workout)))
-        // By calendar day first, so a Workout backfilled onto a past date later
-        // on still counts as that day's.
-        .orderBy(desc(workouts.localDate), desc(workouts.startedAt))
+        .where(and(workingSetOfExercise(), finished(), cameBefore(entry.workout)))
+        .orderBy(...latestWorkoutFirst)
         .limit(1);
       if (!latest) return null;
 

@@ -4,11 +4,11 @@ import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextButton } from '@/components/text-button';
-import { workoutTimes } from '@/components/workout-card';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
+import { workoutTimes } from '@/workout-labels';
 
 // A finished Workout opened from History, corrected with the same tools as
 // during a Workout. It keeps its date and stays finished; there's no rest.

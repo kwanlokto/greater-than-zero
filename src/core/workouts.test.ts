@@ -23,6 +23,7 @@ describe('Workouts', () => {
       localDate: '2026-09-12',
       startedAt: new Date('2026-09-12T18:00:00-04:00'),
       finishedAt: null,
+      isBackfilled: false,
       restEndsAt: null,
       entries: [],
     });

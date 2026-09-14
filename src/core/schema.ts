@@ -69,10 +69,15 @@ export const exercises = sqliteTable('exercises', {
 
 export const workouts = sqliteTable('workouts', {
   ...rowColumns,
-  // The phone's local calendar date when the Workout started, as YYYY-MM-DD.
-  // All grouping by day uses it.
+  // The phone's local calendar date the Workout counts toward, as YYYY-MM-DD:
+  // the date it started on, or the earlier one it was backfilled onto. All
+  // grouping by day uses it.
   localDate: text('local_date').notNull(),
   startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+  // Added afterwards onto an earlier date, so its times are only when it was
+  // entered. Stored rather than worked out from the dates, which would change
+  // with the phone's time zone.
+  isBackfilled: integer('is_backfilled', { mode: 'boolean' }).notNull().default(false),
   // Empty while the Workout is in progress.
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
   // When the current rest ends. Set by logging a Set; the timer counts down to it.

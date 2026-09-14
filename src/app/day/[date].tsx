@@ -3,8 +3,9 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
+import { TextButton } from '@/components/text-button';
 import { WorkoutCard } from '@/components/workout-card';
-import { localDateOf } from '@/core/tracker';
+import { canAddWorkoutOn } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
@@ -19,8 +20,7 @@ export default function DayScreen() {
   const { colors } = useTheme();
   const day = useTrackerQuery(() => tracker.getDay(date), [date]);
   const workoutInProgress = useWorkoutInProgress();
-  // Today's Workouts start from Today; only past days are backfilled.
-  const isPast = date < localDateOf(new Date());
+  const canAdd = canAddWorkoutOn(date, new Date());
 
   async function addWorkout() {
     if (await runOrAlert("Couldn't add a workout", () => tracker.startWorkout({ localDate: date }))) {
@@ -44,14 +44,21 @@ export default function DayScreen() {
               onPress={() => router.navigate({ pathname: '/workout/[id]', params: { id: workout.id } })}
             />
           ))}
-          {/* One Workout at a time, so a backfill waits for the one in progress. */}
-          {isPast && workoutInProgress === null && (
+          {canAdd && workoutInProgress === null && (
             <PrimaryButton label="Add workout" onPress={addWorkout} />
           )}
-          {isPast && workoutInProgress && (
-            <Text style={[styles.note, { color: colors.text }]}>
-              Finish the workout in progress to add one to this day.
-            </Text>
+          {/* One Workout at a time, so a backfill waits for the one in progress.
+              The Workout bar is on the tabs, so this is the way back to it. */}
+          {canAdd && workoutInProgress && (
+            <>
+              <Text style={[styles.note, { color: colors.text }]}>
+                Finish the workout in progress to add one to this day.
+              </Text>
+              <TextButton
+                label="Go to the workout in progress"
+                onPress={() => router.navigate('/workout')}
+              />
+            </>
           )}
         </DaySection>
       )}

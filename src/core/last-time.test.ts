@@ -16,7 +16,7 @@ describe('Last time', () => {
       { weight: 62.5, reps: 5 },
     ]);
 
-    const lastTime = await lastTimeOf(tracker, 'Bench Press');
+    const lastTime = await lastTimeInNewWorkout(tracker, 'Bench Press');
 
     expect(lastTime?.localDate).toBe('2026-09-11');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([
@@ -48,7 +48,7 @@ describe('Last time', () => {
       { weight: 100, reps: 4 },
     ]);
 
-    const lastTime = await lastTimeOf(tracker, 'Squat');
+    const lastTime = await lastTimeInNewWorkout(tracker, 'Squat');
 
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([
       [100, 5],
@@ -59,7 +59,7 @@ describe('Last time', () => {
   it('is nothing for an Exercise never done in a finished Workout', async () => {
     const tracker = createTracker(createTestDatabase());
 
-    expect(await lastTimeOf(tracker, 'Deadlift')).toBeNull();
+    expect(await lastTimeInNewWorkout(tracker, 'Deadlift')).toBeNull();
   });
 
   it('looks past a Workout where the Exercise was only warmed up', async () => {
@@ -69,7 +69,7 @@ describe('Last time', () => {
     clock.setTime('2026-09-11T18:00:00-04:00');
     await doWorkout(tracker, 'Deadlift', [{ weight: 60, reps: 5, isWarmUp: true }]);
 
-    const lastTime = await lastTimeOf(tracker, 'Deadlift');
+    const lastTime = await lastTimeInNewWorkout(tracker, 'Deadlift');
 
     expect(lastTime?.localDate).toBe('2026-09-08');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[140, 3]]);
@@ -117,7 +117,7 @@ describe('Last time', () => {
 });
 
 // "Last time" as the Exercise shows it in a new Workout.
-async function lastTimeOf(tracker: Tracker, exerciseName: string) {
+async function lastTimeInNewWorkout(tracker: Tracker, exerciseName: string) {
   const { entry } = await startWorkoutWith(tracker, exerciseName);
   return tracker.getLastTime(entry.id);
 }

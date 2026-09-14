@@ -3,18 +3,8 @@ import { useTheme } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { setLabels, setPresentationFor } from '@/components/set-fields';
-import { isBackfilled, type ExerciseEntry, type Workout } from '@/core/tracker';
-import { formatTimeOfDay } from '@/dates';
-
-// When a Workout took place, e.g. "6:00 PM – 7:05 PM". A backfilled one's
-// times are only when it was entered, so they aren't shown.
-export function workoutTimes(workout: Workout): string {
-  const { startedAt, finishedAt } = workout;
-  if (isBackfilled(workout)) return 'Added later';
-  return finishedAt
-    ? `${formatTimeOfDay(startedAt)} – ${formatTimeOfDay(finishedAt)}`
-    : formatTimeOfDay(startedAt);
-}
+import type { ExerciseEntry, Workout } from '@/core/tracker';
+import { workoutTimes } from '@/workout-labels';
 
 type Props = {
   workout: Workout;

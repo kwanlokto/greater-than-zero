@@ -9,7 +9,7 @@ import {
   startWorkoutWithEach,
   weightsAndReps,
 } from './test-helpers';
-import { createTracker, isBackfilled, type Tracker } from './tracker';
+import { createTracker, type Tracker } from './tracker';
 
 describe('A finished Workout', () => {
   it('is edited with the same tools as during a Workout, keeping its date and finished state', async () => {
@@ -108,6 +108,20 @@ describe('Deleting a finished Workout', () => {
     expect(await tracker.getWorkout(workout.id)).toBeUndefined();
   });
 
+  it('leaves "last time" to the session before it', async () => {
+    const clock = clockAt('2026-09-08T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 8 }]);
+    clock.setTime('2026-09-11T18:00:00-04:00');
+    const mistake = await doWorkout(tracker, 'Bench Press', [{ weight: 600, reps: 8 }]);
+
+    await tracker.deleteWorkout(mistake.id);
+    clock.setTime('2026-09-14T18:00:00-04:00');
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    expect(weightsAndReps((await tracker.getLastTime(entry.id))?.sets ?? [])).toEqual([[60, 8]]);
+  });
+
   it('takes its Exercises and Sets with it', async () => {
     const tracker = createTracker(createTestDatabase());
     const workout = await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
@@ -169,9 +183,10 @@ describe('A Workout added to a past date', () => {
     await tracker.logSet(added.entry.id, { weight: 100, reps: 5 });
     await tracker.finishWorkout(added.workout.id);
 
-    const workoutsOn = async (localDate: string) => (await tracker.getDay(localDate)).workouts;
-    expect((await workoutsOn('2026-09-12')).map(isBackfilled)).toEqual([false, true]);
-    expect((await workoutsOn('2026-09-14')).map(isBackfilled)).toEqual([false]);
+    const backfilledOn = async (localDate: string) =>
+      (await tracker.getDay(localDate)).workouts.map(workout => workout.isBackfilled);
+    expect(await backfilledOn('2026-09-12')).toEqual([true, false]);
+    expect(await backfilledOn('2026-09-14')).toEqual([false]);
   });
 
   it('sees the session before its date as "last time"', async () => {
@@ -204,6 +219,38 @@ describe('A Workout added to a past date', () => {
 
     expect(lastTime?.localDate).toBe('2026-09-12');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[65, 5]]);
+  });
+
+  it('sees no live session of its own date as "last time", as that may have come later', async () => {
+    const clock = clockAt('2026-09-08T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 8 }]);
+    clock.setTime('2026-09-10T18:00:00-04:00');
+    await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
+
+    clock.setTime('2026-09-14T20:00:00-04:00');
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
+
+    expect((await tracker.getLastTime(entry.id))?.localDate).toBe('2026-09-08');
+  });
+
+  it("comes before its date's live sessions, however recently it was added", async () => {
+    const clock = clockAt('2026-09-10T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    const live = await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
+    clock.setTime('2026-09-14T20:00:00-04:00');
+    const added = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
+    await tracker.logSet(added.entry.id, { weight: 60, reps: 8 });
+    await tracker.finishWorkout(added.workout.id);
+
+    clock.setTime('2026-09-15T18:00:00-04:00');
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    expect(weightsAndReps((await tracker.getLastTime(entry.id))?.sets ?? [])).toEqual([[65, 5]]);
+    expect((await tracker.getDay('2026-09-10')).workouts.map(workout => workout.id)).toEqual([
+      added.workout.id,
+      live.id,
+    ]);
   });
 
   it('follows the one-Workout-at-a-time rule', async () => {
