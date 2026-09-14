@@ -2,14 +2,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useTheme } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { tracker } from '@/database';
-import { useTrackerQuery } from '@/use-tracker-query';
+import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 // Shown on every tab while a Workout is in progress; tapping it returns there.
 export function WorkoutBar() {
   const router = useRouter();
   const { colors } = useTheme();
-  const workout = useTrackerQuery(() => tracker.getWorkoutInProgress(), []);
+  const workout = useWorkoutInProgress();
 
   if (!workout) return null;
 

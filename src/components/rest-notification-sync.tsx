@@ -1,22 +1,36 @@
 import { useEffect } from 'react';
 
-import { tracker } from '@/database';
-import { scheduleRestEnd } from '@/notifications';
-import { useTrackerQuery } from '@/use-tracker-query';
+import {
+  askForNotificationsOnce,
+  setUpNotifications,
+  syncRestEndNotification,
+} from '@/notifications';
+import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
-// Keeps the rest-end notification in step with the Workout in progress:
-// scheduled for the rest's end, moved with it, and cancelled when the rest is
-// cleared by finishing or discarding. Lives at the root so it works whatever
-// screen is open. Renders nothing.
+// Everything the rest-end notification needs, at the root so it works whatever
+// screen is open: set up once, permission asked when the first Workout starts
+// (however it was started), and the notification kept in step with the
+// Workout in progress. It's scheduled for the rest's end, moved with it, and
+// cancelled when finishing or discarding clears the rest. Renders nothing.
 export function RestNotificationSync() {
-  const workout = useTrackerQuery(() => tracker.getWorkoutInProgress(), []);
+  const workout = useWorkoutInProgress();
   const loaded = workout !== undefined;
-  const restEndsAt = workout?.restEndsAt?.getTime() ?? null;
+  const hasWorkout = Boolean(workout);
+  const restEndTime = workout?.restEndsAt?.getTime() ?? null;
+
+  useEffect(() => {
+    setUpNotifications();
+  }, []);
+
+  // Asked over the Workout. Declining leaves the in-app timer working.
+  useEffect(() => {
+    if (hasWorkout) askForNotificationsOnce();
+  }, [hasWorkout]);
 
   useEffect(() => {
     if (!loaded) return;
-    scheduleRestEnd(restEndsAt === null ? null : new Date(restEndsAt));
-  }, [loaded, restEndsAt]);
+    syncRestEndNotification(restEndTime === null ? null : new Date(restEndTime));
+  }, [loaded, restEndTime]);
 
   return null;
 }

@@ -3,21 +3,16 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { tracker } from '@/database';
-import { askForNotificationsOnce } from '@/notifications';
-import { useTrackerQuery } from '@/use-tracker-query';
+import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 export default function TodayScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const workoutInProgress = useTrackerQuery(() => tracker.getWorkoutInProgress(), []);
+  const workoutInProgress = useWorkoutInProgress();
 
   async function startEmptyWorkout() {
     await tracker.startWorkout();
     router.push('/workout');
-    // Asked over the Workout, the first time only; the timer works either way.
-    askForNotificationsOnce().catch(error =>
-      console.warn('Could not ask for notifications', error),
-    );
   }
 
   return (

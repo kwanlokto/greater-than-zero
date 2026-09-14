@@ -8,11 +8,12 @@ import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
+import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 export default function WorkoutScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const workout = useTrackerQuery(() => tracker.getWorkoutInProgress(), []);
+  const workout = useWorkoutInProgress();
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
   if (workout === undefined || displayUnit === undefined) return null;
