@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
 import { tracker } from '@/database';
+import { askForNotificationsOnce } from '@/notifications';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function TodayScreen() {
@@ -13,6 +14,10 @@ export default function TodayScreen() {
   async function startEmptyWorkout() {
     await tracker.startWorkout();
     router.push('/workout');
+    // Asked over the Workout, the first time only; the timer works either way.
+    askForNotificationsOnce().catch(error =>
+      console.warn('Could not ask for notifications', error),
+    );
   }
 
   return (

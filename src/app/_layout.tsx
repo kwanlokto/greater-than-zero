@@ -5,7 +5,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, useColorScheme, View } from 'react-native';
 
+import { RestNotificationSync } from '@/components/rest-notification-sync';
 import { database } from '@/database';
+import { setUpNotifications } from '@/notifications';
 import { FinishOnboardingContext, loadOnboardingDone, saveOnboardingDone } from '@/onboarding';
 import { useResumeWorkoutOnLaunch } from '@/use-resume-workout-on-launch';
 import migrations from '../../drizzle/migrations';
@@ -21,6 +23,7 @@ export default function RootLayout() {
     loadOnboardingDone()
       .then(setOnboarded)
       .catch(() => setOnboarded(false));
+    setUpNotifications().catch(error => console.warn('Could not set up notifications', error));
   }, []);
 
   const ready = migration.success && onboarded !== undefined;
@@ -63,6 +66,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           </Stack.Protected>
         </Stack>
+        {onboarded && <RestNotificationSync />}
       </FinishOnboardingContext>
       <StatusBar style="auto" />
     </ThemeProvider>

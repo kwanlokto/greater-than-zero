@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "android": {
       "package": "com.rkwan.greater_than_zero",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM"
+      ]
     },
     "plugins": [
       "expo-router",
