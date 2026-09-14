@@ -1,4 +1,19 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, like, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
@@ -194,6 +209,14 @@ export function canFinishWorkout(workout: Pick<Workout, 'entries'>): boolean {
   return workout.entries.some(entry => entry.sets.length > 0);
 }
 
+// A Workout recorded on an earlier date than the one it was started on: added
+// afterwards to backfill a session that wasn't logged at the time. It's not
+// being done as it's logged, so it has no rest, and its start and finish
+// times are when it was entered.
+export function isBackfilled(workout: Pick<Workout, 'localDate' | 'startedAt'>): boolean {
+  return workout.localDate < localDateOf(workout.startedAt);
+}
+
 // The time left to rest, in seconds, worked out from the rest's end time so
 // it's right whenever it's asked, even after the app has been in the
 // background. Zero once the rest is over or when none has started.
@@ -213,6 +236,16 @@ function finished() {
   return and(isNotNull(workouts.finishedAt), isNull(workouts.deletedAt));
 }
 
+// The other Workouts that come before this one: on an earlier date, or
+// started no later the same day. By date first, so a Workout backfilled onto a
+// past date counts as that day's.
+function cameBefore({ id, localDate, startedAt }: Pick<Workout, 'id' | 'localDate' | 'startedAt'>) {
+  return or(
+    lt(workouts.localDate, localDate),
+    and(eq(workouts.localDate, localDate), lte(workouts.startedAt, startedAt), ne(workouts.id, id)),
+  );
+}
+
 // A Set that hasn't been deleted, on its own or with its Exercise. For queries
 // joining Sets to their Exercise entries.
 function setStillLogged() {
@@ -222,6 +255,17 @@ function setStillLogged() {
 function requireValidSet(trackingType: TrackingType, set: SetValues) {
   const problem = problemWithSet(trackingType, set);
   if (problem) throw new Error(problem);
+}
+
+// A YYYY-MM-DD date that's on the calendar and before today's.
+function requirePastDate(localDate: string, today: string) {
+  const [year, month, day] = localDate.split('-').map(Number);
+  // Anything else doesn't come back the same: a day past its month's end rolls
+  // into the next month, and text that isn't a date isn't one.
+  if (localDateOf(new Date(year, month - 1, day)) !== localDate) {
+    throw new Error(`No such date as ${localDate}`);
+  }
+  if (localDate >= today) throw new Error('A Workout can only be added to a past date');
 }
 
 function requireExerciseName(typed: string): string {
@@ -302,10 +346,17 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // Exercise's own rest length or the default from Settings.
   async function startRest(exerciseEntryId: string, loggedAt: Date) {
     const [entry] = await db
-      .select({ workoutId: exerciseEntries.workoutId, restSeconds: exercises.defaultRestSeconds })
+      .select({
+        workoutId: exerciseEntries.workoutId,
+        restSeconds: exercises.defaultRestSeconds,
+        localDate: workouts.localDate,
+        startedAt: workouts.startedAt,
+      })
       .from(exerciseEntries)
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
+      .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
       .where(eq(exerciseEntries.id, exerciseEntryId));
+    if (isBackfilled(entry)) return;
     const restSeconds = entry.restSeconds ?? (await getFallbackRestSeconds());
     // Only during a Workout: Sets added to a finished one don't start a rest.
     await db
@@ -320,6 +371,56 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .set({ deletedAt })
       .where(and(where, isNull(sets.deletedAt)))
       .run();
+  }
+
+  function hasLoggedSet(tx: TrackerDatabase, workoutId: string): boolean {
+    const logged = tx
+      .select({ id: sets.id })
+      .from(sets)
+      .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+      .where(and(eq(exerciseEntries.workoutId, workoutId), setStillLogged()))
+      .get();
+    return logged !== undefined;
+  }
+
+  // For a transaction that has just taken Sets from an Exercise entry: throws,
+  // rolling it back, if that left the entry's Workout finished with no Set,
+  // since a finished Workout keeps at least one.
+  function requireFinishedWorkoutKeepsASet(tx: TrackerDatabase, exerciseEntryId: string) {
+    const workout = tx
+      .select({ id: workouts.id })
+      .from(exerciseEntries)
+      .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
+      .where(and(eq(exerciseEntries.id, exerciseEntryId), finished()))
+      .get();
+    if (workout && !hasLoggedSet(tx, workout.id)) {
+      throw new Error('A finished Workout keeps at least one Set: delete the Workout instead');
+    }
+  }
+
+  // Soft-deletes the Workout with its Exercise entries and Sets, all together,
+  // if it's in the given state. Returns whether it was.
+  function softDeleteWorkout(id: string, state: SQL | undefined): boolean {
+    const deletedAt = now();
+    return db.transaction(tx => {
+      const deleted = tx
+        .update(workouts)
+        .set({ deletedAt, restEndsAt: null })
+        .where(and(eq(workouts.id, id), state))
+        .returning({ id: workouts.id })
+        .all();
+      if (deleted.length === 0) return false;
+      const entryIds = tx
+        .select({ id: exerciseEntries.id })
+        .from(exerciseEntries)
+        .where(eq(exerciseEntries.workoutId, id));
+      softDeleteSets(tx, inArray(sets.exerciseEntryId, entryIds), deletedAt);
+      tx.update(exerciseEntries)
+        .set({ deletedAt })
+        .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
+        .run();
+      return true;
+    });
   }
 
   // Removed entries can't change.
@@ -486,14 +587,18 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return exercise;
     },
 
-    async startWorkout(): Promise<{ id: string }> {
+    // Starts a Workout now, recorded on today's date, or on an earlier
+    // `localDate` to backfill a session that wasn't logged at the time.
+    async startWorkout({ localDate }: { localDate?: string } = {}): Promise<{ id: string }> {
+      const startedAt = now();
+      const today = localDateOf(startedAt);
+      if (localDate !== undefined) requirePastDate(localDate, today);
       // Checked and inserted without awaiting in between, so two presses at the
       // same moment can't both start one.
       if (idOfWorkoutInProgress()) throw new Error('A Workout is already in progress');
-      const startedAt = now();
       return db
         .insert(workouts)
-        .values({ startedAt, localDate: localDateOf(startedAt) })
+        .values({ startedAt, localDate: localDate ?? today })
         .returning({ id: workouts.id })
         .get();
     },
@@ -526,6 +631,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .all();
         if (removed.length === 0) throw new Error('No such Exercise in a Workout');
         softDeleteSets(tx, eq(sets.exerciseEntryId, exerciseEntryId), deletedAt);
+        requireFinishedWorkoutKeepsASet(tx, exerciseEntryId);
       });
     },
 
@@ -586,31 +692,27 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Soft delete: the others keep their positions, so their order holds.
     async deleteSet(setId: string): Promise<void> {
-      await updateSet(setId, { deletedAt: now() });
+      db.transaction(tx => {
+        const [deleted] = tx
+          .update(sets)
+          .set({ deletedAt: now() })
+          .where(and(eq(sets.id, setId), isNull(sets.deletedAt)))
+          .returning({ exerciseEntryId: sets.exerciseEntryId })
+          .all();
+        if (!deleted) throw new Error('No such Set');
+        requireFinishedWorkoutKeepsASet(tx, deleted.exerciseEntryId);
+      });
     },
 
-    // Soft-deletes the Workout with its Exercises and Sets, so it's never
-    // recorded: it doesn't reach History, "last time" or charts.
+    // The Workout in progress is never recorded: it doesn't reach History,
+    // "last time" or charts.
     async discardWorkout(id: string): Promise<void> {
-      const deletedAt = now();
-      db.transaction(tx => {
-        const discarded = tx
-          .update(workouts)
-          .set({ deletedAt, restEndsAt: null })
-          .where(and(eq(workouts.id, id), inProgress()))
-          .returning({ id: workouts.id })
-          .all();
-        if (discarded.length === 0) throw new Error('That Workout is not in progress');
-        const entryIds = tx
-          .select({ id: exerciseEntries.id })
-          .from(exerciseEntries)
-          .where(eq(exerciseEntries.workoutId, id));
-        softDeleteSets(tx, inArray(sets.exerciseEntryId, entryIds), deletedAt);
-        tx.update(exerciseEntries)
-          .set({ deletedAt })
-          .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
-          .run();
-      });
+      if (!softDeleteWorkout(id, inProgress())) throw new Error('That Workout is not in progress');
+    },
+
+    // A finished Workout leaves History, "last time" and charts.
+    async deleteWorkout(id: string): Promise<void> {
+      if (!softDeleteWorkout(id, finished())) throw new Error('No such finished Workout');
     },
 
     // Moves the current rest's end by `seconds`: later when positive, earlier
@@ -634,13 +736,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .where(and(eq(workouts.id, id), inProgress()))
           .get();
         if (!workout) throw new Error('That Workout is not in progress');
-        const logged = tx
-          .select({ id: sets.id })
-          .from(sets)
-          .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-          .where(and(eq(exerciseEntries.workoutId, id), setStillLogged()))
-          .get();
-        if (!logged) throw new Error('A Workout needs at least one Set to be finished');
+        if (!hasLoggedSet(tx, id)) throw new Error('A Workout needs at least one Set to be finished');
         tx.update(workouts)
           // The rest belongs to the Workout in progress, so it ends here too.
           .set({ finishedAt, restEndsAt: null })
@@ -651,18 +747,33 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     getWorkout,
 
-    // From the most recent finished Workout with a working Set of the Exercise,
-    // so a session where it was only warmed up doesn't hide the one before.
-    async getLastTime(exerciseId: string): Promise<LastTime | null> {
+    // "Last time" for an Exercise in a Workout: from the most recent finished
+    // Workout before that one, so a past or backfilled Workout sees the session
+    // before it. From one with a working Set of the Exercise, so a session
+    // where it was only warmed up doesn't hide the one before.
+    async getLastTime(exerciseEntryId: string): Promise<LastTime | null> {
+      const [asking] = await db
+        .select({
+          exerciseId: exerciseEntries.exerciseId,
+          workout: { id: workouts.id, localDate: workouts.localDate, startedAt: workouts.startedAt },
+        })
+        .from(exerciseEntries)
+        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
+        .where(eq(exerciseEntries.id, exerciseEntryId));
+      if (!asking) return null;
       const workingSetOfExercise = () =>
-        and(eq(exerciseEntries.exerciseId, exerciseId), setStillLogged(), eq(sets.isWarmUp, false));
+        and(
+          eq(exerciseEntries.exerciseId, asking.exerciseId),
+          setStillLogged(),
+          eq(sets.isWarmUp, false),
+        );
 
       const [latest] = await db
         .select({ workoutId: workouts.id, localDate: workouts.localDate })
         .from(sets)
         .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(and(workingSetOfExercise(), finished()))
+        .where(and(workingSetOfExercise(), finished(), cameBefore(asking.workout)))
         // By calendar day first, so a Workout backfilled onto a past date later
         // on still counts as that day's.
         .orderBy(desc(workouts.localDate), desc(workouts.startedAt))

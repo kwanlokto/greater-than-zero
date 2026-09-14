@@ -1,11 +1,5 @@
 import { createTestDatabase } from './test-database';
-import {
-  clockAt,
-  doWorkout,
-  findExerciseByName,
-  startWorkoutWith,
-  weightsAndReps,
-} from './test-helpers';
+import { clockAt, doWorkout, startWorkoutWith, weightsAndReps } from './test-helpers';
 import { createTracker, type Tracker } from './tracker';
 
 describe('Last time', () => {
@@ -39,7 +33,7 @@ describe('Last time', () => {
     const today = await startWorkoutWith(tracker, 'Squat');
     await tracker.logSet(today.entry.id, { weight: 105, reps: 5 });
 
-    const lastTime = await lastTimeOf(tracker, 'Squat');
+    const lastTime = await tracker.getLastTime(today.entry.id);
 
     expect(lastTime?.localDate).toBe('2026-09-08');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[100, 5]]);
@@ -81,6 +75,23 @@ describe('Last time', () => {
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[140, 3]]);
   });
 
+  it('seen from a past Workout, is the session before it, not a later one', async () => {
+    const clock = clockAt('2026-09-08T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 8 }]);
+    clock.setTime('2026-09-11T18:00:00-04:00');
+    const past = await startWorkoutWith(tracker, 'Bench Press');
+    await tracker.logSet(past.entry.id, { weight: 62.5, reps: 6 });
+    await tracker.finishWorkout(past.workout.id);
+    clock.setTime('2026-09-13T18:00:00-04:00');
+    await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
+
+    const lastTime = await tracker.getLastTime(past.entry.id);
+
+    expect(lastTime?.localDate).toBe('2026-09-08');
+    expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[60, 8]]);
+  });
+
   it('shows a session logged in mixed units in whichever display unit is chosen', async () => {
     const tracker = createTracker(createTestDatabase());
     await tracker.setDisplayUnit('lb');
@@ -89,8 +100,9 @@ describe('Last time', () => {
     await tracker.setDisplayUnit('kg');
     await tracker.logSet(entry.id, { weight: 100, reps: 5 });
     await tracker.finishWorkout(workout.id);
+    const next = await startWorkoutWith(tracker, 'Squat');
     const shown = async () =>
-      (await lastTimeOf(tracker, 'Squat'))?.sets.map(set => set.displayWeight);
+      (await tracker.getLastTime(next.entry.id))?.sets.map(set => set.displayWeight);
 
     expect(await shown()).toEqual([
       { value: 102.1, unit: 'kg' },
@@ -104,7 +116,8 @@ describe('Last time', () => {
   });
 });
 
+// "Last time" as the Exercise shows it in a new Workout.
 async function lastTimeOf(tracker: Tracker, exerciseName: string) {
-  const exercise = await findExerciseByName(tracker, exerciseName);
-  return tracker.getLastTime(exercise.id);
+  const { entry } = await startWorkoutWith(tracker, exerciseName);
+  return tracker.getLastTime(entry.id);
 }

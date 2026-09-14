@@ -11,9 +11,15 @@ export async function findExerciseByName(tracker: Tracker, name: string) {
   return exercise;
 }
 
+type StartOptions = Parameters<Tracker['startWorkout']>[0];
+
 // Starts a Workout with these Exercises, in order.
-export async function startWorkoutWithEach(tracker: Tracker, exerciseNames: string[]) {
-  const workout = await tracker.startWorkout();
+export async function startWorkoutWithEach(
+  tracker: Tracker,
+  exerciseNames: string[],
+  start?: StartOptions,
+) {
+  const workout = await tracker.startWorkout(start);
   const entries = [];
   for (const name of exerciseNames) {
     const exercise = await findExerciseByName(tracker, name);
@@ -23,8 +29,12 @@ export async function startWorkoutWithEach(tracker: Tracker, exerciseNames: stri
 }
 
 // Starts a Workout with one Exercise in it.
-export async function startWorkoutWith(tracker: Tracker, exerciseName: string) {
-  const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName]);
+export async function startWorkoutWith(
+  tracker: Tracker,
+  exerciseName: string,
+  start?: StartOptions,
+) {
+  const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName], start);
   return { workout, entry: entries[0] };
 }
 

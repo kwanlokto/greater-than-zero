@@ -1,28 +1,57 @@
-import { Stack, useLocalSearchParams, useTheme } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PrimaryButton } from '@/components/primary-button';
 import { WorkoutCard } from '@/components/workout-card';
+import { localDateOf } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
+import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
+import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 // What was recorded on one local date, opened from the History calendar: a
 // section for each kind of record.
 export default function DayScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
+  const router = useRouter();
   const { colors } = useTheme();
   const day = useTrackerQuery(() => tracker.getDay(date), [date]);
+  const workoutInProgress = useWorkoutInProgress();
+  // Today's Workouts start from Today; only past days are backfilled.
+  const isPast = date < localDateOf(new Date());
+
+  async function addWorkout() {
+    if (await runOrAlert("Couldn't add a workout", () => tracker.startWorkout({ localDate: date }))) {
+      router.push('/workout');
+    }
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Stack.Screen options={{ title: formatLocalDateWithWeekday(date) }} />
       {day && (
         <DaySection title="Workouts">
-          {day.workouts.length === 0 ? (
-            <Text style={[styles.empty, { color: colors.text }]}>No workouts.</Text>
-          ) : (
-            day.workouts.map(workout => <WorkoutCard key={workout.id} workout={workout} />)
+          {day.workouts.length === 0 && (
+            <Text style={[styles.note, { color: colors.text }]}>No workouts.</Text>
+          )}
+          {day.workouts.map(workout => (
+            <WorkoutCard
+              key={workout.id}
+              workout={workout}
+              // navigate, not push, so a double tap can't open it twice.
+              onPress={() => router.navigate({ pathname: '/workout/[id]', params: { id: workout.id } })}
+            />
+          ))}
+          {/* One Workout at a time, so a backfill waits for the one in progress. */}
+          {isPast && workoutInProgress === null && (
+            <PrimaryButton label="Add workout" onPress={addWorkout} />
+          )}
+          {isPast && workoutInProgress && (
+            <Text style={[styles.note, { color: colors.text }]}>
+              Finish the workout in progress to add one to this day.
+            </Text>
           )}
         </DaySection>
       )}
@@ -55,7 +84,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  empty: {
+  note: {
     fontSize: 16,
     opacity: 0.7,
   },

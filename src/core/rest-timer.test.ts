@@ -72,6 +72,19 @@ describe('Rest', () => {
     );
   });
 
+  it('still starts after midnight in a Workout begun the day before', async () => {
+    const clock = clockAt('2026-09-12T23:50:00-04:00');
+    const tracker = createTracker(createTestDatabase(), { now: clock.now });
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    clock.setTime('2026-09-13T00:10:00-04:00');
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+
+    expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
+      new Date('2026-09-13T00:12:00-04:00'),
+    );
+  });
+
   it("doesn't start for a Set added to a finished Workout", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');

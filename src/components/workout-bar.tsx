@@ -2,6 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useTheme } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { isBackfilled } from '@/core/tracker';
+import { formatLocalDate } from '@/dates';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 // Shown on every tab while a Workout is in progress; tapping it returns there.
@@ -23,7 +25,11 @@ export function WorkoutBar() {
       style={[styles.bar, { backgroundColor: colors.primary }]}
     >
       <View style={styles.text}>
-        <Text style={styles.title}>Workout in progress</Text>
+        <Text style={styles.title}>
+          {isBackfilled(workout)
+            ? `Workout for ${formatLocalDate(workout.localDate)}`
+            : 'Workout in progress'}
+        </Text>
         <Text style={styles.detail}>
           {setCount === 1 ? '1 set logged' : `${setCount} sets logged`}
         </Text>

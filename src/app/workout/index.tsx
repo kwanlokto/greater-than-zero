@@ -5,8 +5,9 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
-import { canFinishWorkout } from '@/core/tracker';
+import { canFinishWorkout, isBackfilled } from '@/core/tracker';
 import { tracker } from '@/database';
+import { formatLocalDate } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -62,6 +63,8 @@ export default function WorkoutScreen() {
     <>
       <Stack.Screen
         options={{
+          // A backfilled Workout says which day it's being added to.
+          title: isBackfilled(workout) ? `Workout for ${formatLocalDate(workout.localDate)}` : 'Workout',
           headerRight: () => (
             <Pressable accessibilityRole="button" hitSlop={12} onPress={confirmFinish}>
               <Text style={[styles.finish, { color: colors.primary }]}>Finish</Text>

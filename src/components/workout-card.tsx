@@ -1,27 +1,47 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { setLabels, setPresentationFor } from '@/components/set-fields';
-import type { ExerciseEntry, Workout } from '@/core/tracker';
+import { isBackfilled, type ExerciseEntry, type Workout } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
 
-// A finished Workout as it was recorded: when it took place, then each
-// Exercise with its notes and Sets, weights in the display unit.
-export function WorkoutCard({ workout }: { workout: Workout }) {
-  const { colors } = useTheme();
+// When a Workout took place, e.g. "6:00 PM – 7:05 PM". A backfilled one's
+// times are only when it was entered, so they aren't shown.
+export function workoutTimes(workout: Workout): string {
   const { startedAt, finishedAt } = workout;
+  if (isBackfilled(workout)) return 'Added later';
+  return finishedAt
+    ? `${formatTimeOfDay(startedAt)} – ${formatTimeOfDay(finishedAt)}`
+    : formatTimeOfDay(startedAt);
+}
+
+type Props = {
+  workout: Workout;
+  onPress: () => void;
+};
+
+// A finished Workout as it was recorded: when it took place, then each
+// Exercise with its notes and Sets, weights in the display unit. Pressing it
+// opens it for editing.
+export function WorkoutCard({ workout, onPress }: Props) {
+  const { colors } = useTheme();
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.time, { color: colors.text }]}>
-        {finishedAt
-          ? `${formatTimeOfDay(startedAt)} – ${formatTimeOfDay(finishedAt)}`
-          : formatTimeOfDay(startedAt)}
-      </Text>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="Opens this workout for editing"
+      onPress={onPress}
+      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+    >
+      <View style={styles.header}>
+        <Text style={[styles.time, { color: colors.text }]}>{workoutTimes(workout)}</Text>
+        <Ionicons name="create-outline" size={18} color={colors.text} style={styles.faint} />
+      </View>
       {workout.entries.map(entry => (
         <RecordedExerciseEntry key={entry.id} entry={entry} />
       ))}
-    </View>
+    </Pressable>
   );
 }
 
@@ -56,9 +76,17 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 16,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   time: {
+    flex: 1,
     fontSize: 14,
     opacity: 0.7,
+  },
+  faint: {
+    opacity: 0.5,
   },
   entry: {
     gap: 4,

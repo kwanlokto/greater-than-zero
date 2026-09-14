@@ -1,5 +1,5 @@
 import { createTestDatabase } from './test-database';
-import { doWorkout, findExerciseByName, setsOf, startWorkoutWith } from './test-helpers';
+import { doWorkout, setsOf, startWorkoutWith } from './test-helpers';
 import { createTracker } from './tracker';
 
 describe('Weights on screen', () => {
@@ -76,8 +76,8 @@ describe('Weights on screen', () => {
     await doWorkout(tracker, 'Deadlift', [{ weight: 315, reps: 3 }]);
 
     await tracker.setDisplayUnit('kg');
-    const deadlift = await findExerciseByName(tracker, 'Deadlift');
-    const lastTime = await tracker.getLastTime(deadlift.id);
+    const { entry } = await startWorkoutWith(tracker, 'Deadlift');
+    const lastTime = await tracker.getLastTime(entry.id);
 
     expect(lastTime?.sets.map(set => set.displayWeight)).toEqual([{ value: 142.9, unit: 'kg' }]);
   });
