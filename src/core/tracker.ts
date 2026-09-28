@@ -101,11 +101,10 @@ export type WorkoutSet = {
 // lifter to confirm as they do it. It isn't a logged Set until then.
 export type PlannedSet = {
   id: string;
-  // In weightUnit, the Target's unit; null for plain bodyweight.
+  // In weightUnit, the Target's unit, which it's shown and confirmed in; null
+  // for plain bodyweight.
   weight: number | null;
   weightUnit: WeightUnit;
-  // The weight in the display unit, for showing only.
-  displayWeight: Weight | null;
   reps: number;
 };
 
@@ -236,10 +235,10 @@ function displayWeightOf(
   return { value: converted < 0 ? -tenths : tenths, unit: displayUnit };
 }
 
-function withDisplayWeight<T extends { weight: number | null; weightUnit: WeightUnit }>(
-  set: T,
+function withDisplayWeight(
+  set: Omit<WorkoutSet, 'displayWeight'>,
   displayUnit: WeightUnit,
-): T & { displayWeight: Weight | null } {
+): WorkoutSet {
   return { ...set, displayWeight: displayWeightOf(set.weight, set.weightUnit, displayUnit) };
 }
 
@@ -347,16 +346,23 @@ const latestWorkoutFirst = [
   desc(workouts.startedAt),
 ];
 
+// A Workout's place in that order. One about to start has no ID yet.
+type WorkoutPlace = Pick<Workout, 'localDate' | 'startedAt' | 'isBackfilled'> & { id?: string };
+
 // The other Workouts that come before this one in that order. Those started at
 // the same moment count too, so it doesn't hang on a millisecond.
-function cameBefore(workout: Pick<Workout, 'id' | 'localDate' | 'startedAt' | 'isBackfilled'>) {
+function cameBefore(workout: WorkoutPlace) {
   const startedNoLater = lte(workouts.startedAt, workout.startedAt);
   const earlierThatDay = workout.isBackfilled
     ? and(eq(workouts.isBackfilled, true), startedNoLater)
     : or(eq(workouts.isBackfilled, true), startedNoLater);
   return or(
     lt(workouts.localDate, workout.localDate),
-    and(eq(workouts.localDate, workout.localDate), earlierThatDay, ne(workouts.id, workout.id)),
+    and(
+      eq(workouts.localDate, workout.localDate),
+      earlierThatDay,
+      workout.id === undefined ? undefined : ne(workouts.id, workout.id),
+    ),
   );
 }
 
@@ -461,9 +467,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     table: SQLiteTable,
     position: SQLiteColumn,
     where: SQL,
-    from: TrackerDatabase = db,
+    tx: TrackerDatabase = db,
   ): number {
-    const [{ next }] = from
+    const [{ next }] = tx
       .select({ next: sql<number>`coalesce(max(${position}), -1) + 1` })
       .from(table)
       .where(where)
@@ -473,8 +479,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
   // Positions aren't renumbered when a Set is deleted, so new Sets always go
   // after every earlier one.
-  function nextSetPosition(exerciseEntryId: string, from: TrackerDatabase = db) {
-    return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId), from);
+  function nextSetPosition(exerciseEntryId: string, tx: TrackerDatabase = db) {
+    return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId), tx);
   }
 
   async function getFallbackRestSeconds(): Promise<number> {
@@ -490,26 +496,40 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   }
 
   // Synchronous, so startWorkout can check and insert without yielding.
-  function idOfWorkoutInProgress(from: TrackerDatabase = db): string | undefined {
-    return from
+  function idOfWorkoutInProgress(tx: TrackerDatabase = db): string | undefined {
+    return tx
       .select({ id: workouts.id })
       .from(workouts)
       .where(inProgress())
       .get()?.id;
   }
 
-  // Adds a Set after the entry's earlier ones, logged now, and starts its rest.
-  async function insertSet(
+  // Adds a Set after the entry's earlier ones, with its weight in weightUnit,
+  // on its own or as part of a larger transaction. The caller starts its rest.
+  function insertSetRow(
+    tx: TrackerDatabase,
     exerciseEntryId: string,
-    values: Pick<typeof sets.$inferInsert, 'weight' | 'weightUnit' | 'reps' | 'isWarmUp'>,
+    set: SetValues,
+    weightUnit: WeightUnit,
+    loggedAt: Date,
   ) {
+    tx.insert(sets)
+      .values({
+        exerciseEntryId,
+        position: nextSetPosition(exerciseEntryId, tx),
+        weight: set.weight,
+        weightUnit,
+        reps: set.reps,
+        isWarmUp: set.isWarmUp ?? false,
+        loggedAt,
+      })
+      .run();
+  }
+
+  // Adds a Set after the entry's earlier ones, logged now, and starts its rest.
+  async function insertSet(exerciseEntryId: string, set: SetValues, weightUnit: WeightUnit) {
     const loggedAt = now();
-    await db.insert(sets).values({
-      ...values,
-      exerciseEntryId,
-      position: nextSetPosition(exerciseEntryId),
-      loggedAt,
-    });
+    insertSetRow(db, exerciseEntryId, set, weightUnit, loggedAt);
     await startRest(exerciseEntryId, loggedAt);
   }
 
@@ -546,7 +566,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
   // Soft-deletes the planned Sets matching `where`, on their own or as part of
   // a larger transaction.
-  function dropPlannedSets(tx: TrackerDatabase, where: SQL, deletedAt: Date) {
+  function softDeletePlannedSets(tx: TrackerDatabase, where: SQL, deletedAt: Date) {
     tx.update(plannedSets)
       .set({ deletedAt })
       .where(and(where, isNull(plannedSets.deletedAt)))
@@ -600,7 +620,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       if (deleted.length === 0) return false;
       const entryIds = entryIdsOf(tx, id);
       softDeleteSets(tx, inArray(sets.exerciseEntryId, entryIds), deletedAt);
-      dropPlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIds), deletedAt);
+      softDeletePlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIds), deletedAt);
       tx.update(exerciseEntries)
         .set({ deletedAt })
         .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
@@ -703,7 +723,6 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       entries: workout.entries.map(entry => ({
         ...entry,
         sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),
-        plannedSets: entry.plannedSets.map(set => withDisplayWeight(set, displayUnit)),
       })),
     }));
   }
@@ -712,7 +731,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // working Set of it, that comes before this one. See getLastTime.
   async function lastTimeBefore(
     exerciseId: string,
-    workout: Pick<Workout, 'id' | 'localDate' | 'startedAt' | 'isBackfilled'>,
+    workout: WorkoutPlace,
   ): Promise<LastTime | null> {
     const workingSetOfExercise = () =>
       and(
@@ -754,23 +773,29 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // What starting a Template adds, for a Workout about to start: its Exercises
   // in order, each with the target number of Sets at the Target weight. Reps
   // come from the Set in the same position among last session's working Sets,
-  // or the bottom of the rep range when there isn't one.
-  async function planFromTemplate(
-    templateId: string,
-    workout: Pick<Workout, 'localDate' | 'startedAt' | 'isBackfilled'>,
-  ) {
+  // or the bottom of the rep range when there isn't one. An Exercise the
+  // Template holds more than once counts positions on from one to the next,
+  // as last session's Sets of it were logged.
+  async function planFromTemplate(templateId: string, workout: WorkoutPlace) {
     const [template] = await findTemplates(eq(templates.id, templateId));
     if (!template) throw new Error('No such Template');
+    const lastSets = new Map<string, WorkoutSet[]>();
+    const setsPlanned = new Map<string, number>();
     const plan = [];
     for (const { exercise, target } of template.exercises) {
-      // Not saved yet, so no Workout has its ID.
-      const lastTime = await lastTimeBefore(exercise.id, { ...workout, id: '' });
+      if (!lastSets.has(exercise.id)) {
+        const lastTime = await lastTimeBefore(exercise.id, workout);
+        lastSets.set(exercise.id, lastTime?.sets ?? []);
+      }
+      const last = lastSets.get(exercise.id) ?? [];
+      const first = setsPlanned.get(exercise.id) ?? 0;
+      setsPlanned.set(exercise.id, first + target.sets);
       plan.push({
         exerciseId: exercise.id,
         sets: Array.from({ length: target.sets }, (_, index) => ({
           weight: target.weight,
           weightUnit: target.weightUnit,
-          reps: lastTime?.sets[index]?.reps ?? target.minReps,
+          reps: last[first + index]?.reps ?? target.minReps,
         })),
       });
     }
@@ -926,15 +951,25 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // The new Exercise takes the old one's place in the Workout, keeping its
     // notes but not its planned Sets. Enforces canSwapExercise's rule against the saved Sets.
     async swapExercise(exerciseEntryId: string, exerciseId: string): Promise<void> {
-      const [logged] = await db
-        .select({ id: sets.id })
-        .from(sets)
-        .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
-        .limit(1);
-      if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
-      await updateEntry(exerciseEntryId, { exerciseId });
-      // They were planned from the Target of the Exercise swapped out.
-      dropPlannedSets(db, eq(plannedSets.exerciseEntryId, exerciseEntryId), now());
+      // All together, so a planned Set confirmed meanwhile can't land on the
+      // new Exercise.
+      db.transaction(tx => {
+        const logged = tx
+          .select({ id: sets.id })
+          .from(sets)
+          .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+          .get();
+        if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
+        const swapped = tx
+          .update(exerciseEntries)
+          .set({ exerciseId })
+          .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
+          .returning({ id: exerciseEntries.id })
+          .all();
+        if (swapped.length === 0) throw new Error('No such Exercise in a Workout');
+        // They were planned from the Target of the Exercise swapped out.
+        softDeletePlannedSets(tx, eq(plannedSets.exerciseEntryId, exerciseEntryId), now());
+      });
     },
 
     // Soft-deletes the entry and its Sets together.
@@ -949,7 +984,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .all();
         if (removed.length === 0) throw new Error('No such Exercise in a Workout');
         softDeleteSets(tx, eq(sets.exerciseEntryId, exerciseEntryId), deletedAt);
-        dropPlannedSets(tx, eq(plannedSets.exerciseEntryId, exerciseEntryId), deletedAt);
+        softDeletePlannedSets(tx, eq(plannedSets.exerciseEntryId, exerciseEntryId), deletedAt);
         requireFinishedWorkoutKeepsASet(tx, exerciseEntryId);
       });
     },
@@ -977,12 +1012,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // in the display unit the lifter sees while typing it.
     async logSet(exerciseEntryId: string, set: SetValues): Promise<void> {
       requireValidSet(await trackingTypeOfEntry(exerciseEntryId), set);
-      await insertSet(exerciseEntryId, {
-        weight: set.weight,
-        weightUnit: await getDisplayUnit(),
-        reps: set.reps,
-        isWarmUp: set.isWarmUp ?? false,
-      });
+      await insertSet(exerciseEntryId, set, await getDisplayUnit());
     },
 
     // The weight is in the unit the Set was logged in, which is the unit shown
@@ -1006,7 +1036,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .orderBy(desc(sets.position))
         .limit(1);
       if (!last) throw new Error('No Set to copy yet');
-      await insertSet(exerciseEntryId, last);
+      await insertSet(exerciseEntryId, last, last.weightUnit);
     },
 
     // Logs the planned Set with the numbers the lifter confirms, in the unit it
@@ -1035,17 +1065,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .returning({ id: plannedSets.id })
           .all();
         if (taken.length === 0) throw new Error('No such planned Set');
-        tx.insert(sets)
-          .values({
-            exerciseEntryId: planned.exerciseEntryId,
-            position: nextSetPosition(planned.exerciseEntryId, tx),
-            weight: set.weight,
-            weightUnit: planned.weightUnit,
-            reps: set.reps,
-            isWarmUp: set.isWarmUp ?? false,
-            loggedAt,
-          })
-          .run();
+        insertSetRow(tx, planned.exerciseEntryId, set, planned.weightUnit, loggedAt);
       });
       await startRest(planned.exerciseEntryId, loggedAt);
     },
@@ -1098,7 +1118,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         if (!workout) throw new Error('That Workout is not in progress');
         if (!hasLoggedSet(tx, id)) throw new Error('A Workout needs at least one Set to be finished');
         // Only what was done is recorded.
-        dropPlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIdsOf(tx, id)), finishedAt);
+        const entryIds = entryIdsOf(tx, id);
+        softDeletePlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIds), finishedAt);
         tx.update(workouts)
           // The rest belongs to the Workout in progress, so it ends here too.
           .set({ finishedAt, restEndsAt: null })

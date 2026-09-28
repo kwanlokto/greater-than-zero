@@ -59,10 +59,13 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
   },
 };
 
-// Warm-ups are marked W; working Sets are numbered among themselves.
-export function setLabels(sets: WorkoutSet[]): string[] {
+// Warm-ups are marked W; working Sets are numbered among themselves. Labels
+// for any planned Sets follow, numbered on from the working Sets.
+export function setLabels(sets: WorkoutSet[], plannedCount = 0): string[] {
   let working = 0;
-  return sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
+  const logged = sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
+  const planned = Array.from({ length: plannedCount }, () => String(++working));
+  return [...logged, ...planned];
 }
 
 type Initial = { weight?: string; reps?: string; isWarmUp?: boolean };

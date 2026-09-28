@@ -83,7 +83,7 @@
       "idx": 11,
       "version": "6",
       "when": 1790636607142,
-      "tag": "0011_add_planned_sets",
+      "tag": "0011_start_workouts_from_templates",
       "breakpoints": true
     }
   ]

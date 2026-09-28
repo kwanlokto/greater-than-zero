@@ -33,7 +33,7 @@ export default function TodayScreen() {
           <View style={styles.section}>
             <Text style={[styles.heading, { color: colors.text }]}>Start from template</Text>
             {templates?.length === 0 && (
-              <Text style={[styles.faint, { color: colors.text }]}>
+              <Text style={[styles.details, { color: colors.text }]}>
                 No templates yet.{' '}
                 <Link href="/templates" style={{ color: colors.primary }}>
                   Create one
@@ -66,19 +66,25 @@ function TemplateButton({ template, onPress }: TemplateButtonProps) {
   const { colors } = useTheme();
   // A double tap starts one Workout, not an error about the first.
   const { press, busy } = useGuardedPress(onPress);
+  const { exercises } = template;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Start ${template.name}`}
+      accessibilityState={{ disabled: busy }}
       disabled={busy}
       onPress={press}
-      style={[styles.template, { backgroundColor: colors.card, borderColor: colors.border }]}
+      style={[
+        styles.template,
+        { backgroundColor: colors.card, borderColor: colors.border, opacity: busy ? 0.4 : 1 },
+      ]}
     >
-      <Text style={[styles.templateName, { color: colors.text }]}>{template.name}</Text>
-      <Text style={[styles.faint, { color: colors.text }]}>
-        {template.exercises.map(({ exercise }) => exercise.name).join(', ') ||
-          exerciseCount(0)}
+      <Text style={[styles.heading, { color: colors.text }]}>{template.name}</Text>
+      <Text style={[styles.details, { color: colors.text }]}>
+        {exercises.length === 0
+          ? exerciseCount(0)
+          : exercises.map(({ exercise }) => exercise.name).join(', ')}
       </Text>
     </Pressable>
   );
@@ -104,11 +110,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 4,
   },
-  templateName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  faint: {
+  details: {
     fontSize: 14,
     opacity: 0.7,
   },

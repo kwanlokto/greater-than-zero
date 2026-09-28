@@ -3,6 +3,7 @@ import {
   clockAt,
   createTemplateWith,
   doWorkout,
+  entriesOf,
   findExerciseByName,
   setsOf,
   startWorkoutWith,
@@ -46,7 +47,7 @@ describe('Starting a Workout from a Template', () => {
 
     const workout = await tracker.startWorkout({ templateId: template.id });
 
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     expect(entry.plannedSets.map(set => [set.weight, set.weightUnit, set.reps])).toEqual([
       [135, 'lb', 8],
       [135, 'lb', 8],
@@ -67,7 +68,7 @@ describe('Starting a Workout from a Template', () => {
 
     const workout = await tracker.startWorkout({ templateId: template.id });
 
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     expect(entry.plannedSets.map(set => set.reps)).toEqual([11, 10, 9, 8]);
   });
 
@@ -86,7 +87,7 @@ describe('Starting a Workout from a Template', () => {
 
     const workout = await tracker.startWorkout({ templateId: template.id });
 
-    const [planned] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [planned] = await entriesOf(tracker, workout.id);
     expect(planned.plannedSets.map(set => set.reps)).toEqual([12, 10, 9]);
   });
 
@@ -98,24 +99,48 @@ describe('Starting a Workout from a Template', () => {
 
     const workout = await tracker.startWorkout({ templateId: template.id });
 
-    const [planned] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [planned] = await entriesOf(tracker, workout.id);
     expect(planned.plannedSets.map(set => set.reps)).toEqual([9, 8, 8]);
+  });
+
+  it('counts Set positions on across an Exercise that the Template holds twice', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(
+      tracker,
+      'Push',
+      ['Bench Press', 'Dip', 'Bench Press'],
+      { ...threeByEightToTwelve, sets: 2 },
+    );
+    await doWorkout(tracker, 'Bench Press', [
+      { weight: 60, reps: 12 },
+      { weight: 60, reps: 11 },
+      { weight: 60, reps: 10 },
+    ]);
+
+    const workout = await tracker.startWorkout({ templateId: template.id });
+
+    const entries = await entriesOf(tracker, workout.id);
+    expect(entries.map(entry => entry.plannedSets.map(set => set.reps))).toEqual([
+      [12, 11],
+      [8, 8],
+      [10, 8],
+    ]);
   });
 
   it('pre-fills a bodyweight Exercise with its Target added weight', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Pull', ['Pull-up'], {
       ...threeByEightToTwelve,
-      weight: null,
+      weight: -20,
     });
 
     const workout = await tracker.startWorkout({ templateId: template.id });
 
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
-    expect(entry.plannedSets.map(set => [set.weight, set.displayWeight])).toEqual([
-      [null, null],
-      [null, null],
-      [null, null],
+    const [entry] = await entriesOf(tracker, workout.id);
+    expect(entry.plannedSets.map(set => [set.weight, set.weightUnit])).toEqual([
+      [-20, 'kg'],
+      [-20, 'kg'],
+      [-20, 'kg'],
     ]);
   });
 });
@@ -126,7 +151,7 @@ describe('A Workout started from a Template', () => {
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press', 'Dip']);
     const before = await tracker.getTemplate(template.id);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [bench, dip] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [bench, dip] = await entriesOf(tracker, workout.id);
     const inclineBench = await findExerciseByName(tracker, 'Incline Bench Press');
     const pushdown = await findExerciseByName(tracker, 'Triceps Pushdown');
 
@@ -150,12 +175,12 @@ describe('A Workout started from a Template', () => {
       weight: null,
     });
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     const latPulldown = await findExerciseByName(tracker, 'Lat Pulldown');
 
     await tracker.swapExercise(entry.id, latPulldown.id);
 
-    const [swapped] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [swapped] = await entriesOf(tracker, workout.id);
     expect(swapped.plannedSets).toEqual([]);
     await expect(
       tracker.confirmPlannedSet(entry.plannedSets[0].id, { weight: null, reps: 8 }),
@@ -208,7 +233,7 @@ describe('A Workout started from a Template', () => {
       templateId: template.id,
     });
 
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     expect(entry.plannedSets.map(set => set.reps)).toEqual([11, 8, 8]);
   });
 });
@@ -219,11 +244,11 @@ describe('Confirming a planned Set', () => {
     await tracker.setDisplayUnit('lb');
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [{ plannedSets }] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [{ plannedSets }] = await entriesOf(tracker, workout.id);
 
     await tracker.confirmPlannedSet(plannedSets[0].id, { weight: 60, reps: 10 });
 
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     expect(entry.sets.map(set => [set.weight, set.weightUnit, set.reps, set.isWarmUp])).toEqual([
       [60, 'kg', 10, false],
     ]);
@@ -234,7 +259,7 @@ describe('Confirming a planned Set', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [{ plannedSets }] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [{ plannedSets }] = await entriesOf(tracker, workout.id);
 
     await tracker.confirmPlannedSet(plannedSets[0].id, { weight: 57.5, reps: 6 });
 
@@ -246,7 +271,7 @@ describe('Confirming a planned Set', () => {
     const tracker = createTracker(createTestDatabase(), clock);
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [{ plannedSets }] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [{ plannedSets }] = await entriesOf(tracker, workout.id);
     clock.setTime('2026-09-28T18:05:00');
 
     await tracker.confirmPlannedSet(plannedSets[0].id, { weight: 60, reps: 10 });
@@ -260,12 +285,12 @@ describe('Confirming a planned Set', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [{ plannedSets }] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [{ plannedSets }] = await entriesOf(tracker, workout.id);
 
     await expect(
       tracker.confirmPlannedSet(plannedSets[0].id, { weight: null, reps: 10 }),
     ).rejects.toThrow('A weighted Set needs a weight');
-    const [entry] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, workout.id);
     expect([entry.sets.length, entry.plannedSets.length]).toEqual([0, 3]);
   });
 
@@ -273,7 +298,7 @@ describe('Confirming a planned Set', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [{ plannedSets }] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [{ plannedSets }] = await entriesOf(tracker, workout.id);
     await tracker.confirmPlannedSet(plannedSets[0].id, { weight: 60, reps: 10 });
 
     await expect(
@@ -288,7 +313,7 @@ describe('Finishing a Workout started from a Template', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press', 'Dip']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const [bench] = (await tracker.getWorkout(workout.id))?.entries ?? [];
+    const [bench] = await entriesOf(tracker, workout.id);
     await tracker.confirmPlannedSet(bench.plannedSets[0].id, { weight: 60, reps: 10 });
 
     await tracker.finishWorkout(workout.id);
@@ -304,9 +329,9 @@ describe('Finishing a Workout started from a Template', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
-    const started = await tracker.getWorkout(workout.id);
+    const started = { entries: await entriesOf(tracker, workout.id) };
 
-    expect(canFinishWorkout(started!)).toBe(false);
+    expect(canFinishWorkout(started)).toBe(false);
     await expect(tracker.finishWorkout(workout.id)).rejects.toThrow(
       'A Workout needs at least one Set to be finished',
     );
@@ -316,13 +341,13 @@ describe('Finishing a Workout started from a Template', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const first = await tracker.startWorkout({ templateId: template.id });
-    const [entry] = (await tracker.getWorkout(first.id))?.entries ?? [];
+    const [entry] = await entriesOf(tracker, first.id);
     await tracker.confirmPlannedSet(entry.plannedSets[0].id, { weight: 60, reps: 12 });
     await tracker.finishWorkout(first.id);
 
     const second = await tracker.startWorkout({ templateId: template.id });
 
-    const [next] = (await tracker.getWorkout(second.id))?.entries ?? [];
+    const [next] = await entriesOf(tracker, second.id);
     expect(next.plannedSets.map(set => set.reps)).toEqual([12, 8, 8]);
     expect((await tracker.getLastTime(next.id))?.sets.map(set => set.reps)).toEqual([12]);
   });

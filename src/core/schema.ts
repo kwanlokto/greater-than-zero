@@ -141,18 +141,6 @@ export const sets = sqliteTable('sets', {
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-export const templatesRelations = relations(templates, ({ many }) => ({
-  exercises: many(templateExercises),
-}));
-
-export const templateExercisesRelations = relations(templateExercises, ({ one }) => ({
-  template: one(templates, { fields: [templateExercises.templateId], references: [templates.id] }),
-  exercise: one(exercises, {
-    fields: [templateExercises.exerciseId],
-    references: [exercises.id],
-  }),
-}));
-
 // A Set a Workout started from a Template plans to do, pre-filled from the
 // Target. Confirming one logs a Set and deletes it; finishing the Workout
 // deletes the rest, so only logged Sets are ever recorded.
@@ -167,6 +155,18 @@ export const plannedSets = sqliteTable('planned_sets', {
   weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
   reps: integer('reps').notNull(),
 });
+
+export const templatesRelations = relations(templates, ({ many }) => ({
+  exercises: many(templateExercises),
+}));
+
+export const templateExercisesRelations = relations(templateExercises, ({ one }) => ({
+  template: one(templates, { fields: [templateExercises.templateId], references: [templates.id] }),
+  exercise: one(exercises, {
+    fields: [templateExercises.exerciseId],
+    references: [exercises.id],
+  }),
+}));
 
 export const workoutsRelations = relations(workouts, ({ many }) => ({
   entries: many(exerciseEntries),

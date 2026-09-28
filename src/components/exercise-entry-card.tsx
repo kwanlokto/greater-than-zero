@@ -41,9 +41,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
   const next = useSetFields(trackingType, displayUnit);
-  const labels = setLabels(entry.sets);
-  // Planned Sets are numbered on from the working Sets already logged.
-  const workingSetCount = entry.sets.filter(set => !set.isWarmUp).length;
+  const labels = setLabels(entry.sets, entry.plannedSets.length);
   const { hint } = setPresentationFor[trackingType];
 
   async function logSet() {
@@ -127,7 +125,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
         <PlannedSetRow
           key={planned.id}
           planned={planned}
-          label={String(workingSetCount + index + 1)}
+          label={labels[entry.sets.length + index]}
           trackingType={trackingType}
         />
       ))}

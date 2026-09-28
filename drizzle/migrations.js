@@ -12,7 +12,7 @@ import m0007 from './0007_add_exercise_entries_notes.sql';
 import m0008 from './0008_add_rest_timer.sql';
 import m0009 from './0009_add_workouts_is_backfilled.sql';
 import m0010 from './0010_create_templates.sql';
-import m0011 from './0011_add_planned_sets.sql';
+import m0011 from './0011_start_workouts_from_templates.sql';
 
   export default {
     journal,

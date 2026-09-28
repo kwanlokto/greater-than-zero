@@ -36,9 +36,14 @@ export async function startWorkoutWith(
   return { workout, entry: entries[0] };
 }
 
+// A Workout's Exercises, in order.
+export async function entriesOf(tracker: Tracker, workoutId: string) {
+  return (await tracker.getWorkout(workoutId))?.entries ?? [];
+}
+
 // The Sets of a Workout's first Exercise.
 export async function setsOf(tracker: Tracker, workoutId: string) {
-  const [entry] = (await tracker.getWorkout(workoutId))?.entries ?? [];
+  const [entry] = await entriesOf(tracker, workoutId);
   return entry.sets;
 }
 
