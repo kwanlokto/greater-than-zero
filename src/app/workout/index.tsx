@@ -7,6 +7,7 @@ import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
 import { canFinishWorkout, type FinishSummary } from '@/core/tracker';
 import { tracker } from '@/database';
+import { putFinishOffers } from '@/finish-offers';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -48,10 +49,9 @@ export default function WorkoutScreen() {
           const finished = await runOrAlert("Couldn't finish the workout", async () => {
             summary = await tracker.finishWorkout(workout.id);
           });
-          if (!finished) return;
+          if (!finished || !summary) return;
           router.back();
-          const offer = summary?.templateUpdateOffer;
-          if (offer) offerTemplateUpdate(workout.id, offer.templateName);
+          putFinishOffers(workout.id, summary);
         },
       },
     ]);
@@ -97,25 +97,6 @@ export default function WorkoutScreen() {
         <RestTimer workoutId={workout.id} restEndsAt={workout.restEndsAt} />
       </View>
     </>
-  );
-}
-
-// Asks whether the Template the finished Workout started from should take its
-// Exercise list. Declining changes nothing.
-function offerTemplateUpdate(workoutId: string, templateName: string) {
-  Alert.alert(
-    `Update ${templateName}?`,
-    "This workout's exercises differ from it. Exercises it already has keep their targets.",
-    [
-      { text: 'Keep template', style: 'cancel' },
-      {
-        text: 'Update',
-        onPress: () =>
-          runOrAlert("Couldn't update the template", () =>
-            tracker.updateTemplateFromWorkout(workoutId),
-          ),
-      },
-    ],
   );
 }
 

@@ -102,6 +102,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
         </Pressable>
       </View>
       <LastTimeLine entry={entry} />
+      <ReadyToGoHeavierLine entry={entry} />
       <EntryNotes entry={entry} />
       {entry.sets.map((set, index) =>
         set.id === editingSetId ? (
@@ -262,6 +263,22 @@ function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
   );
 }
 
+// Shown when the Exercise hit the top of its Target's rep range on every Set
+// last session under this Workout's Template.
+function ReadyToGoHeavierLine({ entry }: { entry: ExerciseEntry }) {
+  const { colors } = useTheme();
+  const { id } = entry;
+  const ready = useTrackerQuery(() => tracker.isReadyToGoHeavier(id), [id]);
+  if (!ready) return null;
+
+  return (
+    <View style={styles.row}>
+      <Ionicons name="trending-up" size={18} color={colors.primary} />
+      <Text style={[styles.readyToGoHeavier, { color: colors.primary }]}>Ready to go heavier</Text>
+    </View>
+  );
+}
+
 // Saved shortly after the lifter stops typing, and when the card goes away, so
 // a note isn't lost if they finish the Workout straight after writing it.
 function EntryNotes({ entry }: { entry: ExerciseEntry }) {
@@ -322,6 +339,10 @@ const styles = StyleSheet.create({
   lastTime: {
     fontSize: 14,
     opacity: 0.7,
+  },
+  readyToGoHeavier: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   notes: {
     borderWidth: StyleSheet.hairlineWidth,

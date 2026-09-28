@@ -1,4 +1,4 @@
-import type { Target, TrackingType } from '@/core/tracker';
+import type { Target, TrackingType, Weight } from '@/core/tracker';
 
 // "3 × 8–12 @ 60 kg", or "3 × 5 @ 100 kg" when the rep range is one number.
 // The weight is in the display unit, whatever unit the Target was entered in.
@@ -8,7 +8,12 @@ export function describeTarget(trackingType: TrackingType, target: Target): stri
   return `${sets} × ${reps} @ ${describeTargetWeight(trackingType, target)}`;
 }
 
-function describeTargetWeight(trackingType: TrackingType, { weight, displayWeight }: Target) {
+// "60 kg", or for a bodyweight Exercise "bodyweight + 10 kg", in the display
+// unit. For a Target's weight, or one proposed for it.
+export function describeTargetWeight(
+  trackingType: TrackingType,
+  { weight, displayWeight }: { weight: number | null; displayWeight: Weight | null },
+) {
   if (trackingType === 'weighted') {
     return displayWeight ? `${displayWeight.value} ${displayWeight.unit}` : '';
   }
