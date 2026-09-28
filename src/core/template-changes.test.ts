@@ -29,7 +29,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
   it('says the Exercise list differs when an Exercise was added', async () => {
@@ -42,7 +42,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(true);
+    expect(summary.templateUpdateOffer).toEqual({ templateId: template.id, templateName: 'Push' });
   });
 
   it('says the Exercise list differs when an Exercise was removed', async () => {
@@ -54,7 +54,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(true);
+    expect(summary.templateUpdateOffer).toEqual({ templateId: template.id, templateName: 'Push' });
   });
 
   it('says the Exercise list differs when an Exercise was swapped for another', async () => {
@@ -70,7 +70,23 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(true);
+    expect(summary.templateUpdateOffer).toEqual({ templateId: template.id, templateName: 'Push' });
+  });
+
+  it('says nothing differs when an Exercise was swapped away and back again', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press', 'Dip']);
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const [bench] = await entriesOf(tracker, workout.id);
+    const inclineBench = await findExerciseByName(tracker, 'Incline Bench Press');
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
+    await tracker.swapExercise(bench.id, inclineBench.id);
+    await tracker.swapExercise(bench.id, benchPress.id);
+    await tracker.logSet(bench.id, { weight: 20, reps: 5 });
+
+    const summary = await tracker.finishWorkout(workout.id);
+
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
   it("doesn't count an Exercise skipped on the day, with nothing logged, as removed", async () => {
@@ -82,7 +98,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
   it("doesn't count an Exercise added with no working Set, as there's no Target to give it", async () => {
@@ -95,7 +111,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
   it('says nothing differs for a Workout started empty', async () => {
@@ -105,7 +121,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
   it('says nothing differs once the Template has been deleted', async () => {
@@ -119,7 +135,7 @@ describe('The finish summary', () => {
 
     const summary = await tracker.finishWorkout(workout.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 });
 
@@ -210,6 +226,31 @@ describe('Updating a Template from a Workout', () => {
     ]);
   });
 
+  it('moves an Exercise removed and added again, keeping its Target', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template, exercises } = await createTemplateWith(tracker, 'Push', [
+      'Bench Press',
+      'Dip',
+    ]);
+    await tracker.editTarget(exercises[0].id, { ...threeByEightToTwelve, sets: 5, weight: 80 });
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const [bench, dip] = await entriesOf(tracker, workout.id);
+    await tracker.removeExerciseFromWorkout(bench.id);
+    await tracker.confirmPlannedSet(dip.plannedSets[0].id, dip.plannedSets[0]);
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
+    const again = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
+    await tracker.logSet(again.id, { weight: 40, reps: 5 });
+    const summary = await tracker.finishWorkout(workout.id);
+
+    await tracker.updateTemplateFromWorkout(workout.id);
+
+    expect(summary.templateUpdateOffer).toEqual({ templateId: template.id, templateName: 'Push' });
+    expect(await targetsOf(tracker, template.id)).toEqual([
+      ['Dip', 3, 8, 12, 60, 'kg'],
+      ['Bench Press', 5, 8, 12, 80, 'kg'],
+    ]);
+  });
+
   it('keeps the right Target when the Template holds an Exercise twice', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template, exercises } = await createTemplateWith(tracker, 'Push', [
@@ -244,22 +285,32 @@ describe('Updating a Template from a Workout', () => {
     const second = await doTemplateAsPlanned(tracker, template.id);
     const summary = await tracker.finishWorkout(second.id);
 
-    expect(summary.differsFromTemplate).toBe(false);
+    expect(summary.templateUpdateOffer).toBeNull();
   });
 
-  it('is only for a finished Workout started from a Template', async () => {
+  it('is only for a finished Workout', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const inProgress = await doTemplateAsPlanned(tracker, template.id);
-    await expect(tracker.updateTemplateFromWorkout(inProgress.id)).rejects.toThrow(
-      'No finished Workout from a Template to update it from',
-    );
-    await tracker.finishWorkout(inProgress.id);
-    const startedEmpty = await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 10 }]);
 
-    await expect(tracker.updateTemplateFromWorkout(startedEmpty.id)).rejects.toThrow(
-      'No finished Workout from a Template to update it from',
+    await expect(tracker.updateTemplateFromWorkout(inProgress.id)).rejects.toThrow(
+      'No such finished Workout',
     );
+  });
+
+  it('is only for a Workout started from a Template that still exists', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const startedEmpty = await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 10 }]);
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    const fromDeleted = await doTemplateAsPlanned(tracker, template.id);
+    await tracker.finishWorkout(fromDeleted.id);
+    await tracker.deleteTemplate(template.id);
+
+    for (const workout of [startedEmpty, fromDeleted]) {
+      await expect(tracker.updateTemplateFromWorkout(workout.id)).rejects.toThrow(
+        'That Workout has no Template to update',
+      );
+    }
   });
 });
 
@@ -359,6 +410,27 @@ describe('Saving a Workout as a Template', () => {
       ['Bench Press', 3, 8, 8, 60, 'kg'],
       ['Dip', 1, 10, 10, null, 'kg'],
     ]);
+  });
+
+  it('leaves out an Exercise hidden from the library since, as Templates hold library Exercises', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const arnoldPress = await tracker.createExercise({
+      name: 'Arnold Press',
+      trackingType: 'weighted',
+      muscleGroup: 'shoulders',
+    });
+    const { workout, entries } = await startWorkoutWithEach(tracker, [
+      'Bench Press',
+      'Arnold Press',
+    ]);
+    await tracker.logSet(entries[0].id, { weight: 60, reps: 10 });
+    await tracker.logSet(entries[1].id, { weight: 20, reps: 10 });
+    await tracker.finishWorkout(workout.id);
+    await tracker.hideExercise(arnoldPress.id);
+
+    const template = await tracker.saveWorkoutAsTemplate(workout.id, 'Push');
+
+    expect(await targetsOf(tracker, template.id)).toEqual([['Bench Press', 1, 10, 10, 60, 'kg']]);
   });
 
   it('needs a name', async () => {

@@ -50,9 +50,8 @@ export default function WorkoutScreen() {
           });
           if (!finished) return;
           router.back();
-          if (summary?.differsFromTemplate && workout.templateId) {
-            offerTemplateUpdate(workout.id, workout.templateId);
-          }
+          const offer = summary?.templateUpdateOffer;
+          if (offer) offerTemplateUpdate(workout.id, offer.templateName);
         },
       },
     ]);
@@ -103,11 +102,9 @@ export default function WorkoutScreen() {
 
 // Asks whether the Template the finished Workout started from should take its
 // Exercise list. Declining changes nothing.
-async function offerTemplateUpdate(workoutId: string, templateId: string) {
-  const template = await tracker.getTemplate(templateId);
-  if (!template) return;
+function offerTemplateUpdate(workoutId: string, templateName: string) {
   Alert.alert(
-    `Update ${template.name}?`,
+    `Update ${templateName}?`,
     "This workout's exercises differ from it. Exercises it already has keep their targets.",
     [
       { text: 'Keep template', style: 'cancel' },
