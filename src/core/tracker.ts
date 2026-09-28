@@ -236,13 +236,8 @@ export function problemWithSet(
   trackingType: TrackingType,
   { weight, reps }: SetValues,
 ): string | undefined {
-  if (weight === null) {
-    if (trackingType === 'weighted') return 'A weighted Set needs a weight';
-  } else if (!Number.isFinite(weight)) {
-    return "A Set's weight must be a number";
-  } else if (weight < 0 && trackingType === 'weighted') {
-    return 'Only bodyweight Sets can have a negative weight';
-  }
+  const weightProblem = problemWithWeight(trackingType, weight, 'Set');
+  if (weightProblem) return weightProblem;
   if (!Number.isInteger(reps) || reps < 1) return 'A Set needs a whole number of reps, at least 1';
   return undefined;
 }
@@ -261,12 +256,22 @@ export function problemWithTarget(
     return 'A rep range needs whole numbers of reps, at least 1';
   }
   if (minReps > maxReps) return "A rep range's minimum can't be more than its maximum";
+  return problemWithWeight(trackingType, weight, 'Target');
+}
+
+// Sets and Targets take the same weights: a weighted Exercise needs one, and
+// only a bodyweight Exercise's added weight can be negative, for assistance.
+function problemWithWeight(
+  trackingType: TrackingType,
+  weight: number | null,
+  what: 'Set' | 'Target',
+): string | undefined {
   if (weight === null) {
-    if (trackingType === 'weighted') return 'A weighted Target needs a weight';
+    if (trackingType === 'weighted') return `A weighted ${what} needs a weight`;
   } else if (!Number.isFinite(weight)) {
-    return "A Target's weight must be a number";
+    return `A ${what}'s weight must be a number`;
   } else if (weight < 0 && trackingType === 'weighted') {
-    return 'Only bodyweight Targets can have a negative weight';
+    return `Only bodyweight ${what}s can have a negative weight`;
   }
   return undefined;
 }
@@ -341,6 +346,11 @@ function setStillLogged() {
   return and(isNull(sets.deletedAt), isNull(exerciseEntries.deletedAt));
 }
 
+// A Template that hasn't been deleted.
+function templateStillThere(templateId: string) {
+  return and(eq(templates.id, templateId), isNull(templates.deletedAt));
+}
+
 // An Exercise still in its Template: not removed, alone or with the Template.
 function templateExerciseStillIn(templateExerciseId: string) {
   return and(eq(templateExercises.id, templateExerciseId), isNull(templateExercises.deletedAt));
@@ -371,6 +381,17 @@ function targetColumns({ sets, minReps, maxReps, weight, weightUnit }: TargetVal
     maxReps,
     targetWeight: weight,
     targetWeightUnit: weightUnit,
+  };
+}
+
+// Back from a Template exercise row.
+function targetOf(row: typeof templateExercises.$inferSelect): TargetValues {
+  return {
+    sets: row.targetSets,
+    minReps: row.minReps,
+    maxReps: row.maxReps,
+    weight: row.targetWeight,
+    weightUnit: row.targetWeightUnit,
   };
 }
 
@@ -652,13 +673,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       id: template.id,
       name: template.name,
       exercises: template.exercises.map(row => {
-        const target = {
-          sets: row.targetSets,
-          minReps: row.minReps,
-          maxReps: row.maxReps,
-          weight: row.targetWeight,
-          weightUnit: row.targetWeightUnit,
-        };
+        const target = targetOf(row);
         return {
           id: row.id,
           exercise: row.exercise,
@@ -972,7 +987,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const renamed = await db
         .update(templates)
         .set({ name: requireTemplateName(name) })
-        .where(and(eq(templates.id, id), isNull(templates.deletedAt)))
+        .where(templateStillThere(id))
         .returning({ id: templates.id });
       if (renamed.length === 0) throw new Error('No such Template');
     },
@@ -984,7 +999,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const deleted = tx
           .update(templates)
           .set({ deletedAt })
-          .where(and(eq(templates.id, id), isNull(templates.deletedAt)))
+          .where(templateStillThere(id))
           .returning({ id: templates.id })
           .all();
         if (deleted.length === 0) throw new Error('No such Template');
@@ -1004,7 +1019,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const [template] = await db
         .select({ id: templates.id })
         .from(templates)
-        .where(and(eq(templates.id, templateId), isNull(templates.deletedAt)));
+        .where(templateStillThere(templateId));
       if (!template) throw new Error('No such Template');
       // Hidden Exercises already in a Template stay; new ones come from the library.
       const [exercise] = await db
@@ -1039,10 +1054,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .where(templateExerciseStillIn(templateExerciseId));
       if (!row) throw new Error('No such Exercise in a Template');
       requireValidTarget(row.trackingType, target);
-      await db
+      const changed = await db
         .update(templateExercises)
         .set(targetColumns(target))
-        .where(eq(templateExercises.id, templateExerciseId));
+        .where(templateExerciseStillIn(templateExerciseId))
+        .returning({ id: templateExercises.id });
+      // Removed while its Exercise was being looked up.
+      if (changed.length === 0) throw new Error('No such Exercise in a Template');
     },
 
     // Soft delete: the others keep their positions, so their order holds.
