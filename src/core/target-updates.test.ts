@@ -4,6 +4,7 @@ import {
   entriesOf,
   findExerciseByName,
   startWorkoutWith,
+  targetsOf,
   threeByEightToTwelve,
 } from './test-helpers';
 import {
@@ -154,6 +155,19 @@ describe('Target update offers', () => {
     expect(offersOf(summary)).toEqual([]);
   });
 
+  it('compare weights in the same unit exactly', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press'], {
+      ...threeByEightToTwelve,
+      weight: 135,
+      weightUnit: 'lb',
+    });
+
+    const { summary } = await doTemplate(tracker, template.id, [threeSetsOf(135.1, 10, 'lb')]);
+
+    expect(offersOf(summary)).toEqual([['Bench Press', 135.1, 'lb']]);
+  });
+
   it('never lower a Target after a worse session', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
@@ -233,19 +247,6 @@ describe('Target update offers', () => {
     expect([offersOf(fromTemplate), offersOf(startedEmpty)]).toEqual([[], []]);
   });
 });
-
-// Each Exercise in the Template with its Target, as [name, sets, min, max, weight, unit].
-async function targetsOf(tracker: Tracker, templateId: string) {
-  const template = await tracker.getTemplate(templateId);
-  return template?.exercises.map(({ exercise, target }) => [
-    exercise.name,
-    target.sets,
-    target.minReps,
-    target.maxReps,
-    target.weight,
-    target.weightUnit,
-  ]);
-}
 
 describe('Accepting a Target update offer', () => {
   it("changes only that Exercise's Target weight, leaving the others for their own answer", async () => {
@@ -421,6 +422,55 @@ describe('The "ready to go heavier" hint', () => {
     expect(await hintOnStarting(tracker, template.id)).toBe(true);
   });
 
+  it("counts a session with only warm-ups of it as its most recent, which isn't one to go heavier from", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
+    await doTemplate(tracker, template.id, [[{ weight: 40, reps: 10, isWarmUp: true }]]);
+
+    expect(await hintOnStarting(tracker, template.id)).toBe(false);
+  });
+
+  it('shows for an Exercise that joined the Template from what was done last session', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const dip = await findExerciseByName(tracker, 'Dip');
+    const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
+    for (const set of threeSetsOf(null, 12)) await tracker.logSet(added.id, set);
+    await tracker.finishWorkout(workout.id);
+    await tracker.updateTemplateFromWorkout(workout.id);
+
+    const next = await tracker.startWorkout({ templateId: template.id });
+    const [, dipAgain] = await entriesOf(tracker, next.id);
+
+    expect(await tracker.isReadyToGoHeavier(dipAgain.id)).toBe(true);
+  });
+
+  it('shows for an Exercise removed and added again in the Workout in progress', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const [bench] = await entriesOf(tracker, workout.id);
+    await tracker.removeExerciseFromWorkout(bench.id);
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
+    const again = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
+
+    expect(await tracker.isReadyToGoHeavier(again.id)).toBe(true);
+  });
+
+  it('goes by the Exercise, even after it was taken out of the Template and put back', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template, exercises } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
+    await tracker.removeExerciseFromTemplate(exercises[0].id);
+    const benchPress = await findExerciseByName(tracker, 'Bench Press');
+    await tracker.addExerciseToTemplate(template.id, benchPress.id, threeByEightToTwelve);
+
+    expect(await hintOnStarting(tracker, template.id)).toBe(true);
+  });
+
   it('treats a weight that converts a hair lighter as the Target weight', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press'], {
@@ -460,16 +510,26 @@ describe('The "ready to go heavier" hint', () => {
     expect(await hintOnStarting(tracker, template.id)).toBe(false);
   });
 
-  it('shows only in a Workout in progress, for an Exercise from the Template', async () => {
+  it('shows only in a Workout in progress, for an Exercise in the Template', async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const { workout: first } = await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
+    const [finishedEntry] = await entriesOf(tracker, first.id);
     const second = await tracker.startWorkout({ templateId: template.id });
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
-    const added = await tracker.addExerciseToWorkout(second.id, benchPress.id);
-    const [finishedEntry] = await entriesOf(tracker, first.id);
+    // A second Bench Press, beyond the one in the Template.
+    const extra = await tracker.addExerciseToWorkout(second.id, benchPress.id);
 
-    expect(await tracker.isReadyToGoHeavier(added.id)).toBe(false);
     expect(await tracker.isReadyToGoHeavier(finishedEntry.id)).toBe(false);
+    expect(await tracker.isReadyToGoHeavier(extra.id)).toBe(false);
+  });
+
+  it("doesn't show in a Workout started empty", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
+    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+
+    expect(await tracker.isReadyToGoHeavier(entry.id)).toBe(false);
   });
 });

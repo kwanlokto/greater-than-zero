@@ -7,7 +7,7 @@ import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
 import { canFinishWorkout, type FinishSummary } from '@/core/tracker';
 import { tracker } from '@/database';
-import { putFinishOffers } from '@/finish-offers';
+import { askFinishOffers } from '@/finish-offers';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -51,7 +51,7 @@ export default function WorkoutScreen() {
           });
           if (!finished || !summary) return;
           router.back();
-          putFinishOffers(workout.id, summary);
+          askFinishOffers(workout.id, summary);
         },
       },
     ]);

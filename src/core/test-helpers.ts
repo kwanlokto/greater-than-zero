@@ -93,3 +93,16 @@ export async function createTemplateWith(
   }
   return { template, exercises };
 }
+
+// Each Exercise in the Template with its Target, as [name, sets, min, max, weight, unit].
+export async function targetsOf(tracker: Tracker, templateId: string) {
+  const template = await tracker.getTemplate(templateId);
+  return template?.exercises.map(({ exercise, target }) => [
+    exercise.name,
+    target.sets,
+    target.minReps,
+    target.maxReps,
+    target.weight,
+    target.weightUnit,
+  ]);
+}

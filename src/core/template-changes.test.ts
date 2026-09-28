@@ -5,6 +5,7 @@ import {
   entriesOf,
   findExerciseByName,
   startWorkoutWith,
+  targetsOf,
   startWorkoutWithEach,
   threeByEightToTwelve,
 } from './test-helpers';
@@ -138,19 +139,6 @@ describe('The finish summary', () => {
     expect(summary.templateUpdateOffer).toBeNull();
   });
 });
-
-// Each Exercise in the Template with its Target, as [name, sets, min, max, weight, unit].
-async function targetsOf(tracker: Tracker, templateId: string) {
-  const template = await tracker.getTemplate(templateId);
-  return template?.exercises.map(({ exercise, target }) => [
-    exercise.name,
-    target.sets,
-    target.minReps,
-    target.maxReps,
-    target.weight,
-    target.weightUnit,
-  ]);
-}
 
 describe('Updating a Template from a Workout', () => {
   it('leaves the Template as it was until the lifter accepts', async () => {
