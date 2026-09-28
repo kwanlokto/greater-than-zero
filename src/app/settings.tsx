@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, useTheme } from 'expo-router';
+import { Link, useTheme, type Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { UnitPicker } from '@/components/unit-picker';
@@ -16,16 +16,25 @@ export default function SettingsScreen() {
         <Text style={[styles.heading, { color: colors.text }]}>Display unit</Text>
         <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
       </View>
-      <Link href="/exercises" asChild>
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.linkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-        >
-          <Text style={[styles.linkLabel, { color: colors.text }]}>Exercise library</Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.text} />
-        </Pressable>
-      </Link>
+      <LinkRow href="/templates" label="Templates" />
+      <LinkRow href="/exercises" label="Exercise library" />
     </View>
+  );
+}
+
+function LinkRow({ href, label }: { href: Href; label: string }) {
+  const { colors } = useTheme();
+
+  return (
+    <Link href={href} asChild>
+      <Pressable
+        accessibilityRole="button"
+        style={[styles.linkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+      >
+        <Text style={[styles.linkLabel, { color: colors.text }]}>{label}</Text>
+        <Ionicons name="chevron-forward" size={20} color={colors.text} />
+      </Pressable>
+    </Link>
   );
 }
 

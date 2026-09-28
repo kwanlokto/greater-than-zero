@@ -114,6 +114,43 @@ export const sets = sqliteTable('sets', {
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
+// A Workout to repeat: a name and an ordered list of Exercises with Targets.
+export const templates = sqliteTable('templates', {
+  ...rowColumns,
+  name: text('name').notNull(),
+});
+
+// An Exercise in a Template, with its Target: sets × rep range @ weight.
+export const templateExercises = sqliteTable('template_exercises', {
+  ...rowColumns,
+  templateId: text('template_id')
+    .notNull()
+    .references(() => templates.id),
+  exerciseId: text('exercise_id')
+    .notNull()
+    .references(() => exercises.id),
+  position: integer('position').notNull(),
+  targetSets: integer('target_sets').notNull(),
+  minReps: integer('min_reps').notNull(),
+  maxReps: integer('max_reps').notNull(),
+  // Exactly as entered, in the unit it was entered in, like a Set's weight.
+  // For a bodyweight Exercise it's the added weight, empty for none.
+  targetWeight: real('target_weight'),
+  targetWeightUnit: text('target_weight_unit', { enum: weightUnits }).notNull(),
+});
+
+export const templatesRelations = relations(templates, ({ many }) => ({
+  exercises: many(templateExercises),
+}));
+
+export const templateExercisesRelations = relations(templateExercises, ({ one }) => ({
+  template: one(templates, { fields: [templateExercises.templateId], references: [templates.id] }),
+  exercise: one(exercises, {
+    fields: [templateExercises.exerciseId],
+    references: [exercises.id],
+  }),
+}));
+
 export const workoutsRelations = relations(workouts, ({ many }) => ({
   entries: many(exerciseEntries),
 }));
