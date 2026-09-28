@@ -91,8 +91,10 @@ export function useSetFields(trackingType: TrackingType, unit: WeightUnit, initi
   };
 }
 
-// A logged Set's fields, for correcting it.
-export function initialFieldsOf(set: WorkoutSet): Initial {
+// A logged Set's fields, for correcting it, or a planned Set's, for confirming it.
+export function initialFieldsOf(
+  set: Pick<WorkoutSet, 'weight' | 'reps'> & { isWarmUp?: boolean },
+): Initial {
   return {
     weight: set.weight === null ? '' : String(set.weight),
     reps: String(set.reps),

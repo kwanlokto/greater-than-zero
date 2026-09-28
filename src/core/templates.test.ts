@@ -1,27 +1,6 @@
 import { createTestDatabase } from './test-database';
-import { findExerciseByName } from './test-helpers';
-import { createTracker, type TargetValues, type Template, type Tracker } from './tracker';
-
-const threeByEightToTwelve: TargetValues = {
-  sets: 3,
-  minReps: 8,
-  maxReps: 12,
-  weight: 60,
-  weightUnit: 'kg',
-};
-
-// A Template holding these Exercises, in order, each with the same Target.
-async function createTemplateWith(tracker: Tracker, name: string, exerciseNames: string[]) {
-  const template = await tracker.createTemplate(name);
-  const exercises = [];
-  for (const exerciseName of exerciseNames) {
-    const exercise = await findExerciseByName(tracker, exerciseName);
-    exercises.push(
-      await tracker.addExerciseToTemplate(template.id, exercise.id, threeByEightToTwelve),
-    );
-  }
-  return { template, exercises };
-}
+import { createTemplateWith, findExerciseByName, threeByEightToTwelve } from './test-helpers';
+import { createTracker, type TargetValues, type Template } from './tracker';
 
 function exerciseNamesOf(template: Template | undefined) {
   return template?.exercises.map(({ exercise }) => exercise.name);

@@ -1,4 +1,4 @@
-import type { NewWorkout, SetValues, Tracker } from './tracker';
+import type { NewWorkout, SetValues, TargetValues, Tracker } from './tracker';
 
 export function names(items: { name: string }[]) {
   return items.map(item => item.name);
@@ -63,4 +63,28 @@ export async function doWorkout(tracker: Tracker, exerciseName: string, loggedSe
 
 export function weightsAndReps(loggedSets: { weight: number | null; reps: number }[]) {
   return loggedSets.map(set => [set.weight, set.reps]);
+}
+
+export const threeByEightToTwelve: TargetValues = {
+  sets: 3,
+  minReps: 8,
+  maxReps: 12,
+  weight: 60,
+  weightUnit: 'kg',
+};
+
+// A Template holding these Exercises, in order, each with the same Target.
+export async function createTemplateWith(
+  tracker: Tracker,
+  name: string,
+  exerciseNames: string[],
+  target: TargetValues = threeByEightToTwelve,
+) {
+  const template = await tracker.createTemplate(name);
+  const exercises = [];
+  for (const exerciseName of exerciseNames) {
+    const exercise = await findExerciseByName(tracker, exerciseName);
+    exercises.push(await tracker.addExerciseToTemplate(template.id, exercise.id, target));
+  }
+  return { template, exercises };
 }

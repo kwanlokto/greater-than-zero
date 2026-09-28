@@ -67,6 +67,31 @@ export const exercises = sqliteTable('exercises', {
   defaultRestSeconds: integer('default_rest_seconds'),
 });
 
+// A Workout to repeat: a name and an ordered list of Exercises with Targets.
+export const templates = sqliteTable('templates', {
+  ...rowColumns,
+  name: text('name').notNull(),
+});
+
+// An Exercise in a Template, with its Target: sets × rep range @ weight.
+export const templateExercises = sqliteTable('template_exercises', {
+  ...rowColumns,
+  templateId: text('template_id')
+    .notNull()
+    .references(() => templates.id),
+  exerciseId: text('exercise_id')
+    .notNull()
+    .references(() => exercises.id),
+  position: integer('position').notNull(),
+  targetSets: integer('target_sets').notNull(),
+  minReps: integer('min_reps').notNull(),
+  maxReps: integer('max_reps').notNull(),
+  // Exactly as entered, in the unit it was entered in, like a Set's weight.
+  // For a bodyweight Exercise it's the added weight, empty for none.
+  targetWeight: real('target_weight'),
+  targetWeightUnit: text('target_weight_unit', { enum: weightUnits }).notNull(),
+});
+
 export const workouts = sqliteTable('workouts', {
   ...rowColumns,
   // The phone's local calendar date the Workout counts toward, as YYYY-MM-DD:
@@ -82,6 +107,8 @@ export const workouts = sqliteTable('workouts', {
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
   // When the current rest ends. Set by logging a Set; the timer counts down to it.
   restEndsAt: integer('rest_ends_at', { mode: 'timestamp_ms' }),
+  // The Template it was started from; empty when started empty.
+  templateId: text('template_id').references(() => templates.id),
 });
 
 // An Exercise within a Workout.
@@ -114,31 +141,6 @@ export const sets = sqliteTable('sets', {
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-// A Workout to repeat: a name and an ordered list of Exercises with Targets.
-export const templates = sqliteTable('templates', {
-  ...rowColumns,
-  name: text('name').notNull(),
-});
-
-// An Exercise in a Template, with its Target: sets × rep range @ weight.
-export const templateExercises = sqliteTable('template_exercises', {
-  ...rowColumns,
-  templateId: text('template_id')
-    .notNull()
-    .references(() => templates.id),
-  exerciseId: text('exercise_id')
-    .notNull()
-    .references(() => exercises.id),
-  position: integer('position').notNull(),
-  targetSets: integer('target_sets').notNull(),
-  minReps: integer('min_reps').notNull(),
-  maxReps: integer('max_reps').notNull(),
-  // Exactly as entered, in the unit it was entered in, like a Set's weight.
-  // For a bodyweight Exercise it's the added weight, empty for none.
-  targetWeight: real('target_weight'),
-  targetWeightUnit: text('target_weight_unit', { enum: weightUnits }).notNull(),
-});
-
 export const templatesRelations = relations(templates, ({ many }) => ({
   exercises: many(templateExercises),
 }));
@@ -151,6 +153,21 @@ export const templateExercisesRelations = relations(templateExercises, ({ one })
   }),
 }));
 
+// A Set a Workout started from a Template plans to do, pre-filled from the
+// Target. Confirming one logs a Set and deletes it; finishing the Workout
+// deletes the rest, so only logged Sets are ever recorded.
+export const plannedSets = sqliteTable('planned_sets', {
+  ...rowColumns,
+  exerciseEntryId: text('exercise_entry_id')
+    .notNull()
+    .references(() => exerciseEntries.id),
+  position: integer('position').notNull(),
+  // The Target's weight, in its unit; empty for plain bodyweight.
+  weight: real('weight'),
+  weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
+  reps: integer('reps').notNull(),
+});
+
 export const workoutsRelations = relations(workouts, ({ many }) => ({
   entries: many(exerciseEntries),
 }));
@@ -159,6 +176,14 @@ export const exerciseEntriesRelations = relations(exerciseEntries, ({ one, many 
   workout: one(workouts, { fields: [exerciseEntries.workoutId], references: [workouts.id] }),
   exercise: one(exercises, { fields: [exerciseEntries.exerciseId], references: [exercises.id] }),
   sets: many(sets),
+  plannedSets: many(plannedSets),
+}));
+
+export const plannedSetsRelations = relations(plannedSets, ({ one }) => ({
+  exerciseEntry: one(exerciseEntries, {
+    fields: [plannedSets.exerciseEntryId],
+    references: [exerciseEntries.id],
+  }),
 }));
 
 export const setsRelations = relations(sets, ({ one }) => ({

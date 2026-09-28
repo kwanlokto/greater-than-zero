@@ -25,6 +25,7 @@ describe('Workouts', () => {
       finishedAt: null,
       isBackfilled: false,
       restEndsAt: null,
+      templateId: null,
       entries: [],
     });
   });

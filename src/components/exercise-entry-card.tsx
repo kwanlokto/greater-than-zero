@@ -16,6 +16,7 @@ import { TextButton } from '@/components/text-button';
 import {
   canSwapExercise,
   type ExerciseEntry,
+  type PlannedSet,
   type TrackingType,
   type WeightUnit,
   type WorkoutSet,
@@ -41,6 +42,8 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
   const next = useSetFields(trackingType, displayUnit);
   const labels = setLabels(entry.sets);
+  // Planned Sets are numbered on from the working Sets already logged.
+  const workingSetCount = entry.sets.filter(set => !set.isWarmUp).length;
   const { hint } = setPresentationFor[trackingType];
 
   async function logSet() {
@@ -120,6 +123,14 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           />
         ),
       )}
+      {entry.plannedSets.map((planned, index) => (
+        <PlannedSetRow
+          key={planned.id}
+          planned={planned}
+          label={String(workingSetCount + index + 1)}
+          trackingType={trackingType}
+        />
+      ))}
       <View style={styles.row}>
         <SetFields {...next.fields} />
         <Chip
@@ -165,6 +176,33 @@ function SetRow({ set, label, trackingType, onPress }: SetRowProps) {
       </Text>
       <Ionicons name="create-outline" size={18} color={colors.text} style={styles.faint} />
     </Pressable>
+  );
+}
+
+type PlannedSetRowProps = {
+  planned: PlannedSet;
+  label: string;
+  trackingType: TrackingType;
+};
+
+// A Set planned from the Template's Target, pre-filled in the Target's unit.
+// Logging it confirms it, with any numbers changed on the day.
+function PlannedSetRow({ planned, label, trackingType }: PlannedSetRowProps) {
+  const { colors } = useTheme();
+  const fields = useSetFields(trackingType, planned.weightUnit, initialFieldsOf(planned));
+
+  async function confirm() {
+    const { values } = fields;
+    if (!values) return;
+    await runOrAlert("Couldn't log the Set", () => tracker.confirmPlannedSet(planned.id, values));
+  }
+
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.setLabel, styles.faint, { color: colors.text }]}>{label}</Text>
+      <SetFields {...fields.fields} />
+      <PrimaryButton label="Log" disabled={!fields.values} onPress={confirm} />
+    </View>
   );
 }
 
