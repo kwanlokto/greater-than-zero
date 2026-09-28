@@ -5,7 +5,7 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { RestTimer } from '@/components/rest-timer';
 import { TextButton } from '@/components/text-button';
-import { canFinishWorkout } from '@/core/tracker';
+import { canFinishWorkout, type FinishSummary } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -44,8 +44,14 @@ export default function WorkoutScreen() {
       {
         text: 'Finish',
         onPress: async () => {
-          if (await runOrAlert("Couldn't finish the workout", () => tracker.finishWorkout(workout.id))) {
-            router.back();
+          let summary: FinishSummary | undefined;
+          const finished = await runOrAlert("Couldn't finish the workout", async () => {
+            summary = await tracker.finishWorkout(workout.id);
+          });
+          if (!finished) return;
+          router.back();
+          if (summary?.differsFromTemplate && workout.templateId) {
+            offerTemplateUpdate(workout.id, workout.templateId);
           }
         },
       },
@@ -92,6 +98,27 @@ export default function WorkoutScreen() {
         <RestTimer workoutId={workout.id} restEndsAt={workout.restEndsAt} />
       </View>
     </>
+  );
+}
+
+// Asks whether the Template the finished Workout started from should take its
+// Exercise list. Declining changes nothing.
+async function offerTemplateUpdate(workoutId: string, templateId: string) {
+  const template = await tracker.getTemplate(templateId);
+  if (!template) return;
+  Alert.alert(
+    `Update ${template.name}?`,
+    "This workout's exercises differ from it. Exercises it already has keep their targets.",
+    [
+      { text: 'Keep template', style: 'cancel' },
+      {
+        text: 'Update',
+        onPress: () =>
+          runOrAlert("Couldn't update the template", () =>
+            tracker.updateTemplateFromWorkout(workoutId),
+          ),
+      },
+    ],
   );
 }
 

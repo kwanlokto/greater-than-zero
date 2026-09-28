@@ -123,6 +123,9 @@ export const exerciseEntries = sqliteTable('exercise_entries', {
   position: integer('position').notNull(),
   // Free text, e.g. cues, pain or machine settings.
   notes: text('notes').notNull().default(''),
+  // The Template exercise it was copied from when the Workout started from a
+  // Template; empty for one added during the Workout or swapped in.
+  templateExerciseId: text('template_exercise_id').references(() => templateExercises.id),
 });
 
 export const sets = sqliteTable('sets', {

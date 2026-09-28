@@ -1,0 +1,1 @@
+ALTER TABLE `exercise_entries` ADD `template_exercise_id` text REFERENCES template_exercises(id);

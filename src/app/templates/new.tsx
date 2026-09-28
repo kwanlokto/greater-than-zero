@@ -1,4 +1,4 @@
-import { useRouter, useTheme } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -6,8 +6,11 @@ import { PrimaryButton } from '@/components/primary-button';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 
-// Names a new Template, then opens it to add its Exercises.
+// Names a new Template, then opens it. It starts empty for adding Exercises,
+// or, when saving a finished Workout as a Template (fromWorkoutId), holds that
+// Workout's Exercises with Targets taken from what was done.
 export default function NewTemplateScreen() {
+  const { fromWorkoutId } = useLocalSearchParams<{ fromWorkoutId?: string }>();
   const router = useRouter();
   const { colors } = useTheme();
   const [name, setName] = useState('');
@@ -15,13 +18,17 @@ export default function NewTemplateScreen() {
   async function create() {
     let id: string | undefined;
     const created = await runOrAlert("Couldn't create the template", async () => {
-      id = (await tracker.createTemplate(name)).id;
+      const template = fromWorkoutId
+        ? await tracker.saveWorkoutAsTemplate(fromWorkoutId, name)
+        : await tracker.createTemplate(name);
+      id = template.id;
     });
     if (created && id) router.replace({ pathname: '/templates/[id]', params: { id } });
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      {fromWorkoutId && <Stack.Screen options={{ title: 'Save as template' }} />}
       <View style={styles.field}>
         <Text style={[styles.label, { color: colors.text }]}>Name</Text>
         <TextInput
@@ -37,7 +44,11 @@ export default function NewTemplateScreen() {
           ]}
         />
       </View>
-      <PrimaryButton label="Create template" disabled={name.trim() === ''} onPress={create} />
+      <PrimaryButton
+        label={fromWorkoutId ? 'Save template' : 'Create template'}
+        disabled={name.trim() === ''}
+        onPress={create}
+      />
     </ScrollView>
   );
 }

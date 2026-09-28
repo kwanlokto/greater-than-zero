@@ -53,6 +53,12 @@ export default function PastWorkoutScreen() {
           router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
         }
       />
+      <TextButton
+        label="Save as template"
+        onPress={() =>
+          router.push({ pathname: '/templates/new', params: { fromWorkoutId: workout.id } })
+        }
+      />
       <TextButton label="Delete workout" destructive onPress={confirmDelete} />
     </ScrollView>
   );

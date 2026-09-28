@@ -10,6 +10,7 @@ import {
   lt,
   lte,
   ne,
+  notInArray,
   or,
   sql,
   type SQL,
@@ -136,6 +137,14 @@ export type Workout = {
   entries: ExerciseEntry[];
 };
 
+// The Exercise list a Template would take to match a Workout, and whether that
+// differs from the list it has.
+type TemplateMatch = {
+  templateId: string;
+  exercises: ({ templateExerciseId: string } | { exerciseId: string; target: TargetValues })[];
+  differs: boolean;
+};
+
 // Where a new Workout goes: today, unless it's backfilling an earlier date.
 // Started from a Template, it's a copy of the Template's Exercises with their
 // Sets planned from the Targets; otherwise it starts empty.
@@ -188,6 +197,14 @@ export type Template = {
   name: string;
   // In the order they're done.
   exercises: TemplateExercise[];
+};
+
+// What finishing a Workout reports.
+export type FinishSummary = {
+  // Whether the Workout's Exercise list no longer matches the Template it was
+  // started from, so the lifter can be asked to update the Template. Always
+  // false for a Workout started empty.
+  differsFromTemplate: boolean;
 };
 
 export type TrackerOptions = {
@@ -424,6 +441,32 @@ function targetOf(row: typeof templateExercises.$inferSelect): TargetValues {
     maxReps: row.maxReps,
     weight: row.targetWeight,
     weightUnit: row.targetWeightUnit,
+  };
+}
+
+// For comparing weights entered in either unit. Plain bodyweight, stored as
+// null, is no added weight.
+function kilogramsOf({ weight, weightUnit }: Pick<WorkoutSet, 'weight' | 'weightUnit'>): number {
+  const value = weight ?? 0;
+  return weightUnit === 'kg' ? value : value * kilogramsPerPound;
+}
+
+// A Target taken from what was done in an Exercise: as many sets as working
+// Sets logged, their lowest to highest reps, at the lightest working weight as
+// it was entered. Undefined with no working Set, as a Target needs one.
+function targetFromSets(loggedSets: WorkoutSet[]): TargetValues | undefined {
+  const working = loggedSets.filter(set => !set.isWarmUp);
+  if (working.length === 0) return undefined;
+  const reps = working.map(set => set.reps);
+  const lightest = working.reduce((lightestSoFar, set) =>
+    kilogramsOf(set) < kilogramsOf(lightestSoFar) ? set : lightestSoFar,
+  );
+  return {
+    sets: working.length,
+    minReps: Math.min(...reps),
+    maxReps: Math.max(...reps),
+    weight: lightest.weight,
+    weightUnit: lightest.weightUnit,
   };
 }
 
@@ -782,7 +825,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const lastSets = new Map<string, WorkoutSet[]>();
     const setsPlanned = new Map<string, number>();
     const plan = [];
-    for (const { exercise, target } of template.exercises) {
+    for (const { id, exercise, target } of template.exercises) {
       if (!lastSets.has(exercise.id)) {
         const lastTime = await lastTimeBefore(exercise.id, workout);
         lastSets.set(exercise.id, lastTime?.sets ?? []);
@@ -792,6 +835,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       setsPlanned.set(exercise.id, first + target.sets);
       plan.push({
         exerciseId: exercise.id,
+        templateExerciseId: id,
         sets: Array.from({ length: target.sets }, (_, index) => ({
           weight: target.weight,
           weightUnit: target.weightUnit,
@@ -800,6 +844,63 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       });
     }
     return plan;
+  }
+
+  // Adds an Exercise with its Target to a Template, at `position`, on its own or
+  // as part of a larger transaction.
+  function insertTemplateExercise(
+    tx: TrackerDatabase,
+    {
+      templateId,
+      exerciseId,
+      position,
+      target,
+    }: { templateId: string; exerciseId: string; position: number; target: TargetValues },
+  ): { id: string } {
+    return tx
+      .insert(templateExercises)
+      .values({ templateId, exerciseId, position, ...targetColumns(target) })
+      .returning({ id: templateExercises.id })
+      .get();
+  }
+
+  // What the Exercise list of the Template a Workout started from would become
+  // to match the Workout: its Exercises in the Workout's order. Each is the
+  // Template exercise it was copied from, keeping its Target, even if nothing
+  // was logged for it; or one added or swapped in, with a Target taken from what
+  // was done, left out when there's no working Set to take one from. Null for a
+  // Workout started empty, or from a Template since deleted.
+  async function templateMatchFor(workoutId: string): Promise<TemplateMatch | null> {
+    const workout = await getWorkout(workoutId);
+    if (!workout?.templateId) return null;
+    const [template] = await findTemplates(eq(templates.id, workout.templateId));
+    if (!template) return null;
+    const links = await db
+      .select({ id: exerciseEntries.id, templateExerciseId: exerciseEntries.templateExerciseId })
+      .from(exerciseEntries)
+      .where(eq(exerciseEntries.workoutId, workoutId));
+    const linkOf = new Map(links.map(link => [link.id, link.templateExerciseId]));
+    // A Template exercise removed from the Template since isn't kept.
+    const stillInTemplate = new Set(template.exercises.map(({ id }) => id));
+
+    const exercises: TemplateMatch['exercises'] = [];
+    for (const entry of workout.entries) {
+      const templateExerciseId = linkOf.get(entry.id);
+      if (templateExerciseId && stillInTemplate.has(templateExerciseId)) {
+        exercises.push({ templateExerciseId });
+        continue;
+      }
+      const target = targetFromSets(entry.sets);
+      if (target) exercises.push({ exerciseId: entry.exercise.id, target });
+    }
+    const differs =
+      exercises.length !== template.exercises.length ||
+      exercises.some(
+        (exercise, index) =>
+          !('templateExerciseId' in exercise) ||
+          exercise.templateExerciseId !== template.exercises[index].id,
+      );
+    return { templateId: template.id, exercises, differs };
   }
 
   // The Templates matching `where`, each with its Exercises in order. Deleted
@@ -928,10 +1029,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .values(workout)
           .returning({ id: workouts.id })
           .get();
-        plan.forEach(({ exerciseId, sets: planned }, position) => {
+        plan.forEach(({ exerciseId, templateExerciseId, sets: planned }, position) => {
           const entry = tx
             .insert(exerciseEntries)
-            .values({ workoutId: started.id, exerciseId, position })
+            .values({ workoutId: started.id, exerciseId, templateExerciseId, position })
             .returning({ id: exerciseEntries.id })
             .get();
           tx.insert(plannedSets)
@@ -962,7 +1063,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
         const swapped = tx
           .update(exerciseEntries)
-          .set({ exerciseId })
+          // It's no longer the Template's Exercise.
+          .set({ exerciseId, templateExerciseId: null })
           .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
           .returning({ id: exerciseEntries.id })
           .all();
@@ -1107,7 +1209,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     // Enforces canFinishWorkout's rule against the saved Sets.
-    async finishWorkout(id: string): Promise<void> {
+    async finishWorkout(id: string): Promise<FinishSummary> {
       const finishedAt = now();
       db.transaction(tx => {
         const workout = tx
@@ -1126,6 +1228,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .where(eq(workouts.id, id))
           .run();
       });
+      const match = await templateMatchFor(id);
+      return { differsFromTemplate: match?.differs ?? false };
     },
 
     getWorkout,
@@ -1210,16 +1314,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         templateExercises.position,
         eq(templateExercises.templateId, templateId),
       );
-      return db
-        .insert(templateExercises)
-        .values({
-          templateId,
-          exerciseId,
-          position,
-          ...targetColumns(target),
-        })
-        .returning({ id: templateExercises.id })
-        .get();
+      return insertTemplateExercise(db, { templateId, exerciseId, position, target });
     },
 
     // Checked against the Exercise's tracking type, like a new Target.
@@ -1286,6 +1381,69 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Every Template, by name.
     getTemplates(): Promise<Template[]> {
       return findTemplates(undefined);
+    },
+
+    // Makes the Exercise list of the Template a finished Workout started from
+    // match the Workout, when the lifter accepts. Exercises the Template already
+    // had keep their Targets; new ones take theirs from what was done.
+    async updateTemplateFromWorkout(workoutId: string): Promise<void> {
+      const [workout] = await db
+        .select({ id: workouts.id })
+        .from(workouts)
+        .where(and(eq(workouts.id, workoutId), finished()));
+      const match = workout && (await templateMatchFor(workoutId));
+      if (!match) throw new Error('No finished Workout from a Template to update it from');
+      const { templateId } = match;
+      const deletedAt = now();
+      db.transaction(tx => {
+        const kept = match.exercises.flatMap(exercise =>
+          'templateExerciseId' in exercise ? [exercise.templateExerciseId] : [],
+        );
+        tx.update(templateExercises)
+          .set({ deletedAt })
+          .where(
+            and(
+              eq(templateExercises.templateId, templateId),
+              isNull(templateExercises.deletedAt),
+              notInArray(templateExercises.id, kept),
+            ),
+          )
+          .run();
+        match.exercises.forEach((exercise, position) => {
+          if ('templateExerciseId' in exercise) {
+            tx.update(templateExercises)
+              .set({ position })
+              .where(eq(templateExercises.id, exercise.templateExerciseId))
+              .run();
+          } else {
+            insertTemplateExercise(tx, { templateId, position, ...exercise });
+          }
+        });
+      });
+    },
+
+    // A new Template of a finished Workout's Exercises, in order, each with a
+    // Target taken from what was done. Exercises with no working Set are left
+    // out, having nothing to take a Target from.
+    async saveWorkoutAsTemplate(workoutId: string, name: string): Promise<{ id: string }> {
+      const templateName = requireTemplateName(name);
+      const [workout] = await findWorkouts(and(eq(workouts.id, workoutId), finished()));
+      if (!workout) throw new Error('No such finished Workout');
+      const exercisesDone = workout.entries.flatMap(entry => {
+        const target = targetFromSets(entry.sets);
+        return target ? [{ exerciseId: entry.exercise.id, target }] : [];
+      });
+      return db.transaction(tx => {
+        const template = tx
+          .insert(templates)
+          .values({ name: templateName })
+          .returning({ id: templates.id })
+          .get();
+        exercisesDone.forEach((exercise, position) => {
+          insertTemplateExercise(tx, { templateId: template.id, position, ...exercise });
+        });
+        return template;
+      });
     },
 
     async getTemplate(id: string): Promise<Template | undefined> {
