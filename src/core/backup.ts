@@ -1,5 +1,5 @@
-import { getTableName, is, sql } from 'drizzle-orm';
-import { SQLiteTable } from 'drizzle-orm/sqlite-core';
+import { getTableColumns, getTableName, is, sql } from 'drizzle-orm';
+import { SQLiteTable, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 import * as schema from './schema';
 import type { TrackerDatabase } from './tracker';
@@ -55,4 +55,143 @@ export function readTables(db: TrackerDatabase): BackupFile['tables'] {
       db.all<Record<string, unknown>>(sql`SELECT * FROM ${table} ORDER BY rowid`),
     ]),
   );
+}
+
+// Brings a file in an older format up to date, one version at a time:
+// formatUpgrades[n] turns a version n file into a version n + 1 one. Empty
+// until the format first changes, when bumping backupFormatVersion to 2 means
+// adding formatUpgrades[1].
+const formatUpgrades: Record<number, (file: BackupFile) => BackupFile> = {};
+
+// The Backup file in `contents`, checked and in the current format, for a
+// database that's had `schemaVersion` migrations. Throws, saying why, for one
+// from a newer app, or anything that isn't a Backup file the database can take.
+export function parseBackup(contents: string, schemaVersion: number): BackupFile {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    throw damaged("it isn't JSON");
+  }
+  if (!isRecord(parsed)) throw damaged("it isn't a JSON object");
+  const { formatVersion, schemaVersion: fileSchemaVersion, appVersion, exportedAt } = parsed;
+  if (!isVersion(formatVersion) || !isVersion(fileSchemaVersion)) {
+    throw damaged('it has no version');
+  }
+  if (
+    typeof appVersion !== 'string' ||
+    typeof exportedAt !== 'string' ||
+    Number.isNaN(Date.parse(exportedAt))
+  ) {
+    throw damaged("it doesn't say where it's from");
+  }
+  if (formatVersion > backupFormatVersion || fileSchemaVersion > schemaVersion) {
+    throw new Error(
+      'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.',
+    );
+  }
+  let backup = parsed as BackupFile;
+  while (backup.formatVersion < backupFormatVersion) {
+    const upgrade = formatUpgrades[backup.formatVersion];
+    backup = { ...upgrade(backup), formatVersion: backup.formatVersion + 1 };
+  }
+  checkTables(backup.tables, backup.schemaVersion === schemaVersion);
+  return backup;
+}
+
+// Throws unless `tables` holds only this database's tables and columns, each
+// value one its column can hold, and the one Settings row the app needs. A
+// file as new as the database (`complete`) has every table and column; an
+// older one may lack those added since, which then start empty or take their
+// defaults.
+function checkTables(tables: unknown, complete: boolean) {
+  if (!isRecord(tables)) throw damaged('it has no tables');
+  for (const table of backedUpTables) {
+    const name = getTableName(table);
+    const rows = tables[name];
+    if (rows === undefined && !complete) continue;
+    if (!Array.isArray(rows)) throw damaged(`its ${name} table isn't a list of rows`);
+    const columns = Object.values(getTableColumns(table));
+    for (const row of rows) {
+      if (!isRecord(row)) throw damaged(`a row of its ${name} table isn't a row`);
+      for (const key of Object.keys(row)) {
+        if (!columns.some(column => column.name === key)) {
+          throw damaged(`its ${name} table has no such column as ${key}`);
+        }
+      }
+      for (const column of columns) {
+        if (!(column.name in row) && !complete) continue;
+        if (!fits(column, row[column.name])) {
+          throw damaged(
+            `its ${name} table has ${JSON.stringify(row[column.name])} in ${column.name}`,
+          );
+        }
+      }
+    }
+  }
+  const known = new Set(backedUpTables.map(table => getTableName(table)));
+  const unknown = Object.keys(tables).find(name => !known.has(name));
+  if (unknown) throw damaged(`the app has no such table as ${unknown}`);
+  if ((tables.settings as unknown[]).length !== 1) throw damaged('it needs one settings row');
+}
+
+// Whether a column can hold `value` as stored: text for text (one of its
+// values, for a list of them), numbers for numbers and timestamps, and 0 or 1
+// for flags. Empty only where the column allows it.
+function fits(column: SQLiteColumn, value: unknown): boolean {
+  if (value === null || value === undefined) return value === null && !column.notNull;
+  switch (column.dataType) {
+    case 'string':
+      return typeof value === 'string' && (!column.enumValues || column.enumValues.includes(value));
+    case 'boolean':
+      return value === 0 || value === 1;
+    case 'number':
+    case 'date':
+      return typeof value === 'number';
+    default:
+      return false;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isVersion(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1;
+}
+
+function damaged(why: string): Error {
+  return new Error(`That file isn't a Greater Than Zero backup, or it's damaged: ${why}.`);
+}
+
+// Replaces every table's rows with the file's, as part of a larger
+// transaction. Foreign keys are checked once all the rows are in, so tables
+// can be emptied and filled in any order. A table the file doesn't have, from
+// before it was added, is left empty.
+export function writeTables(tx: TrackerDatabase, tables: BackupFile['tables']) {
+  tx.run(sql`PRAGMA defer_foreign_keys = ON`);
+  for (const table of backedUpTables) tx.run(sql`DELETE FROM ${table}`);
+  for (const table of backedUpTables) {
+    for (const row of tables[getTableName(table)] ?? []) {
+      const columns = Object.keys(row);
+      const names = sql.join(
+        columns.map(column => sql.identifier(column)),
+        sql`, `,
+      );
+      const values = sql.join(
+        columns.map(column => sql`${row[column]}`),
+        sql`, `,
+      );
+      try {
+        tx.run(sql`INSERT INTO ${table} (${names}) VALUES (${values})`);
+      } catch (error) {
+        // Such as two rows with the same ID.
+        throw damaged(error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+  if (tx.all(sql`PRAGMA foreign_key_check`).length > 0) {
+    throw damaged("some of its records point to ones it doesn't have");
+  }
 }

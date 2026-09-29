@@ -3,8 +3,10 @@ import { Link, useTheme, type Href } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
+import { TextButton } from '@/components/text-button';
 import { UnitPicker } from '@/components/unit-picker';
 import { tracker } from '@/database';
+import { importBackupFromFile } from '@/import-backup';
 import { runOrAlert } from '@/run-or-alert';
 import { shareBackup } from '@/share-backup';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -25,12 +27,19 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={[styles.heading, { color: colors.text }]}>Backup</Text>
         <Text style={[styles.details, { color: colors.text }]}>
-          Save all your data to a file you can keep in Drive or send by email.
+          Save all your data to a file you can keep in Drive or send by email, and bring it back on
+          a new phone.
         </Text>
         <PrimaryButton
           label="Export backup"
           onPress={async () => {
             await runOrAlert("Couldn't export the backup", shareBackup);
+          }}
+        />
+        <TextButton
+          label="Import backup"
+          onPress={async () => {
+            await runOrAlert("Couldn't import the backup", importBackupFromFile);
           }}
         />
       </View>
