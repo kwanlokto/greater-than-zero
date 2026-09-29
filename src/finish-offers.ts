@@ -1,5 +1,4 @@
-import { Alert } from 'react-native';
-
+import { ask, tell, type Question } from '@/ask';
 import type { FinishSummary } from '@/core/tracker';
 import { tracker } from '@/database';
 import { describeTargetWeight } from '@/template-labels';
@@ -40,14 +39,6 @@ export async function askFinishOffers(workoutId: string, summary: FinishSummary)
   }
 }
 
-type Question = {
-  title: string;
-  message: string;
-  // The button labels.
-  decline: string;
-  accept: string;
-};
-
 // Asks the question, and runs `accept` if the lifter accepts. A failure is
 // shown until the lifter dismisses it, as a new alert on Android replaces the
 // one showing.
@@ -58,29 +49,4 @@ async function offer(question: Question, failureTitle: string, accept: () => Pro
   } catch (error) {
     await tell(failureTitle, error instanceof Error ? error.message : String(error));
   }
-}
-
-// True when the lifter accepts. Dismissing it declines.
-function ask({ title, message, decline, accept }: Question): Promise<boolean> {
-  return new Promise(resolve => {
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: decline, style: 'cancel', onPress: () => resolve(false) },
-        { text: accept, onPress: () => resolve(true) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) },
-    );
-  });
-}
-
-// Resolves once the lifter has dismissed it.
-function tell(title: string, message: string): Promise<void> {
-  return new Promise(resolve => {
-    Alert.alert(title, message, [{ text: 'OK', onPress: () => resolve() }], {
-      cancelable: true,
-      onDismiss: () => resolve(),
-    });
-  });
 }

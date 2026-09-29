@@ -7,9 +7,12 @@ import type { TrackerDatabase } from './tracker';
 // The Backup file: all the lifter's data as one JSON document, to export and
 // import.
 
-// Bumped by hand whenever the document's own layout changes in a way
-// importing has to handle, so an app refuses files from a newer version and
-// upgrades older ones. The tables' shape is versioned apart, by schemaVersion.
+// Bumped by hand when importing an older file needs more than leaving tables
+// added since empty and giving columns added since their defaults: when the
+// document's own layout changes, or a migration changes rows already there
+// (e.g. adding a built-in Exercise). Each bump adds a step to formatUpgrades.
+// An app refuses files from a newer version. The tables' shape is versioned
+// apart, by schemaVersion.
 export const backupFormatVersion = 1;
 
 export type BackupFile = {
@@ -61,7 +64,8 @@ export function readTables(db: TrackerDatabase): BackupFile['tables'] {
 // formatUpgrades[n] turns a version n file into a version n + 1 one. Empty
 // until the format first changes, when bumping backupFormatVersion to 2 means
 // adding formatUpgrades[1].
-const formatUpgrades: Record<number, (file: BackupFile) => BackupFile> = {};
+const formatUpgrades: Record<number, (file: Record<string, unknown>) => Record<string, unknown>> =
+  {};
 
 // The Backup file in `contents`, checked and in the current format, for a
 // database that's had `schemaVersion` migrations. Throws, saying why, for one
@@ -74,10 +78,17 @@ export function parseBackup(contents: string, schemaVersion: number): BackupFile
     throw damaged("it isn't JSON");
   }
   if (!isRecord(parsed)) throw damaged("it isn't a JSON object");
-  const { formatVersion, schemaVersion: fileSchemaVersion, appVersion, exportedAt } = parsed;
-  if (!isVersion(formatVersion) || !isVersion(fileSchemaVersion)) {
-    throw damaged('it has no version');
+  // Before anything else, as another format may lay the rest out differently.
+  let upgraded = parsed;
+  const { formatVersion } = upgraded;
+  if (!isVersion(formatVersion)) throw damaged('it has no format version');
+  if (formatVersion > backupFormatVersion) throw fromNewerApp();
+  for (let version = formatVersion; version < backupFormatVersion; version++) {
+    upgraded = { ...formatUpgrades[version](upgraded), formatVersion: version + 1 };
   }
+  const { schemaVersion: fileSchemaVersion, appVersion, exportedAt, tables } = upgraded;
+  if (!isVersion(fileSchemaVersion)) throw damaged('it has no schema version');
+  if (fileSchemaVersion > schemaVersion) throw fromNewerApp();
   if (
     typeof appVersion !== 'string' ||
     typeof exportedAt !== 'string' ||
@@ -85,18 +96,8 @@ export function parseBackup(contents: string, schemaVersion: number): BackupFile
   ) {
     throw damaged("it doesn't say where it's from");
   }
-  if (formatVersion > backupFormatVersion || fileSchemaVersion > schemaVersion) {
-    throw new Error(
-      'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.',
-    );
-  }
-  let backup = parsed as BackupFile;
-  while (backup.formatVersion < backupFormatVersion) {
-    const upgrade = formatUpgrades[backup.formatVersion];
-    backup = { ...upgrade(backup), formatVersion: backup.formatVersion + 1 };
-  }
-  checkTables(backup.tables, backup.schemaVersion === schemaVersion);
-  return backup;
+  checkTables(tables, fileSchemaVersion === schemaVersion);
+  return upgraded as BackupFile;
 }
 
 // Throws unless `tables` holds only this database's tables and columns, each
@@ -132,7 +133,10 @@ function checkTables(tables: unknown, complete: boolean) {
   const known = new Set(backedUpTables.map(table => getTableName(table)));
   const unknown = Object.keys(tables).find(name => !known.has(name));
   if (unknown) throw damaged(`the app has no such table as ${unknown}`);
-  if ((tables.settings as unknown[]).length !== 1) throw damaged('it needs one settings row');
+  const settingsRows = tables.settings;
+  if (!Array.isArray(settingsRows) || settingsRows.length !== 1) {
+    throw damaged('it needs one settings row');
+  }
 }
 
 // Whether a column can hold `value` as stored: text for text (one of its
@@ -161,6 +165,12 @@ function isVersion(value: unknown): value is number {
   return Number.isInteger(value) && (value as number) >= 1;
 }
 
+function fromNewerApp(): Error {
+  return new Error(
+    'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.',
+  );
+}
+
 function damaged(why: string): Error {
   return new Error(`That file isn't a Greater Than Zero backup, or it's damaged: ${why}.`);
 }
@@ -185,9 +195,9 @@ export function writeTables(tx: TrackerDatabase, tables: BackupFile['tables']) {
       );
       try {
         tx.run(sql`INSERT INTO ${table} (${names}) VALUES (${values})`);
-      } catch (error) {
-        // Such as two rows with the same ID.
-        throw damaged(error instanceof Error ? error.message : String(error));
+      } catch {
+        // Two rows with the same ID, or one without a column it needs.
+        throw damaged('some of its records repeat or leave out details');
       }
     }
   }

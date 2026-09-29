@@ -270,11 +270,9 @@ export type TargetUpdateOffer = {
   displayWeight: Weight | null;
 };
 
-// Where a Backup file is from, for the lifter to confirm importing it.
+// What the lifter is told about a Backup file, to confirm importing it.
 export type BackupSummary = {
   exportedAt: Date;
-  // The version of the app that exported it.
-  appVersion: string;
 };
 
 export type TrackerOptions = {
@@ -2059,11 +2057,11 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     // Checks a Backup file before importing it, throwing to say why it can't
-    // be, and says where it's from. Only importing finds records that don't
-    // fit together.
+    // be, and says when it was exported. Only importing finds records that
+    // don't fit together.
     async checkBackup(contents: string): Promise<BackupSummary> {
-      const { exportedAt, appVersion } = parseBackup(contents, schemaVersionOf(db));
-      return { exportedAt: new Date(exportedAt), appVersion };
+      const { exportedAt } = parseBackup(contents, schemaVersionOf(db));
+      return { exportedAt: new Date(exportedAt) };
     },
 
     // Replaces all the lifter's data with a Backup file's, all together, so a

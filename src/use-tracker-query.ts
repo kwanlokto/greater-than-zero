@@ -18,9 +18,18 @@ export function useTrackerQuery<T>(query: () => Promise<T>, deps: DependencyList
       });
     };
     run();
-    const subscription = addDatabaseChangeListener(run);
+    // A change comes as one event per row, so a big one, like importing a
+    // Backup file, is a burst of thousands: they're gathered into one run.
+    let scheduled: ReturnType<typeof setTimeout> | undefined;
+    const subscription = addDatabaseChangeListener(() => {
+      scheduled ??= setTimeout(() => {
+        scheduled = undefined;
+        run();
+      }, 0);
+    });
     return () => {
       active = false;
+      clearTimeout(scheduled);
       subscription.remove();
     };
   }, deps);

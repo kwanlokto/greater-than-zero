@@ -9,6 +9,13 @@ import {
 } from './test-helpers';
 import { createTracker, type BackupFile, type Tracker } from './tracker';
 
+const damagedFile = "That file isn't a Greater Than Zero backup, or it's damaged";
+const fromNewerApp =
+  'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.';
+
+// How many migrations there were before Rotations: an app's schema version then.
+const beforeRotations = journal.entries.findIndex(({ tag }) => tag === '0013_create_rotations');
+
 // A phone with a little of everything on it: a display unit, a hidden custom
 // Exercise, a Rotation of Templates, finished Workouts and one in progress.
 async function phoneWithData() {
@@ -28,7 +35,12 @@ async function phoneWithData() {
   await doWorkout(tracker, 'Squat', [{ weight: 225, reps: 5 }]);
   const { entry } = await startWorkoutWith(tracker, 'Deadlift');
   await tracker.logSet(entry.id, { weight: 315, reps: 3 });
-  return { tracker, clock };
+  return tracker;
+}
+
+// The Backup file of a phone with data, read back to change.
+async function backupWithData(): Promise<BackupFile> {
+  return JSON.parse(await (await phoneWithData()).exportBackup('1.2.3'));
 }
 
 // The Backup file with its first Set changed.
@@ -46,9 +58,20 @@ async function dataOn(tracker: Tracker) {
   return tables;
 }
 
+// Imports the file onto a phone with data of its own, expecting it to be
+// refused with `message` and the phone's data left as it was.
+async function expectRefused(contents: string, message: string) {
+  const phone = await phoneWithData();
+  const before = await dataOn(phone);
+
+  await expect(phone.importBackup(contents)).rejects.toThrow(message);
+
+  expect(await dataOn(phone)).toEqual(before);
+}
+
 describe('Backup import', () => {
   it('replaces all the data on a phone with what was exported, exactly', async () => {
-    const { tracker: oldPhone } = await phoneWithData();
+    const oldPhone = await phoneWithData();
     const backup = await oldPhone.exportBackup('1.2.3');
     const newPhone = createTracker(createTestDatabase());
     await doWorkout(newPhone, 'Bench Press', [{ weight: 60, reps: 10 }]);
@@ -61,50 +84,33 @@ describe('Backup import', () => {
   });
 
   it('leaves the data untouched when the file fails partway through', async () => {
-    const { tracker: oldPhone } = await phoneWithData();
-    const backup = JSON.parse(await oldPhone.exportBackup('1.2.3'));
+    const backup = await backupWithData();
     backup.tables.sets.push({ ...backup.tables.sets[0] });
-    const { tracker: phone } = await phoneWithData();
-    const before = await dataOn(phone);
 
-    await expect(phone.importBackup(JSON.stringify(backup))).rejects.toThrow();
-
-    expect(await dataOn(phone)).toEqual(before);
+    await expectRefused(
+      JSON.stringify(backup),
+      `${damagedFile}: some of its records repeat or leave out details.`,
+    );
   });
 
   it("leaves the data untouched when the file's records point to ones it doesn't have", async () => {
-    const { tracker: oldPhone } = await phoneWithData();
-    const backup = JSON.parse(await oldPhone.exportBackup('1.2.3'));
+    const backup = await backupWithData();
     backup.tables.exercise_entries = [];
     backup.tables.planned_sets = [];
-    const { tracker: phone } = await phoneWithData();
-    const before = await dataOn(phone);
 
-    await expect(phone.importBackup(JSON.stringify(backup))).rejects.toThrow(
-      "That file isn't a Greater Than Zero backup, or it's damaged: some of its records point to ones it doesn't have.",
+    await expectRefused(
+      JSON.stringify(backup),
+      `${damagedFile}: some of its records point to ones it doesn't have.`,
     );
-
-    expect(await dataOn(phone)).toEqual(before);
   });
 
-  it.each([
-    ['format version', { formatVersion: 2 }],
-    ['schema version', { schemaVersion: journal.entries.length + 1 }],
-  ])(
-    'refuses a file with a newer %s, from a newer app, leaving the data untouched',
-    async (_, newer) => {
-      const { tracker: oldPhone } = await phoneWithData();
-      const backup = { ...JSON.parse(await oldPhone.exportBackup('1.2.3')), ...newer };
-      const { tracker: phone } = await phoneWithData();
-      const before = await dataOn(phone);
-
-      await expect(phone.importBackup(JSON.stringify(backup))).rejects.toThrow(
-        'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.',
-      );
-
-      expect(await dataOn(phone)).toEqual(before);
-    },
-  );
+  it.each<[string, (backup: BackupFile) => object]>([
+    ['format version', backup => ({ ...backup, formatVersion: 2 })],
+    ['format version, laid out differently', () => ({ formatVersion: 2, workouts: [] })],
+    ['schema version', backup => ({ ...backup, schemaVersion: journal.entries.length + 1 })],
+  ])('refuses a file with a newer %s, from a newer app', async (_, newer) => {
+    await expectRefused(JSON.stringify(newer(await backupWithData())), fromNewerApp);
+  });
 
   it.each<[string, (backup: BackupFile) => string]>([
     ["text that isn't JSON", () => 'Push day: bench 3 × 8'],
@@ -140,39 +146,32 @@ describe('Backup import', () => {
       'no settings',
       backup => JSON.stringify({ ...backup, tables: { ...backup.tables, settings: [] } }),
     ],
-  ])('rejects a file with %s, leaving the data untouched', async (_, damaged) => {
-    const { tracker: oldPhone } = await phoneWithData();
-    const backup = JSON.parse(await oldPhone.exportBackup('1.2.3'));
-    const { tracker: phone } = await phoneWithData();
-    const before = await dataOn(phone);
-
-    await expect(phone.importBackup(damaged(backup))).rejects.toThrow(
-      "That file isn't a Greater Than Zero backup, or it's damaged",
-    );
-
-    expect(await dataOn(phone)).toEqual(before);
+    [
+      'no settings table, even from an older app',
+      ({ tables: { settings, ...tables }, ...rest }) =>
+        JSON.stringify({ ...rest, schemaVersion: beforeRotations, tables }),
+    ],
+  ])('rejects a file with %s', async (_, damaged) => {
+    await expectRefused(damaged(await backupWithData()), damagedFile);
   });
 
   it('takes a file from before a table or column was added, leaving them empty', async () => {
-    const { tracker: oldPhone } = await phoneWithData();
-    // As an app from before Rotations (schema version 13) would have written it.
     const {
       tables: { rotations, rotation_entries, ...tables },
       ...backup
-    } = JSON.parse(await oldPhone.exportBackup('1.2.3'));
-    const beforeRotations = {
+    } = await backupWithData();
+    // As an app from before Rotations would have written it.
+    const fromBeforeRotations = {
       ...backup,
-      schemaVersion: 13,
+      schemaVersion: beforeRotations,
       tables: {
         ...tables,
-        workouts: tables.workouts.map(
-          ({ rotation_id, ...workout }: Record<string, unknown>) => workout,
-        ),
+        workouts: tables.workouts.map(({ rotation_id, ...workout }) => workout),
       },
     };
     const phone = createTracker(createTestDatabase());
 
-    await phone.importBackup(JSON.stringify(beforeRotations));
+    await phone.importBackup(JSON.stringify(fromBeforeRotations));
 
     expect(await phone.getRotations()).toEqual([]);
     const [workout] = (await phone.getDay('2026-09-28')).workouts;
@@ -180,19 +179,15 @@ describe('Backup import', () => {
     expect(workout.entries.map(entry => entry.exercise.name)).toEqual(['Bench Press']);
   });
 
-  it('can be checked first, to say where the file is from, changing nothing', async () => {
-    const { tracker: oldPhone } = await phoneWithData();
-    const backup = await oldPhone.exportBackup('1.2.3');
-    const { tracker: phone } = await phoneWithData();
+  it('can be checked first, to say when it was exported, changing nothing', async () => {
+    const backup = await (await phoneWithData()).exportBackup('1.2.3');
+    const phone = await phoneWithData();
     const before = await dataOn(phone);
 
     expect(await phone.checkBackup(backup)).toEqual({
       exportedAt: new Date('2026-09-29T18:00:00-04:00'),
-      appVersion: '1.2.3',
     });
-    await expect(phone.checkBackup('Push day')).rejects.toThrow(
-      "That file isn't a Greater Than Zero backup, or it's damaged",
-    );
+    await expect(phone.checkBackup('Push day')).rejects.toThrow(damagedFile);
     expect(await dataOn(phone)).toEqual(before);
   });
 });
