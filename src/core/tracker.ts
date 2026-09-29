@@ -25,10 +25,21 @@ import {
   writeTables,
   type BackupFile,
 } from './backup';
+import {
+  caloriesFromMacros,
+  defaultMealName,
+  foodItemColumns,
+  totalsOf,
+  type FoodItemValues,
+  type Meal,
+  type MealChanges,
+} from './food';
 import * as schema from './schema';
 import {
   exerciseEntries,
   exercises,
+  foodItems,
+  meals,
   plannedSets,
   rotationEntries,
   rotations,
@@ -44,6 +55,15 @@ import {
 
 export { schema };
 export type { BackupFile } from './backup';
+export {
+  caloriesFromMacros,
+  problemWithFoodItem,
+  type FoodItem,
+  type FoodItemValues,
+  type Macros,
+  type Meal,
+  type MealChanges,
+} from './food';
 export {
   muscleGroups,
   trackingTypes,
@@ -185,6 +205,8 @@ export type Day = {
   localDate: string;
   // Its finished Workouts, in the order Workouts go in.
   workouts: Workout[];
+  // Its Meals, in the order eaten.
+  meals: Meal[];
 };
 
 // An Exercise's working Sets from the most recent finished Workout before the
@@ -492,6 +514,16 @@ function rotationEntryStillIn(rotationEntryId: string) {
   return and(eq(rotationEntries.id, rotationEntryId), isNull(rotationEntries.deletedAt));
 }
 
+// A Meal that hasn't been deleted.
+function mealStillThere(mealId: string) {
+  return and(eq(meals.id, mealId), isNull(meals.deletedAt));
+}
+
+// A Food item that hasn't been deleted, on its own or with its Meal.
+function foodItemStillThere(foodItemId: string) {
+  return and(eq(foodItems.id, foodItemId), isNull(foodItems.deletedAt));
+}
+
 // An Exercise still in its Template: not removed, alone or with the Template.
 function templateExerciseStillIn(templateExerciseId: string) {
   return and(eq(templateExercises.id, templateExerciseId), isNull(templateExercises.deletedAt));
@@ -637,6 +669,12 @@ function requireExerciseName(typed: string): string {
 function requireTemplateName(typed: string): string {
   const name = typed.trim();
   if (!name) throw new Error('A Template needs a name');
+  return name;
+}
+
+function requireMealName(typed: string): string {
+  const name = typed.trim();
+  if (!name) throw new Error('A Meal needs a name');
   return name;
 }
 
@@ -1233,6 +1271,40 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const next = active.entries[(lastIndex + 1) % active.entries.length];
     const [template] = await findTemplates(eq(templates.id, next.template.id));
     return template ?? null;
+  }
+
+  // The Meals matching `where`, in the order they were eaten, each with its
+  // Food items in the order they were added. Deleted ones are left out.
+  async function findMeals(where: SQL | undefined): Promise<Meal[]> {
+    const found = await db.query.meals.findMany({
+      where: and(where, isNull(meals.deletedAt)),
+      orderBy: [asc(meals.eatenAt), asc(meals.createdAt)],
+      columns: { id: true, localDate: true, eatenAt: true, name: true },
+      with: {
+        items: {
+          where: isNull(foodItems.deletedAt),
+          orderBy: asc(foodItems.position),
+          columns: {
+            id: true,
+            name: true,
+            quantity: true,
+            unit: true,
+            calories: true,
+            protein: true,
+            carbs: true,
+            fat: true,
+          },
+        },
+      },
+    });
+    return found.map(({ items, ...meal }) => {
+      const withCalories = items.map(({ calories, ...item }) => ({
+        ...item,
+        typedCalories: calories,
+        calories: calories ?? caloriesFromMacros(item),
+      }));
+      return { ...meal, items: withCalories, totals: totalsOf(withCalories) };
+    });
   }
 
   async function getWorkout(id: string): Promise<Workout | undefined> {
@@ -2037,6 +2109,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return {
         localDate,
         workouts: await findWorkouts(and(eq(workouts.localDate, localDate), finished())),
+        meals: await findMeals(eq(meals.localDate, localDate)),
       };
     },
 
@@ -2071,6 +2144,102 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const backup = parseBackup(contents, schemaVersionOf(tx));
         writeTables(tx, backup.tables);
       });
+    },
+
+    // A new Meal eaten now, on today's date, named for the time of day.
+    async addMeal(): Promise<{ id: string }> {
+      const eatenAt = now();
+      return db
+        .insert(meals)
+        .values({ localDate: localDateOf(eatenAt), eatenAt, name: defaultMealName(eatenAt) })
+        .returning({ id: meals.id })
+        .get();
+    },
+
+    // The time must be on the day the Meal is recorded on, which doesn't change.
+    async editMeal(mealId: string, { name, eatenAt }: MealChanges): Promise<void> {
+      const values = { name: requireMealName(name), eatenAt };
+      db.transaction(tx => {
+        const meal = tx
+          .select({ localDate: meals.localDate })
+          .from(meals)
+          .where(mealStillThere(mealId))
+          .get();
+        if (!meal) throw new Error('No such Meal');
+        if (localDateOf(eatenAt) !== meal.localDate) {
+          throw new Error("A Meal's time must be on the day it's recorded on");
+        }
+        tx.update(meals).set(values).where(eq(meals.id, mealId)).run();
+      });
+    },
+
+    // Soft-deletes the Meal with its Food items, together.
+    async deleteMeal(mealId: string): Promise<void> {
+      const deletedAt = now();
+      db.transaction(tx => {
+        const deleted = tx
+          .update(meals)
+          .set({ deletedAt })
+          .where(mealStillThere(mealId))
+          .returning({ id: meals.id })
+          .all();
+        if (deleted.length === 0) throw new Error('No such Meal');
+        tx.update(foodItems)
+          .set({ deletedAt })
+          .where(and(eq(foodItems.mealId, mealId), isNull(foodItems.deletedAt)))
+          .run();
+      });
+    },
+
+    // Adds a Food item after the Meal's others. Enforces problemWithFoodItem.
+    async addFoodItem(mealId: string, values: FoodItemValues): Promise<{ id: string }> {
+      const columns = foodItemColumns(values);
+      return db.transaction(tx => {
+        const meal = tx.select({ id: meals.id }).from(meals).where(mealStillThere(mealId)).get();
+        if (!meal) throw new Error('No such Meal');
+        const position = nextPosition(
+          foodItems,
+          foodItems.position,
+          eq(foodItems.mealId, mealId),
+          tx,
+        );
+        return tx
+          .insert(foodItems)
+          .values({ mealId, position, ...columns })
+          .returning({ id: foodItems.id })
+          .get();
+      });
+    },
+
+    // Enforces problemWithFoodItem. Null calories work them out from the
+    // macros again.
+    async editFoodItem(foodItemId: string, values: FoodItemValues): Promise<void> {
+      const changed = await db
+        .update(foodItems)
+        .set(foodItemColumns(values))
+        .where(foodItemStillThere(foodItemId))
+        .returning({ id: foodItems.id });
+      if (changed.length === 0) throw new Error('No such Food item');
+    },
+
+    // Soft delete: the others keep their positions, so their order holds.
+    async deleteFoodItem(foodItemId: string): Promise<void> {
+      const deleted = await db
+        .update(foodItems)
+        .set({ deletedAt: now() })
+        .where(foodItemStillThere(foodItemId))
+        .returning({ id: foodItems.id });
+      if (deleted.length === 0) throw new Error('No such Food item');
+    },
+
+    // The Meals added on a local date, as YYYY-MM-DD, in the order eaten.
+    getMeals(localDate: string): Promise<Meal[]> {
+      return findMeals(eq(meals.localDate, localDate));
+    },
+
+    async getMeal(id: string): Promise<Meal | undefined> {
+      const [meal] = await findMeals(eq(meals.id, id));
+      return meal;
     },
 
     // Null when no Workout is in progress.

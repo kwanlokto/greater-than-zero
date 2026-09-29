@@ -186,6 +186,36 @@ export const plannedSets = sqliteTable('planned_sets', {
   reps: integer('reps').notNull(),
 });
 
+// Something eaten at one time, made of Food items.
+export const meals = sqliteTable('meals', {
+  ...rowColumns,
+  // The phone's local calendar date it was added on, as YYYY-MM-DD. All
+  // grouping by day uses it.
+  localDate: text('local_date').notNull(),
+  eatenAt: integer('eaten_at', { mode: 'timestamp_ms' }).notNull(),
+  name: text('name').notNull(),
+});
+
+// A food in a Meal, keeping its own name, amount and macros.
+export const foodItems = sqliteTable('food_items', {
+  ...rowColumns,
+  mealId: text('meal_id')
+    .notNull()
+    .references(() => meals.id),
+  position: integer('position').notNull(),
+  name: text('name').notNull(),
+  // How much, in `unit` (e.g. 150 g, 1 scoop).
+  quantity: real('quantity').notNull(),
+  unit: text('unit').notNull(),
+  // As typed, e.g. from a nutrition label. Empty to work them out from the
+  // macros whenever they're read, so they follow any change to them.
+  calories: real('calories'),
+  // In grams.
+  protein: real('protein').notNull(),
+  carbs: real('carbs').notNull(),
+  fat: real('fat').notNull(),
+});
+
 export const templatesRelations = relations(templates, ({ many }) => ({
   exercises: many(templateExercises),
 }));
@@ -223,6 +253,14 @@ export const plannedSetsRelations = relations(plannedSets, ({ one }) => ({
     fields: [plannedSets.exerciseEntryId],
     references: [exerciseEntries.id],
   }),
+}));
+
+export const mealsRelations = relations(meals, ({ many }) => ({
+  items: many(foodItems),
+}));
+
+export const foodItemsRelations = relations(foodItems, ({ one }) => ({
+  meal: one(meals, { fields: [foodItems.mealId], references: [meals.id] }),
 }));
 
 export const setsRelations = relations(sets, ({ one }) => ({

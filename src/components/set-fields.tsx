@@ -159,7 +159,7 @@ function typedSet(
   reps: string,
   isWarmUp: boolean,
 ): SetValues | undefined {
-  const parsedWeight = parseWeight(weight);
+  const parsedWeight = parseDecimal(weight);
   const parsedReps = parseWholeNumber(reps);
   if (parsedWeight === undefined || parsedReps === undefined) return undefined;
   const values = { weight: parsedWeight, reps: parsedReps, isWarmUp };
@@ -168,7 +168,7 @@ function typedSet(
 
 // Null when blank, undefined when it isn't a number. Accepts a comma as the
 // decimal separator too, as some keyboards type one.
-export function parseWeight(text: string): number | null | undefined {
+export function parseDecimal(text: string): number | null | undefined {
   const trimmed = text.trim();
   if (trimmed === '') return null;
   const value = Number(trimmed.replace(',', '.'));

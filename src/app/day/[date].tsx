@@ -2,6 +2,7 @@ import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { MealCard } from '@/components/meal-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextButton } from '@/components/text-button';
 import { WorkoutCard } from '@/components/workout-card';
@@ -60,6 +61,20 @@ export default function DayScreen() {
               />
             </>
           )}
+        </DaySection>
+      )}
+      {day && (
+        <DaySection title="Meals">
+          {day.meals.length === 0 && (
+            <Text style={[styles.note, { color: colors.text }]}>No meals.</Text>
+          )}
+          {day.meals.map(meal => (
+            <MealCard
+              key={meal.id}
+              meal={meal}
+              onPress={() => router.navigate({ pathname: '/meals/[id]', params: { id: meal.id } })}
+            />
+          ))}
         </DaySection>
       )}
     </ScrollView>

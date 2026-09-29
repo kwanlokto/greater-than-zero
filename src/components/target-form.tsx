@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/primary-button';
-import { parseWeight, parseWholeNumber, setPresentationFor } from '@/components/set-fields';
+import { parseDecimal, parseWholeNumber, setPresentationFor } from '@/components/set-fields';
 import { UnitPicker } from '@/components/unit-picker';
 import {
   problemWithTarget,
@@ -136,7 +136,7 @@ function typedTarget(text: {
   const sets = parseWholeNumber(text.sets);
   const minReps = parseWholeNumber(text.minReps);
   const maxReps = parseWholeNumber(text.maxReps);
-  const weight = parseWeight(text.weight);
+  const weight = parseDecimal(text.weight);
   if (sets === undefined || minReps === undefined || maxReps === undefined) return undefined;
   if (weight === undefined) return undefined;
   return { sets, minReps, maxReps, weight, weightUnit: text.weightUnit };
