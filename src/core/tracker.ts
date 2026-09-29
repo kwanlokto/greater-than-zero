@@ -17,7 +17,7 @@ import {
 } from 'drizzle-orm';
 import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
-import { backupFormatVersion, readTables, type BackupFile } from './backup';
+import { backupFormatVersion, readTables, schemaVersionOf, type BackupFile } from './backup';
 import * as schema from './schema';
 import {
   exerciseEntries,
@@ -36,7 +36,7 @@ import {
 } from './schema';
 
 export { schema };
-export { backupFormatVersion, type BackupFile } from './backup';
+export type { BackupFile } from './backup';
 export {
   muscleGroups,
   trackingTypes,
@@ -261,11 +261,6 @@ export type TargetUpdateOffer = {
   weightUnit: WeightUnit;
   // For showing only.
   displayWeight: Weight | null;
-};
-
-export type BackupOptions = {
-  // The version of the app exporting it, recorded in the file.
-  appVersion: string;
 };
 
 export type TrackerOptions = {
@@ -2033,16 +2028,20 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       };
     },
 
-    // The Backup file's contents, as JSON: all the lifter's data.
-    async exportBackup({ appVersion }: BackupOptions): Promise<string> {
-      const backup: BackupFile = {
-        formatVersion: backupFormatVersion,
-        appVersion,
-        exportedAt: now().toISOString(),
-        // Read together, so it's the data as it was at one moment.
-        tables: db.transaction(tx => readTables(tx)),
-      };
-      return JSON.stringify(backup);
+    // The Backup file's contents, as JSON: all the lifter's data, recording
+    // the version of the app exporting it.
+    async exportBackup(appVersion: string): Promise<string> {
+      // Read together, so it's the data as it was at one moment.
+      return db.transaction(tx => {
+        const backup: BackupFile = {
+          formatVersion: backupFormatVersion,
+          schemaVersion: schemaVersionOf(tx),
+          appVersion,
+          exportedAt: now().toISOString(),
+          tables: readTables(tx),
+        };
+        return JSON.stringify(backup);
+      });
     },
 
     // Null when no Workout is in progress.

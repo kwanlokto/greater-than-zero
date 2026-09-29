@@ -1,15 +1,19 @@
 import { sql } from 'drizzle-orm';
 
+import journal from '../../drizzle/meta/_journal.json';
 import { createTestDatabase } from './test-database';
 import { clockAt, startWorkoutWith } from './test-helpers';
-import { backupFormatVersion, createTracker, type BackupFile, type Tracker } from './tracker';
+import { createTracker, type BackupFile, type Tracker } from './tracker';
 
-async function exportBackup(tracker: Tracker): Promise<BackupFile> {
-  return JSON.parse(await tracker.exportBackup({ appVersion: '1.2.3' }));
+// The Backup file exported now, read back.
+async function exportedBackup(tracker: Tracker): Promise<BackupFile> {
+  return JSON.parse(await tracker.exportBackup('1.2.3'));
 }
 
 // The tables the migrations created, leaving out SQLite's own and the one
-// recording which migrations have run.
+// recording which migrations have run. Read from the database itself, rather
+// than the schema the export goes by, so a table the export misses however it
+// comes about is caught.
 function tablesIn(db: ReturnType<typeof createTestDatabase>): string[] {
   return db
     .all<{ name: string }>(
@@ -23,9 +27,8 @@ describe('Backup export', () => {
   it('records the format version, the app version and when it was exported', async () => {
     const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T18:30:00-04:00'));
 
-    const backup = await exportBackup(tracker);
+    const backup = await exportedBackup(tracker);
 
-    expect(backupFormatVersion).toBe(1);
     expect(backup).toMatchObject({
       formatVersion: 1,
       appVersion: '1.2.3',
@@ -37,13 +40,21 @@ describe('Backup export', () => {
     const db = createTestDatabase();
     const tracker = createTracker(db);
 
-    const backup = await exportBackup(tracker);
+    const backup = await exportedBackup(tracker);
 
-    expect(tablesIn(db)).toContain('rotation_entries');
+    expect(tablesIn(db)).not.toHaveLength(0);
     expect(Object.keys(backup.tables).sort()).toEqual(tablesIn(db).sort());
   });
 
-  it('holds every row as stored, soft-deleted ones included', async () => {
+  it('records the schema version: how many migrations had shaped the tables', async () => {
+    const tracker = createTracker(createTestDatabase());
+
+    const backup = await exportedBackup(tracker);
+
+    expect(backup.schemaVersion).toBe(journal.entries.length);
+  });
+
+  it('holds every row with its columns and values as stored, soft-deleted ones included', async () => {
     const clock = clockAt('2026-09-29T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), clock);
     await tracker.setDisplayUnit('lb');
@@ -59,7 +70,7 @@ describe('Backup export', () => {
     const [warmUp] = (await tracker.getWorkout(workout.id))?.entries[0].sets ?? [];
     await tracker.deleteSet(warmUp.id);
 
-    const { tables } = await exportBackup(tracker);
+    const { tables } = await exportedBackup(tracker);
 
     const at = new Date('2026-09-29T18:00:00-04:00').getTime();
     expect(tables.settings).toEqual([expect.objectContaining({ display_unit: 'lb' })]);

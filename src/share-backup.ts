@@ -10,9 +10,7 @@ import { tracker } from '@/database';
 // greater-than-zero-backup-2026-09-29.json; a second export that day replaces
 // the first in the app's cache.
 export async function shareBackup() {
-  const contents = await tracker.exportBackup({
-    appVersion: Constants.expoConfig?.version ?? 'unknown',
-  });
+  const contents = await tracker.exportBackup(Constants.expoConfig?.version ?? 'unknown');
   const file = new File(Paths.cache, `greater-than-zero-backup-${localDateOf(new Date())}.json`);
   file.write(contents);
   await Sharing.shareAsync(file.uri, {
