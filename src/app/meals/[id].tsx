@@ -60,7 +60,7 @@ export default function MealScreen() {
       )}
       <PrimaryButton
         label="Add food"
-        onPress={() => router.push({ pathname: '/meals/food-item', params: { mealId: id } })}
+        onPress={() => router.push({ pathname: '/meals/choose-food', params: { mealId: id } })}
       />
       <TextButton label="Delete meal" destructive onPress={confirmDelete} />
     </ScrollView>

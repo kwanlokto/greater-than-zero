@@ -27,13 +27,17 @@ import {
 } from './backup';
 import {
   defaultMealName,
-  foodItemOf,
+  foodItemFromSavedFood,
   requireMealName,
   requireValidFoodItem,
+  requireValidSavedFood,
   timeOnDay,
   totalsOf,
+  withCaloriesWorkedOut,
   type FoodItemValues,
   type Meal,
+  type SavedFood,
+  type SavedFoodValues,
   type TimeOfDay,
 } from './food';
 import * as schema from './schema';
@@ -43,6 +47,7 @@ import {
   foodItems,
   meals,
   plannedSets,
+  savedFoods,
   rotationEntries,
   rotations,
   sets,
@@ -59,11 +64,16 @@ export { schema };
 export type { BackupFile } from './backup';
 export {
   caloriesFromMacros,
+  foodItemFromSavedFood,
+  portionOf,
   problemWithFoodItem,
+  problemWithSavedFood,
   type FoodItem,
   type FoodItemValues,
   type Macros,
   type Meal,
+  type SavedFood,
+  type SavedFoodValues,
   type TimeOfDay,
 } from './food';
 export {
@@ -524,6 +534,11 @@ function mealStillThere(mealId: string) {
 // A Food item that hasn't been deleted, on its own or with its Meal.
 function foodItemStillThere(foodItemId: string) {
   return and(eq(foodItems.id, foodItemId), isNull(foodItems.deletedAt));
+}
+
+// A Saved food that hasn't been deleted.
+function savedFoodStillThere(savedFoodId: string) {
+  return and(eq(savedFoods.id, savedFoodId), isNull(savedFoods.deletedAt));
 }
 
 // An Exercise still in its Template: not removed, alone or with the Template.
@@ -1289,14 +1304,52 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
             protein: true,
             carbs: true,
             fat: true,
+            savedFoodId: true,
           },
         },
       },
     });
     return found.map(({ items, ...meal }) => {
-      const foodItems = items.map(foodItemOf);
+      const foodItems = items.map(withCaloriesWorkedOut);
       return { ...meal, items: foodItems, totals: totalsOf(foodItems) };
     });
+  }
+
+  // Adds a Food item, already checked, after the Meal's others, as part of a
+  // larger transaction.
+  function insertFoodItem(
+    tx: TrackerDatabase,
+    mealId: string,
+    values: FoodItemValues,
+    savedFoodId: string | null = null,
+  ): { id: string } {
+    const meal = tx.select({ id: meals.id }).from(meals).where(mealStillThere(mealId)).get();
+    if (!meal) throw new Error('No such Meal');
+    const position = nextPosition(foodItems, foodItems.position, eq(foodItems.mealId, mealId), tx);
+    return tx
+      .insert(foodItems)
+      .values({ mealId, position, ...values, savedFoodId })
+      .returning({ id: foodItems.id })
+      .get();
+  }
+
+  // The Saved foods matching `where`, by name. Deleted ones are left out.
+  async function findSavedFoods(where: SQL | undefined): Promise<SavedFood[]> {
+    const found = await db
+      .select({
+        id: savedFoods.id,
+        name: savedFoods.name,
+        servingAmount: savedFoods.servingAmount,
+        servingUnit: savedFoods.servingUnit,
+        calories: savedFoods.calories,
+        protein: savedFoods.protein,
+        carbs: savedFoods.carbs,
+        fat: savedFoods.fat,
+      })
+      .from(savedFoods)
+      .where(and(where, isNull(savedFoods.deletedAt)))
+      .orderBy(sql`${savedFoods.name} COLLATE NOCASE`);
+    return found.map(withCaloriesWorkedOut);
   }
 
   async function getWorkout(id: string): Promise<Workout | undefined> {
@@ -2194,22 +2247,23 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Adds a Food item after the Meal's others. Enforces problemWithFoodItem.
     async addFoodItem(mealId: string, values: FoodItemValues): Promise<{ id: string }> {
-      const columns = requireValidFoodItem(values);
-      return db.transaction(tx => {
-        const meal = tx.select({ id: meals.id }).from(meals).where(mealStillThere(mealId)).get();
-        if (!meal) throw new Error('No such Meal');
-        const position = nextPosition(
-          foodItems,
-          foodItems.position,
-          eq(foodItems.mealId, mealId),
-          tx,
-        );
-        return tx
-          .insert(foodItems)
-          .values({ mealId, position, ...columns })
-          .returning({ id: foodItems.id })
-          .get();
-      });
+      const checked = requireValidFoodItem(values);
+      // Checked and added together, so the Meal can't be deleted in between.
+      return db.transaction(tx => insertFoodItem(tx, mealId, checked));
+    },
+
+    // Adds `quantity` of a Saved food, in its Serving unit, after the Meal's
+    // other Food items: a copy of it with its macros scaled to match (see
+    // foodItemFromSavedFood), linked to it.
+    async addSavedFoodToMeal(
+      mealId: string,
+      savedFoodId: string,
+      quantity: number,
+    ): Promise<{ id: string }> {
+      const [savedFood] = await findSavedFoods(eq(savedFoods.id, savedFoodId));
+      if (!savedFood) throw new Error('No such Saved food');
+      const values = requireValidFoodItem(foodItemFromSavedFood(savedFood, quantity));
+      return db.transaction(tx => insertFoodItem(tx, mealId, values, savedFood.id));
     },
 
     // Enforces problemWithFoodItem. Null calories work them out from the
@@ -2241,6 +2295,45 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     async getMeal(id: string): Promise<Meal | undefined> {
       const [meal] = await findMeals(eq(meals.id, id));
       return meal;
+    },
+
+    async createSavedFood(values: SavedFoodValues): Promise<{ id: string }> {
+      return db
+        .insert(savedFoods)
+        .values(requireValidSavedFood(values))
+        .returning({ id: savedFoods.id })
+        .get();
+    },
+
+    // Enforces problemWithSavedFood. Food items added from it before keep the
+    // macros they were logged with.
+    async editSavedFood(id: string, values: SavedFoodValues): Promise<void> {
+      const changed = await db
+        .update(savedFoods)
+        .set(requireValidSavedFood(values))
+        .where(savedFoodStillThere(id))
+        .returning({ id: savedFoods.id });
+      if (changed.length === 0) throw new Error('No such Saved food');
+    },
+
+    // Soft delete. Food items added from it keep their copies.
+    async deleteSavedFood(id: string): Promise<void> {
+      const deleted = await db
+        .update(savedFoods)
+        .set({ deletedAt: now() })
+        .where(savedFoodStillThere(id))
+        .returning({ id: savedFoods.id });
+      if (deleted.length === 0) throw new Error('No such Saved food');
+    },
+
+    // Every Saved food, by name.
+    getSavedFoods(): Promise<SavedFood[]> {
+      return findSavedFoods(undefined);
+    },
+
+    async getSavedFood(id: string): Promise<SavedFood | undefined> {
+      const [savedFood] = await findSavedFoods(eq(savedFoods.id, id));
+      return savedFood;
     },
 
     // Null when no Workout is in progress.

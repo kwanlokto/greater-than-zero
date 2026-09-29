@@ -1,15 +1,16 @@
 import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 
-import { FoodItemForm } from '@/components/food-item-form';
+import { FoodForm, type FoodFields } from '@/components/food-form';
 import { TextButton } from '@/components/text-button';
-import type { FoodItem, FoodItemValues } from '@/core/tracker';
+import { problemWithFoodItem, type FoodItem } from '@/core/tracker';
 import { tracker } from '@/database';
+import { fieldsOfFoodItem, foodItemValuesOf } from '@/food-fields';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// Either a Food item being added to a Meal, or one in it (foodItemId) being
-// changed.
+// Either a one-off Food item being added to a Meal, or one in it (foodItemId)
+// being changed.
 type Params = { mealId: string; foodItemId?: string };
 
 export default function FoodItemScreen() {
@@ -35,7 +36,8 @@ export default function FoodItemScreen() {
     );
   }
 
-  async function save(values: FoodItemValues) {
+  async function save(fields: FoodFields) {
+    const values = foodItemValuesOf(fields);
     const saved = await runOrAlert("Couldn't save the food", async () => {
       if (foodItemId) await tracker.editFoodItem(foodItemId, values);
       else await tracker.addFoodItem(mealId, values);
@@ -62,7 +64,13 @@ export default function FoodItemScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: item ? 'Edit food' : 'Add food' }} />
-      <FoodItemForm initial={item} submitLabel={item ? 'Save' : 'Add food'} onSubmit={save} />
+      <FoodForm
+        initial={item && fieldsOfFoodItem(item)}
+        amountLabel="Amount"
+        problemOf={fields => problemWithFoodItem(foodItemValuesOf(fields))}
+        submitLabel={item ? 'Save' : 'Add food'}
+        onSubmit={save}
+      />
       {item && <TextButton label="Remove food" destructive onPress={() => confirmRemove(item)} />}
     </ScrollView>
   );

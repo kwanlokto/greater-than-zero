@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { MealCard } from '@/components/meal-card';
 import { PrimaryButton } from '@/components/primary-button';
+import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { useToday } from '@/use-today';
@@ -27,6 +28,7 @@ export default function FoodScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <PrimaryButton label="Add meal" onPress={addMeal} />
+      <TextButton label="Saved foods" onPress={() => router.navigate('/saved-foods')} />
       {meals?.length === 0 && (
         <Text style={[styles.note, { color: colors.text }]}>No meals yet today.</Text>
       )}

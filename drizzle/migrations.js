@@ -16,6 +16,7 @@ import m0011 from './0011_start_workouts_from_templates.sql';
 import m0012 from './0012_link_entries_to_template_exercises.sql';
 import m0013 from './0013_create_rotations.sql';
 import m0014 from './0014_create_meals.sql';
+import m0015 from './0015_create_saved_foods.sql';
 
   export default {
     journal,
@@ -34,7 +35,8 @@ m0010,
 m0011,
 m0012,
 m0013,
-m0014
+m0014,
+m0015
     }
   }
   

@@ -71,6 +71,14 @@ export default function RootLayout() {
             <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
             <Stack.Screen name="meals/[id]" options={{ title: 'Meal' }} />
             <Stack.Screen name="meals/food-item" options={{ title: 'Food' }} />
+            <Stack.Screen
+              name="meals/choose-food"
+              options={{ title: 'Add food', presentation: 'modal' }}
+            />
+            <Stack.Screen name="meals/portion" options={{ title: 'Add food' }} />
+            <Stack.Screen name="saved-foods/index" options={{ title: 'Saved foods' }} />
+            <Stack.Screen name="saved-foods/new" options={{ title: 'New saved food' }} />
+            <Stack.Screen name="saved-foods/[id]" options={{ title: 'Saved food' }} />
             {/* The Workout takes over the screen, covering the tabs. */}
             <Stack.Screen
               name="workout/index"

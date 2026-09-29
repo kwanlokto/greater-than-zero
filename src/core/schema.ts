@@ -186,6 +186,23 @@ export const plannedSets = sqliteTable('planned_sets', {
   reps: integer('reps').notNull(),
 });
 
+// A food the lifter keeps to add to Meals again, with the macros of a Serving
+// of it.
+export const savedFoods = sqliteTable('saved_foods', {
+  ...rowColumns,
+  name: text('name').notNull(),
+  // The Serving its macros are for, e.g. 100 g or 1 scoop.
+  servingAmount: real('serving_amount').notNull(),
+  servingUnit: text('serving_unit').notNull(),
+  // As typed, e.g. from a nutrition label. Empty to work them out from the
+  // macros whenever they're read, as for a Food item.
+  calories: real('calories'),
+  // In grams.
+  protein: real('protein').notNull(),
+  carbs: real('carbs').notNull(),
+  fat: real('fat').notNull(),
+});
+
 // Something eaten at one time, made of Food items.
 export const meals = sqliteTable('meals', {
   ...rowColumns,
@@ -214,6 +231,9 @@ export const foodItems = sqliteTable('food_items', {
   protein: real('protein').notNull(),
   carbs: real('carbs').notNull(),
   fat: real('fat').notNull(),
+  // The Saved food it was added from, if any. Only a record of where it came
+  // from: its copies of the name and macros stay as they were logged.
+  savedFoodId: text('saved_food_id').references(() => savedFoods.id),
 });
 
 export const templatesRelations = relations(templates, ({ many }) => ({

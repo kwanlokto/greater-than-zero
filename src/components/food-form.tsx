@@ -4,41 +4,62 @@ import { StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } fro
 
 import { Field } from '@/components/field';
 import { PrimaryButton } from '@/components/primary-button';
-import {
-  caloriesFromMacros,
-  problemWithFoodItem,
-  type FoodItem,
-  type FoodItemValues,
-} from '@/core/tracker';
+import { caloriesFromMacros } from '@/core/tracker';
 import { formatCalories } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
 
-type Props = {
-  // The Food item being changed; a new one starts blank, in grams.
-  initial: FoodItem | undefined;
-  submitLabel: string;
-  onSubmit: (values: FoodItemValues) => Promise<void>;
+// What the form asks for: a name, an amount in a unit, and the macros of that
+// much. For a Food item the amount is how much was eaten; for a Saved food
+// it's the Serving its macros are for. Null calories are worked out from the
+// macros.
+export type FoodFields = {
+  name: string;
+  amount: number;
+  unit: string;
+  calories: number | null;
+  protein: number;
+  carbs: number;
+  fat: number;
 };
 
-// A Food item's name, amount and macros. Calories left blank are worked out
-// from the macros, and a blank macro counts as none.
-export function FoodItemForm({ initial, submitLabel, onSubmit }: Props) {
+type Props = {
+  // The food being changed; a new one starts blank, in grams.
+  initial: FoodFields | undefined;
+  // What the amount is called, e.g. "Amount" or "Serving", and what it means.
+  amountLabel: string;
+  amountHint?: string;
+  // The core's rule for this kind of food, which decides when it can be saved.
+  problemOf: (fields: FoodFields) => string | undefined;
+  submitLabel: string;
+  onSubmit: (fields: FoodFields) => Promise<void>;
+};
+
+// A food's name, amount and macros. Calories left blank are worked out from
+// the macros, and a blank macro counts as none.
+export function FoodForm({
+  initial,
+  amountLabel,
+  amountHint,
+  problemOf,
+  submitLabel,
+  onSubmit,
+}: Props) {
   const { colors } = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
-  const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '');
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
   const [unit, setUnit] = useState(initial?.unit ?? 'g');
   const [calories, setCalories] = useState(
-    initial?.typedCalories == null ? '' : String(initial.typedCalories),
+    initial?.calories == null ? '' : String(initial.calories),
   );
   const [protein, setProtein] = useState(initial ? String(initial.protein) : '');
   const [carbs, setCarbs] = useState(initial ? String(initial.carbs) : '');
   const [fat, setFat] = useState(initial ? String(initial.fat) : '');
 
-  const typed = typedFoodItem({ name, quantity, unit, calories, protein, carbs, fat });
+  const typed = typedFood({ name, amount, unit, calories, protein, carbs, fat });
   // The core's own rule decides, so the form can't drift from it. Only said
   // once the name, amount and unit are filled in, so it doesn't nag while typing.
-  const filledIn = name.trim() !== '' && quantity.trim() !== '' && unit.trim() !== '';
-  const problem = typed && problemWithFoodItem(typed);
+  const filledIn = name.trim() !== '' && amount.trim() !== '' && unit.trim() !== '';
+  const problem = typed && problemOf(typed);
   const workedOut = typed && typed.calories === null ? caloriesFromMacros(typed) : undefined;
   const inputStyle = [
     styles.input,
@@ -62,13 +83,13 @@ export function FoodItemForm({ initial, submitLabel, onSubmit }: Props) {
           style={[inputStyle, styles.wide]}
         />
       </Field>
-      <Field label="Amount">
+      <Field label={amountLabel}>
         <View style={styles.row}>
           <TextInput
-            value={quantity}
-            onChangeText={setQuantity}
+            value={amount}
+            onChangeText={setAmount}
             keyboardType="decimal-pad"
-            accessibilityLabel="Quantity"
+            accessibilityLabel={amountLabel}
             style={inputStyle}
           />
           <TextInput
@@ -81,6 +102,7 @@ export function FoodItemForm({ initial, submitLabel, onSubmit }: Props) {
             style={[inputStyle, styles.wide]}
           />
         </View>
+        {amountHint && <Text style={[styles.hint, { color: colors.text }]}>{amountHint}</Text>}
       </Field>
       <Field label="Calories">
         <View style={styles.row}>
@@ -138,17 +160,17 @@ function MacroField({ label, value, onChange, inputStyle }: MacroFieldProps) {
 
 // Undefined while a number field holds something that isn't a number. A blank
 // amount is left for the core's rule to refuse.
-function typedFoodItem(text: Record<keyof FoodItemValues, string>): FoodItemValues | undefined {
-  const quantity = parseDecimal(text.quantity);
+function typedFood(text: Record<keyof FoodFields, string>): FoodFields | undefined {
+  const amount = parseDecimal(text.amount);
   const calories = parseDecimal(text.calories);
   const protein = parseDecimal(text.protein);
   const carbs = parseDecimal(text.carbs);
   const fat = parseDecimal(text.fat);
-  const numbers = [quantity, calories, protein, carbs, fat];
+  const numbers = [amount, calories, protein, carbs, fat];
   if (numbers.some(number => number === undefined)) return undefined;
   return {
     name: text.name,
-    quantity: quantity ?? Number.NaN,
+    amount: amount ?? Number.NaN,
     unit: text.unit,
     calories: calories ?? null,
     protein: protein ?? 0,

@@ -29,6 +29,32 @@ export type FoodItem = Macros & {
   unit: string;
   // As typed, or null when `calories` is worked out from the macros.
   typedCalories: number | null;
+  // The Saved food it was added from, if any. Only a record of where it came
+  // from: its own copies of the name and macros are what count.
+  savedFoodId: string | null;
+};
+
+// What the lifter enters for a Saved food: a Serving, such as 100 g or 1
+// scoop, and its macros. Calories are left null to work them out from the
+// macros.
+export type SavedFoodValues = {
+  name: string;
+  servingAmount: number;
+  servingUnit: string;
+  calories: number | null;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+// A food kept to add to Meals again. Its macros are for one Serving.
+export type SavedFood = Macros & {
+  id: string;
+  name: string;
+  servingAmount: number;
+  servingUnit: string;
+  // As typed, or null when `calories` is worked out from the macros.
+  typedCalories: number | null;
 };
 
 // Something eaten at one time, made of Food items.
@@ -96,19 +122,50 @@ export function totalsOf(items: Macros[]): Macros {
   );
 }
 
+// How what's wrong with a kind of food is put.
+type FoodWords = { what: string; amount: string; unit: string };
+
+// A Food item or a Saved food: a name, an amount of something, and macros.
+type FoodValues = {
+  name: string;
+  amount: number;
+  unit: string;
+  calories: number | null;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+// The rule Food items and Saved foods share: a name, an amount above 0 in a
+// unit, and calories (when typed) and macros of 0 or more.
+function problemWithFood(words: FoodWords, food: FoodValues): string | undefined {
+  const { name, amount, unit, calories, protein, carbs, fat } = food;
+  if (!name.trim()) return `${words.what} needs a name`;
+  if (!Number.isFinite(amount) || amount <= 0) return `${words.what} needs ${words.amount} above 0`;
+  if (!unit.trim()) return `${words.what} needs ${words.unit}, like g or scoop`;
+  const amounts = calories === null ? [protein, carbs, fat] : [calories, protein, carbs, fat];
+  if (!amounts.every(value => Number.isFinite(value) && value >= 0)) {
+    return `${words.what}'s calories and macros must be numbers, 0 or more`;
+  }
+  return undefined;
+}
+
 // Why a Food item can't be saved with these values, or undefined when it can.
 // The Food item commands enforce it; screens use it to decide when to allow
 // saving.
 export function problemWithFoodItem(values: FoodItemValues): string | undefined {
-  const { name, quantity, unit, calories, protein, carbs, fat } = values;
-  if (!name.trim()) return 'A Food item needs a name';
-  if (!Number.isFinite(quantity) || quantity <= 0) return 'A Food item needs a quantity above 0';
-  if (!unit.trim()) return 'A Food item needs a unit, like g or scoop';
-  const amounts = calories === null ? [protein, carbs, fat] : [calories, protein, carbs, fat];
-  if (!amounts.every(amount => Number.isFinite(amount) && amount >= 0)) {
-    return "A Food item's calories and macros must be numbers, 0 or more";
-  }
-  return undefined;
+  const words = { what: 'A Food item', amount: 'a quantity', unit: 'a unit' };
+  return problemWithFood(words, { ...values, amount: values.quantity });
+}
+
+// The same for a Saved food, whose amount is its Serving.
+export function problemWithSavedFood(values: SavedFoodValues): string | undefined {
+  const words = { what: 'A Saved food', amount: 'a serving amount', unit: 'a serving unit' };
+  return problemWithFood(words, {
+    ...values,
+    amount: values.servingAmount,
+    unit: values.servingUnit,
+  });
 }
 
 // The values to save: checked against problemWithFoodItem, with the name and
@@ -119,11 +176,45 @@ export function requireValidFoodItem(values: FoodItemValues): FoodItemValues {
   return { ...values, name: values.name.trim(), unit: values.unit.trim() };
 }
 
-// A Food item as read back: its calories as typed, or worked out from its
-// macros when none were, so they follow any change to the macros.
-export function foodItemOf({
-  calories,
-  ...row
-}: Omit<FoodItem, 'typedCalories' | 'calories'> & { calories: number | null }): FoodItem {
+// The values to save: checked against problemWithSavedFood, with the name and
+// serving unit trimmed.
+export function requireValidSavedFood(values: SavedFoodValues): SavedFoodValues {
+  const problem = problemWithSavedFood(values);
+  if (problem) throw new Error(problem);
+  return { ...values, name: values.name.trim(), servingUnit: values.servingUnit.trim() };
+}
+
+// A Food item or Saved food as read back: its calories as typed, or worked
+// out from its macros when none were, so they follow any change to them.
+export function withCaloriesWorkedOut<
+  Row extends Omit<Macros, 'calories'> & { calories: number | null },
+>({ calories, ...row }: Row): Omit<Row, 'calories'> & Pick<FoodItem, 'calories' | 'typedCalories'> {
   return { ...row, typedCalories: calories, calories: calories ?? caloriesFromMacros(row) };
+}
+
+// The macros of `quantity` of a Saved food, in its Serving unit: its macros ×
+// quantity ÷ serving amount. There's no converting between units.
+export function portionOf(savedFood: SavedFood, quantity: number): Macros {
+  const servings = quantity / savedFood.servingAmount;
+  return {
+    calories: savedFood.calories * servings,
+    protein: savedFood.protein * servings,
+    carbs: savedFood.carbs * servings,
+    fat: savedFood.fat * servings,
+  };
+}
+
+// A Food item of `quantity` of a Saved food, in its Serving unit: its own copy
+// of the name, and the macros of that portion (see portionOf). Calories left
+// blank on the Saved food stay blank, to be worked out from the portion's
+// macros, which comes to the same.
+export function foodItemFromSavedFood(savedFood: SavedFood, quantity: number): FoodItemValues {
+  const { calories, ...macros } = portionOf(savedFood, quantity);
+  return {
+    name: savedFood.name,
+    quantity,
+    unit: savedFood.servingUnit,
+    calories: savedFood.typedCalories === null ? null : calories,
+    ...macros,
+  };
 }

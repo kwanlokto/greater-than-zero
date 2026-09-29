@@ -1,4 +1,4 @@
-import type { FoodItem, Macros } from '@/core/tracker';
+import type { FoodItem, Macros, SavedFood } from '@/core/tracker';
 
 // Calories to the nearest whole one, e.g. "101".
 export function formatCalories(calories: number): string {
@@ -19,3 +19,11 @@ export function describeMacros({ calories, protein, carbs, fat }: Macros): strin
 export function describeFoodItem({ name, quantity, unit }: FoodItem): string {
   return `${name} · ${Math.round(quantity * 100) / 100} ${unit}`;
 }
+
+// "100 g", the Serving a Saved food's macros are for.
+export function describeServing({ servingAmount, servingUnit }: SavedFood): string {
+  return `${Math.round(servingAmount * 100) / 100} ${servingUnit}`;
+}
+
+// Under a Saved food's Serving in its form.
+export const servingHint = 'The calories and macros below are for this much, e.g. 100 g.';
