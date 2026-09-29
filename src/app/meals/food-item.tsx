@@ -1,11 +1,10 @@
 import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 
-import { FoodForm, type FoodFields } from '@/components/food-form';
+import { FoodItemForm } from '@/components/food-item-form';
 import { TextButton } from '@/components/text-button';
-import { problemWithFoodItem, type FoodItem } from '@/core/tracker';
+import type { FoodItem, FoodItemValues } from '@/core/tracker';
 import { tracker } from '@/database';
-import { fieldsOfFoodItem, foodItemValuesOf } from '@/food-fields';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -36,8 +35,7 @@ export default function FoodItemScreen() {
     );
   }
 
-  async function save(fields: FoodFields) {
-    const values = foodItemValuesOf(fields);
+  async function save(values: FoodItemValues) {
     const saved = await runOrAlert("Couldn't save the food", async () => {
       if (foodItemId) await tracker.editFoodItem(foodItemId, values);
       else await tracker.addFoodItem(mealId, values);
@@ -64,13 +62,7 @@ export default function FoodItemScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: item ? 'Edit food' : 'Add food' }} />
-      <FoodForm
-        initial={item && fieldsOfFoodItem(item)}
-        amountLabel="Amount"
-        problemOf={fields => problemWithFoodItem(foodItemValuesOf(fields))}
-        submitLabel={item ? 'Save' : 'Add food'}
-        onSubmit={save}
-      />
+      <FoodItemForm initial={item} submitLabel={item ? 'Save' : 'Add food'} onSubmit={save} />
       {item && <TextButton label="Remove food" destructive onPress={() => confirmRemove(item)} />}
     </ScrollView>
   );

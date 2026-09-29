@@ -8,7 +8,7 @@ import { describeMacros, describeServing } from '@/food-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // Picks what to add to a Meal: a one-off Food item typed in, or a Saved food
-// in a quantity. A new Saved food made from here shows up in the list.
+// in a quantity, including one saved from here first.
 export default function ChooseFoodScreen() {
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const router = useRouter();
@@ -31,7 +31,7 @@ export default function ChooseFoodScreen() {
             icon="add-circle-outline"
             label="New saved food"
             details="Save a food you eat often, then add it"
-            onPress={() => router.push('/saved-foods/new')}
+            onPress={() => router.replace({ pathname: '/saved-foods/new', params: { mealId } })}
           />
           <Text style={[styles.heading, { color: colors.text }]}>Saved foods</Text>
         </>

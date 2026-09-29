@@ -122,11 +122,15 @@ export function totalsOf(items: Macros[]): Macros {
   );
 }
 
-// How what's wrong with a kind of food is put.
-type FoodWords = { what: string; amount: string; unit: string };
+// How a kind of food is named when saying what's wrong with it, e.g. "A Saved
+// food" needs "a serving amount".
+type FoodNouns = { subject: string; amountNoun: string; unitNoun: string };
 
-// A Food item or a Saved food: a name, an amount of something, and macros.
-type FoodValues = {
+// A Food item or a Saved food: a name, an amount in a unit, and the macros of
+// that much. For a Food item the amount is how much was eaten; for a Saved
+// food it's the Serving its macros are for. Null calories are worked out from
+// the macros.
+export type FoodValues = {
   name: string;
   amount: number;
   unit: string;
@@ -138,14 +142,15 @@ type FoodValues = {
 
 // The rule Food items and Saved foods share: a name, an amount above 0 in a
 // unit, and calories (when typed) and macros of 0 or more.
-function problemWithFood(words: FoodWords, food: FoodValues): string | undefined {
+function problemWithFood(nouns: FoodNouns, food: FoodValues): string | undefined {
+  const { subject, amountNoun, unitNoun } = nouns;
   const { name, amount, unit, calories, protein, carbs, fat } = food;
-  if (!name.trim()) return `${words.what} needs a name`;
-  if (!Number.isFinite(amount) || amount <= 0) return `${words.what} needs ${words.amount} above 0`;
-  if (!unit.trim()) return `${words.what} needs ${words.unit}, like g or scoop`;
+  if (!name.trim()) return `${subject} needs a name`;
+  if (!Number.isFinite(amount) || amount <= 0) return `${subject} needs ${amountNoun} above 0`;
+  if (!unit.trim()) return `${subject} needs ${unitNoun}, like g or scoop`;
   const amounts = calories === null ? [protein, carbs, fat] : [calories, protein, carbs, fat];
   if (!amounts.every(value => Number.isFinite(value) && value >= 0)) {
-    return `${words.what}'s calories and macros must be numbers, 0 or more`;
+    return `${subject}'s calories and macros must be numbers, 0 or more`;
   }
   return undefined;
 }
@@ -154,14 +159,18 @@ function problemWithFood(words: FoodWords, food: FoodValues): string | undefined
 // The Food item commands enforce it; screens use it to decide when to allow
 // saving.
 export function problemWithFoodItem(values: FoodItemValues): string | undefined {
-  const words = { what: 'A Food item', amount: 'a quantity', unit: 'a unit' };
-  return problemWithFood(words, { ...values, amount: values.quantity });
+  const nouns = { subject: 'A Food item', amountNoun: 'a quantity', unitNoun: 'a unit' };
+  return problemWithFood(nouns, { ...values, amount: values.quantity });
 }
 
 // The same for a Saved food, whose amount is its Serving.
 export function problemWithSavedFood(values: SavedFoodValues): string | undefined {
-  const words = { what: 'A Saved food', amount: 'a serving amount', unit: 'a serving unit' };
-  return problemWithFood(words, {
+  const nouns = {
+    subject: 'A Saved food',
+    amountNoun: 'a serving amount',
+    unitNoun: 'a serving unit',
+  };
+  return problemWithFood(nouns, {
     ...values,
     amount: values.servingAmount,
     unit: values.servingUnit,
@@ -169,19 +178,30 @@ export function problemWithSavedFood(values: SavedFoodValues): string | undefine
 }
 
 // The values to save: checked against problemWithFoodItem, with the name and
-// unit trimmed.
+// unit trimmed. Only these, so a whole Food item passed in can't change which
+// row it is or the Saved food it's linked to.
 export function requireValidFoodItem(values: FoodItemValues): FoodItemValues {
   const problem = problemWithFoodItem(values);
   if (problem) throw new Error(problem);
-  return { ...values, name: values.name.trim(), unit: values.unit.trim() };
+  const { name, quantity, unit, calories, protein, carbs, fat } = values;
+  return { name: name.trim(), quantity, unit: unit.trim(), calories, protein, carbs, fat };
 }
 
 // The values to save: checked against problemWithSavedFood, with the name and
-// serving unit trimmed.
+// serving unit trimmed. Only these, as for a Food item.
 export function requireValidSavedFood(values: SavedFoodValues): SavedFoodValues {
   const problem = problemWithSavedFood(values);
   if (problem) throw new Error(problem);
-  return { ...values, name: values.name.trim(), servingUnit: values.servingUnit.trim() };
+  const { name, servingAmount, servingUnit, calories, protein, carbs, fat } = values;
+  return {
+    name: name.trim(),
+    servingAmount,
+    servingUnit: servingUnit.trim(),
+    calories,
+    protein,
+    carbs,
+    fat,
+  };
 }
 
 // A Food item or Saved food as read back: its calories as typed, or worked
@@ -217,4 +237,11 @@ export function foodItemFromSavedFood(savedFood: SavedFood, quantity: number): F
     calories: savedFood.typedCalories === null ? null : calories,
     ...macros,
   };
+}
+
+// Why `quantity` of a Saved food can't be added to a Meal, or undefined when
+// it can: the Food item rule, for the copy it would add. addSavedFoodToMeal
+// enforces it; screens use it to decide when to allow adding.
+export function problemWithPortion(savedFood: SavedFood, quantity: number): string | undefined {
+  return problemWithFoodItem(foodItemFromSavedFood(savedFood, quantity));
 }

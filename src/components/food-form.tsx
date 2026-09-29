@@ -4,38 +4,25 @@ import { StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } fro
 
 import { Field } from '@/components/field';
 import { PrimaryButton } from '@/components/primary-button';
-import { caloriesFromMacros } from '@/core/tracker';
+import { caloriesFromMacros, type FoodValues } from '@/core/tracker';
 import { formatCalories } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
 
-// What the form asks for: a name, an amount in a unit, and the macros of that
-// much. For a Food item the amount is how much was eaten; for a Saved food
-// it's the Serving its macros are for. Null calories are worked out from the
-// macros.
-export type FoodFields = {
-  name: string;
-  amount: number;
-  unit: string;
-  calories: number | null;
-  protein: number;
-  carbs: number;
-  fat: number;
-};
-
 type Props = {
   // The food being changed; a new one starts blank, in grams.
-  initial: FoodFields | undefined;
+  initial: FoodValues | undefined;
   // What the amount is called, e.g. "Amount" or "Serving", and what it means.
   amountLabel: string;
   amountHint?: string;
   // The core's rule for this kind of food, which decides when it can be saved.
-  problemOf: (fields: FoodFields) => string | undefined;
+  problemOf: (values: FoodValues) => string | undefined;
   submitLabel: string;
-  onSubmit: (fields: FoodFields) => Promise<void>;
+  onSubmit: (values: FoodValues) => Promise<void>;
 };
 
-// A food's name, amount and macros. Calories left blank are worked out from
-// the macros, and a blank macro counts as none.
+// A food's name, amount and macros, for a Food item (FoodItemForm) or a Saved
+// food (SavedFoodForm). Calories left blank are worked out from the macros,
+// and a blank macro counts as none.
 export function FoodForm({
   initial,
   amountLabel,
@@ -160,7 +147,7 @@ function MacroField({ label, value, onChange, inputStyle }: MacroFieldProps) {
 
 // Undefined while a number field holds something that isn't a number. A blank
 // amount is left for the core's rule to refuse.
-function typedFood(text: Record<keyof FoodFields, string>): FoodFields | undefined {
+function typedFood(text: Record<keyof FoodValues, string>): FoodValues | undefined {
   const amount = parseDecimal(text.amount);
   const calories = parseDecimal(text.calories);
   const protein = parseDecimal(text.protein);

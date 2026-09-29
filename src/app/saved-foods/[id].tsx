@@ -1,12 +1,10 @@
 import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 
-import { FoodForm, type FoodFields } from '@/components/food-form';
+import { SavedFoodForm } from '@/components/saved-food-form';
 import { TextButton } from '@/components/text-button';
-import { problemWithSavedFood } from '@/core/tracker';
+import type { SavedFoodValues } from '@/core/tracker';
 import { tracker } from '@/database';
-import { fieldsOfSavedFood, savedFoodValuesOf } from '@/food-fields';
-import { servingHint } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -24,8 +22,7 @@ export default function SavedFoodScreen() {
     return <Text style={[styles.message, { color: colors.text }]}>This food was deleted.</Text>;
   }
 
-  async function save(fields: FoodFields) {
-    const values = savedFoodValuesOf(fields);
+  async function save(values: SavedFoodValues) {
     if (await runOrAlert("Couldn't save the food", () => tracker.editSavedFood(id, values))) {
       router.back();
     }
@@ -49,14 +46,7 @@ export default function SavedFoodScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: savedFood.name }} />
-      <FoodForm
-        initial={fieldsOfSavedFood(savedFood)}
-        amountLabel="Serving"
-        amountHint={servingHint}
-        problemOf={fields => problemWithSavedFood(savedFoodValuesOf(fields))}
-        submitLabel="Save"
-        onSubmit={save}
-      />
+      <SavedFoodForm initial={savedFood} submitLabel="Save" onSubmit={save} />
       <TextButton label="Delete saved food" destructive onPress={confirmDelete} />
     </ScrollView>
   );

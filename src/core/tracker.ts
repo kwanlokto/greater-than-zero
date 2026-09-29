@@ -47,9 +47,9 @@ import {
   foodItems,
   meals,
   plannedSets,
-  savedFoods,
   rotationEntries,
   rotations,
+  savedFoods,
   sets,
   settings,
   templateExercises,
@@ -64,12 +64,13 @@ export { schema };
 export type { BackupFile } from './backup';
 export {
   caloriesFromMacros,
-  foodItemFromSavedFood,
   portionOf,
   problemWithFoodItem,
+  problemWithPortion,
   problemWithSavedFood,
   type FoodItem,
   type FoodItemValues,
+  type FoodValues,
   type Macros,
   type Meal,
   type SavedFood,
@@ -2254,12 +2255,15 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Adds `quantity` of a Saved food, in its Serving unit, after the Meal's
     // other Food items: a copy of it with its macros scaled to match (see
-    // foodItemFromSavedFood), linked to it.
+    // foodItemFromSavedFood), linked to it. Enforces problemWithPortion.
     async addSavedFoodToMeal(
       mealId: string,
       savedFoodId: string,
       quantity: number,
     ): Promise<{ id: string }> {
+      // Looked up first: the copy stands on its own, so the Saved food being
+      // deleted meanwhile leaves a Food item linked to a deleted one, which
+      // is how every Food item ends up once its Saved food is deleted.
       const [savedFood] = await findSavedFoods(eq(savedFoods.id, savedFoodId));
       if (!savedFood) throw new Error('No such Saved food');
       const values = requireValidFoodItem(foodItemFromSavedFood(savedFood, quantity));
@@ -2297,6 +2301,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return meal;
     },
 
+    // Enforces problemWithSavedFood.
     async createSavedFood(values: SavedFoodValues): Promise<{ id: string }> {
       return db
         .insert(savedFoods)

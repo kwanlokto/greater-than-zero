@@ -1,5 +1,10 @@
 import { createTestDatabase } from './test-database';
-import { createTracker, problemWithSavedFood, type SavedFoodValues } from './tracker';
+import {
+  createTracker,
+  problemWithPortion,
+  problemWithSavedFood,
+  type SavedFoodValues,
+} from './tracker';
 
 // Per 100 g, as on the label.
 const oats: SavedFoodValues = {
@@ -152,9 +157,52 @@ describe('Adding a Saved food to a Meal', () => {
       calories: 400,
       protein: 15,
     });
-    await tracker.deleteSavedFood(savedWhey.id);
-
+    // Its calories are worked out from its macros, which change.
+    await tracker.editSavedFood(savedWhey.id, { ...whey, protein: 30, fat: 2 });
     expect(await tracker.getMeal(meal.id)).toEqual(logged);
+
+    await tracker.deleteSavedFood(savedOats.id);
+    await tracker.deleteSavedFood(savedWhey.id);
+    expect(await tracker.getMeal(meal.id)).toEqual(logged);
+  });
+
+  it('stays linked to the Saved food when the Food item is edited', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const savedOats = await tracker.createSavedFood(oats);
+    const meal = await tracker.createMeal();
+    const item = await tracker.addSavedFoodToMeal(meal.id, savedOats.id, 50);
+
+    await tracker.editFoodItem(item.id, {
+      name: 'Steel-cut oats',
+      quantity: 50,
+      unit: 'g',
+      calories: 190,
+      protein: 6.5,
+      carbs: 34,
+      fat: 3.25,
+    });
+
+    const [edited] = (await tracker.getMeal(meal.id))?.items ?? [];
+    expect([edited.name, edited.savedFoodId]).toEqual(['Steel-cut oats', savedOats.id]);
+  });
+
+  it('takes only the values when a Food item is edited with another whole Food item', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const savedOats = await tracker.createSavedFood(oats);
+    const savedWhey = await tracker.createSavedFood(whey);
+    const meal = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(meal.id, savedOats.id, 50);
+    await tracker.addSavedFoodToMeal(meal.id, savedWhey.id, 1);
+    const [oatsItem, wheyItem] = (await tracker.getMeal(meal.id))?.items ?? [];
+
+    await tracker.editFoodItem(oatsItem.id, { ...wheyItem, calories: wheyItem.typedCalories });
+
+    const [edited] = (await tracker.getMeal(meal.id))?.items ?? [];
+    expect([edited.id, edited.name, edited.savedFoodId]).toEqual([
+      oatsItem.id,
+      'Whey protein',
+      savedOats.id,
+    ]);
   });
 
   it('needs a quantity above 0, a Saved food still there and a Meal still there', async () => {
@@ -166,6 +214,9 @@ describe('Adding a Saved food to a Meal', () => {
     const deletedMeal = await tracker.createMeal();
     await tracker.deleteMeal(deletedMeal.id);
 
+    const saved = await tracker.getSavedFood(savedOats.id);
+    expect(saved && problemWithPortion(saved, 50)).toBeUndefined();
+    expect(saved && problemWithPortion(saved, 0)).toBe('A Food item needs a quantity above 0');
     await expect(tracker.addSavedFoodToMeal(meal.id, savedOats.id, 0)).rejects.toThrow(
       'A Food item needs a quantity above 0',
     );
