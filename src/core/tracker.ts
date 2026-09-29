@@ -22,6 +22,8 @@ import {
   exerciseEntries,
   exercises,
   plannedSets,
+  rotationEntries,
+  rotations,
   sets,
   settings,
   templateExercises,
@@ -134,6 +136,9 @@ export type Workout = {
   restEndsAt: Date | null;
   // The Template it was started from, or null when started empty.
   templateId: string | null;
+  // The Rotation it counted toward: the one active when it was started from
+  // one of its Templates. Null otherwise.
+  rotationId: string | null;
   entries: ExerciseEntry[];
 };
 
@@ -211,6 +216,22 @@ export type Template = {
   exercises: TemplateExercise[];
 };
 
+// Templates done in turn, e.g. Push → Pull → Legs. The active one decides
+// which Template is next up.
+export type Rotation = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  // In the order they come up.
+  entries: RotationEntry[];
+};
+
+// A Template at its place in a Rotation.
+export type RotationEntry = {
+  id: string;
+  template: Pick<Template, 'id' | 'name'>;
+};
+
 // What finishing a Workout reports.
 export type FinishSummary = {
   // The Template the Workout started from, when the Workout's Exercise list no
@@ -221,6 +242,9 @@ export type FinishSummary = {
   // A higher Target for each Exercise whose session beat it, each accepted
   // (acceptTargetUpdate) or declined on its own.
   targetUpdateOffers: TargetUpdateOffer[];
+  // The Template to do next from the active Rotation, now this Workout is
+  // done (see getNextUp).
+  nextUp: Template | null;
 };
 
 // An offer to raise the Target weight of an Exercise in a Template, after a
@@ -432,6 +456,21 @@ function templateStillThere(templateId: string) {
   return and(eq(templates.id, templateId), isNull(templates.deletedAt));
 }
 
+// The Rotation next up comes from.
+function activeRotation() {
+  return and(eq(rotations.isActive, true), isNull(rotations.deletedAt));
+}
+
+// A Rotation that hasn't been deleted.
+function rotationStillThere(rotationId: string) {
+  return and(eq(rotations.id, rotationId), isNull(rotations.deletedAt));
+}
+
+// A Template still in its Rotation: not removed, alone or with the Rotation.
+function rotationEntryStillIn(rotationEntryId: string) {
+  return and(eq(rotationEntries.id, rotationEntryId), isNull(rotationEntries.deletedAt));
+}
+
 // An Exercise still in its Template: not removed, alone or with the Template.
 function templateExerciseStillIn(templateExerciseId: string) {
   return and(eq(templateExercises.id, templateExerciseId), isNull(templateExercises.deletedAt));
@@ -554,6 +593,15 @@ function targetFromSets(loggedSets: WorkoutSet[]): TargetValues | undefined {
   };
 }
 
+// The IDs in `order` with `id` moved to `toIndex`, counting from 0, and the
+// ones in between shifted along by one. Undefined when there's no such place.
+function movedTo(order: string[], id: string, toIndex: number): string[] | undefined {
+  const others = order.filter(other => other !== id);
+  if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex > others.length) return undefined;
+  others.splice(toIndex, 0, id);
+  return others;
+}
+
 function requireValidTarget(trackingType: TrackingType, target: TargetValues) {
   const problem = problemWithTarget(trackingType, target);
   if (problem) throw new Error(problem);
@@ -568,6 +616,12 @@ function requireExerciseName(typed: string): string {
 function requireTemplateName(typed: string): string {
   const name = typed.trim();
   if (!name) throw new Error('A Template needs a name');
+  return name;
+}
+
+function requireRotationName(typed: string): string {
+  const name = typed.trim();
+  if (!name) throw new Error('A Rotation needs a name');
   return name;
 }
 
@@ -628,6 +682,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .select({ id: workouts.id })
       .from(workouts)
       .where(inProgress())
+      .get()?.id;
+  }
+
+  // The active Rotation, when the Template is in it: the one a Workout started
+  // from the Template counts toward. Synchronous, so it can run inside a
+  // transaction.
+  function idOfActiveRotationWith(templateId: string, tx: TrackerDatabase = db) {
+    return tx
+      .select({ id: rotations.id })
+      .from(rotations)
+      .innerJoin(rotationEntries, eq(rotationEntries.rotationId, rotations.id))
+      .where(
+        and(
+          activeRotation(),
+          eq(rotationEntries.templateId, templateId),
+          isNull(rotationEntries.deletedAt),
+        ),
+      )
       .get()?.id;
   }
 
@@ -815,6 +887,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         isBackfilled: true,
         restEndsAt: true,
         templateId: true,
+        rotationId: true,
       },
       with: {
         entries: {
@@ -1093,6 +1166,51 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     }));
   }
 
+  // The Rotations matching `where`, by name, each with its Templates in order.
+  // Deleted Rotations and removed Templates are left out.
+  async function findRotations(where: SQL | undefined): Promise<Rotation[]> {
+    return db.query.rotations.findMany({
+      where: and(where, isNull(rotations.deletedAt)),
+      orderBy: sql`${rotations.name} COLLATE NOCASE`,
+      columns: { id: true, name: true, isActive: true },
+      with: {
+        entries: {
+          where: isNull(rotationEntries.deletedAt),
+          orderBy: asc(rotationEntries.position),
+          columns: { id: true },
+          with: { template: { columns: { id: true, name: true } } },
+        },
+      },
+    });
+  }
+
+  // The Template to do next from the active Rotation: the one after the
+  // Template of the last finished Workout that counted toward it, wrapping
+  // around. The first one when there's no such Workout, or its Template has
+  // since left the Rotation. Null with no active Rotation, or an empty one.
+  // The Workout `finishing` counts as finished already, so finishWorkout can
+  // work it out before finishing.
+  async function findNextUp(finishing?: string): Promise<Template | null> {
+    const [active] = await findRotations(activeRotation());
+    if (!active || active.entries.length === 0) return null;
+    const [last] = await db
+      .select({ templateId: workouts.templateId })
+      .from(workouts)
+      .where(
+        and(
+          eq(workouts.rotationId, active.id),
+          or(finished(), finishing === undefined ? undefined : eq(workouts.id, finishing)),
+        ),
+      )
+      .orderBy(...latestWorkoutFirst)
+      .limit(1);
+    // -1 when it's not there, so the first one.
+    const lastIndex = active.entries.findIndex(({ template }) => template.id === last?.templateId);
+    const next = active.entries[(lastIndex + 1) % active.entries.length];
+    const [template] = await findTemplates(eq(templates.id, next.template.id));
+    return template ?? null;
+  }
+
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const [workout] = await findWorkouts(eq(workouts.id, id));
     return workout;
@@ -1181,9 +1299,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       // same moment can't both start one.
       return db.transaction(tx => {
         if (idOfWorkoutInProgress(tx)) throw new Error('A Workout is already in progress');
+        const rotationId = templateId && idOfActiveRotationWith(templateId, tx);
         const started = tx
           .insert(workouts)
-          .values(workout)
+          .values({ ...workout, rotationId })
           .returning({ id: workouts.id })
           .get();
         plan.forEach(({ exerciseId, templateExerciseId, sets: planned }, position) => {
@@ -1373,6 +1492,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const pairing = workout && (await templatePairingOf(workout));
       const update = pairing && (await templateUpdateFor(workout, pairing));
       const targetUpdateOffers = pairing ? await targetUpdateOffersFor(workout, pairing) : [];
+      const nextUp = await findNextUp(id);
       const finishedAt = now();
       db.transaction(tx => {
         const workout = tx
@@ -1410,6 +1530,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           ? { templateId: update.templateId, templateName: update.templateName }
           : null,
         targetUpdateOffers,
+        nextUp,
       };
     },
 
@@ -1518,7 +1639,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       if (renamed.length === 0) throw new Error('No such Template');
     },
 
-    // Soft-deletes the Template with its Exercises, together.
+    // Soft-deletes the Template with its Exercises, together, and takes it out
+    // of every Rotation.
     async deleteTemplate(id: string): Promise<void> {
       const deletedAt = now();
       db.transaction(tx => {
@@ -1532,6 +1654,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         tx.update(templateExercises)
           .set({ deletedAt })
           .where(and(eq(templateExercises.templateId, id), isNull(templateExercises.deletedAt)))
+          .run();
+        tx.update(rotationEntries)
+          .set({ deletedAt })
+          .where(and(eq(rotationEntries.templateId, id), isNull(rotationEntries.deletedAt)))
           .run();
       });
     },
@@ -1611,13 +1737,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           )
           .orderBy(asc(templateExercises.position))
           .all()
-          .map(row => row.id)
-          .filter(id => id !== templateExerciseId);
-        if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex > order.length) {
-          throw new Error('No such place in the Template');
-        }
-        order.splice(toIndex, 0, templateExerciseId);
-        order.forEach((id, position) => {
+          .map(row => row.id);
+        const moved = movedTo(order, templateExerciseId, toIndex);
+        if (!moved) throw new Error('No such place in the Template');
+        moved.forEach((id, position) => {
           tx.update(templateExercises).set({ position }).where(eq(templateExercises.id, id)).run();
         });
       });
@@ -1722,6 +1845,157 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     async getTemplate(id: string): Promise<Template | undefined> {
       const [template] = await findTemplates(eq(templates.id, id));
       return template;
+    },
+
+    async createRotation(name: string): Promise<{ id: string }> {
+      return db
+        .insert(rotations)
+        .values({ name: requireRotationName(name) })
+        .returning({ id: rotations.id })
+        .get();
+    },
+
+    // Appends the Template after the ones already in the Rotation. A Template
+    // comes up once in a Rotation, so next up knows where it's at.
+    async addTemplateToRotation(rotationId: string, templateId: string): Promise<{ id: string }> {
+      // Checked and inserted together, so a double tap adds it once.
+      return db.transaction(tx => {
+        const rotation = tx
+          .select({ id: rotations.id })
+          .from(rotations)
+          .where(rotationStillThere(rotationId))
+          .get();
+        if (!rotation) throw new Error('No such Rotation');
+        const template = tx
+          .select({ name: templates.name })
+          .from(templates)
+          .where(templateStillThere(templateId))
+          .get();
+        if (!template) throw new Error('No such Template');
+        const already = tx
+          .select({ id: rotationEntries.id })
+          .from(rotationEntries)
+          .where(
+            and(
+              eq(rotationEntries.rotationId, rotationId),
+              eq(rotationEntries.templateId, templateId),
+              isNull(rotationEntries.deletedAt),
+            ),
+          )
+          .get();
+        if (already) throw new Error(`${template.name} is already in that Rotation`);
+        const position = nextPosition(
+          rotationEntries,
+          rotationEntries.position,
+          eq(rotationEntries.rotationId, rotationId),
+          tx,
+        );
+        return tx
+          .insert(rotationEntries)
+          .values({ rotationId, templateId, position })
+          .returning({ id: rotationEntries.id })
+          .get();
+      });
+    },
+
+    async renameRotation(id: string, name: string): Promise<void> {
+      const renamed = await db
+        .update(rotations)
+        .set({ name: requireRotationName(name) })
+        .where(rotationStillThere(id))
+        .returning({ id: rotations.id });
+      if (renamed.length === 0) throw new Error('No such Rotation');
+    },
+
+    // Soft delete: the others keep their positions, so their order holds.
+    async removeTemplateFromRotation(rotationEntryId: string): Promise<void> {
+      const removed = await db
+        .update(rotationEntries)
+        .set({ deletedAt: now() })
+        .where(rotationEntryStillIn(rotationEntryId))
+        .returning({ id: rotationEntries.id });
+      if (removed.length === 0) throw new Error('No such Template in a Rotation');
+    },
+
+    // Puts the Template at `toIndex` among the Rotation's Templates, counting
+    // from 0, and shifts the ones in between along by one.
+    async moveTemplateInRotation(rotationEntryId: string, toIndex: number): Promise<void> {
+      db.transaction(tx => {
+        const moving = tx
+          .select({ rotationId: rotationEntries.rotationId })
+          .from(rotationEntries)
+          .where(rotationEntryStillIn(rotationEntryId))
+          .get();
+        if (!moving) throw new Error('No such Template in a Rotation');
+        const order = tx
+          .select({ id: rotationEntries.id })
+          .from(rotationEntries)
+          .where(
+            and(
+              eq(rotationEntries.rotationId, moving.rotationId),
+              isNull(rotationEntries.deletedAt),
+            ),
+          )
+          .orderBy(asc(rotationEntries.position))
+          .all()
+          .map(row => row.id);
+        const moved = movedTo(order, rotationEntryId, toIndex);
+        if (!moved) throw new Error('No such place in the Rotation');
+        moved.forEach((id, position) => {
+          tx.update(rotationEntries).set({ position }).where(eq(rotationEntries.id, id)).run();
+        });
+      });
+    },
+
+    // Soft-deletes the Rotation with its entries, together. Workouts that
+    // counted toward it keep saying so.
+    async deleteRotation(id: string): Promise<void> {
+      const deletedAt = now();
+      db.transaction(tx => {
+        const deleted = tx
+          .update(rotations)
+          .set({ deletedAt, isActive: false })
+          .where(rotationStillThere(id))
+          .returning({ id: rotations.id })
+          .all();
+        if (deleted.length === 0) throw new Error('No such Rotation');
+        tx.update(rotationEntries)
+          .set({ deletedAt })
+          .where(and(eq(rotationEntries.rotationId, id), isNull(rotationEntries.deletedAt)))
+          .run();
+      });
+    },
+
+    // Makes the Rotation the active one, the one next up comes from, in place
+    // of any other. Null leaves none active.
+    async setActiveRotation(id: string | null): Promise<void> {
+      // Together, so there's never more than one, or none after a failure.
+      db.transaction(tx => {
+        tx.update(rotations).set({ isActive: false }).where(eq(rotations.isActive, true)).run();
+        if (id === null) return;
+        const activated = tx
+          .update(rotations)
+          .set({ isActive: true })
+          .where(rotationStillThere(id))
+          .returning({ id: rotations.id })
+          .all();
+        if (activated.length === 0) throw new Error('No such Rotation');
+      });
+    },
+
+    // Every Rotation, by name.
+    getRotations(): Promise<Rotation[]> {
+      return findRotations(undefined);
+    },
+
+    async getRotation(id: string): Promise<Rotation | undefined> {
+      const [rotation] = await findRotations(eq(rotations.id, id));
+      return rotation;
+    },
+
+    // The Template to do next from the active Rotation (see findNextUp).
+    getNextUp(): Promise<Template | null> {
+      return findNextUp();
     },
 
     // The local dates in a month, given as YYYY-MM, with at least one finished

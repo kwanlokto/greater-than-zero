@@ -15,6 +15,7 @@ export default function TodayScreen() {
   const { colors } = useTheme();
   const workoutInProgress = useWorkoutInProgress();
   const templates = useTrackerQuery(() => tracker.getTemplates(), []);
+  const nextUp = useTrackerQuery(() => tracker.getNextUp(), []);
 
   async function start(templateId?: string) {
     const started = await runOrAlert("Couldn't start the workout", () =>
@@ -29,6 +30,7 @@ export default function TodayScreen() {
           returns to it. */}
       {workoutInProgress === null && (
         <>
+          {nextUp && <NextUp template={nextUp} onStart={() => start(nextUp.id)} />}
           <PrimaryButton label="Start empty workout" onPress={() => start()} />
           <View style={styles.section}>
             <Text style={[styles.heading, { color: colors.text }]}>Start from template</Text>
@@ -51,9 +53,32 @@ export default function TodayScreen() {
         </>
       )}
       <Text style={[styles.placeholder, { color: colors.text }]}>
-        Your next-up workout, today's food and today's weigh-in will show here.
+        Today's food and weigh-in will show here.
       </Text>
     </ScrollView>
+  );
+}
+
+type NextUpProps = {
+  template: Template;
+  onStart: () => Promise<void>;
+};
+
+// The active Rotation's next-up Template, to start with one tap.
+function NextUp({ template, onStart }: NextUpProps) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.heading, { color: colors.text }]}>Next up</Text>
+      <View style={[styles.template, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.heading, { color: colors.text }]}>{template.name}</Text>
+        <Text style={[styles.details, { color: colors.text }]}>{exerciseList(template)}</Text>
+        <View style={styles.startNextUp}>
+          <PrimaryButton label={`Start ${template.name}`} onPress={onStart} />
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -66,7 +91,6 @@ function TemplateButton({ template, onPress }: TemplateButtonProps) {
   const { colors } = useTheme();
   // A double tap starts one Workout, not an error about the first.
   const { press, busy } = useGuardedPress(onPress);
-  const { exercises } = template;
 
   return (
     <Pressable
@@ -81,13 +105,15 @@ function TemplateButton({ template, onPress }: TemplateButtonProps) {
       ]}
     >
       <Text style={[styles.heading, { color: colors.text }]}>{template.name}</Text>
-      <Text style={[styles.details, { color: colors.text }]}>
-        {exercises.length === 0
-          ? exerciseCount(0)
-          : exercises.map(({ exercise }) => exercise.name).join(', ')}
-      </Text>
+      <Text style={[styles.details, { color: colors.text }]}>{exerciseList(template)}</Text>
     </Pressable>
   );
+}
+
+// "Bench Press, Dip", under a Template's name on Today.
+function exerciseList({ exercises }: Template): string {
+  if (exercises.length === 0) return exerciseCount(0);
+  return exercises.map(({ exercise }) => exercise.name).join(', ');
 }
 
 const styles = StyleSheet.create({
@@ -113,6 +139,9 @@ const styles = StyleSheet.create({
   details: {
     fontSize: 14,
     opacity: 0.7,
+  },
+  startNextUp: {
+    marginTop: 8,
   },
   placeholder: {
     fontSize: 16,

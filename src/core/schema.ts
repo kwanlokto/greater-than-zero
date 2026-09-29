@@ -92,6 +92,27 @@ export const templateExercises = sqliteTable('template_exercises', {
   targetWeightUnit: text('target_weight_unit', { enum: weightUnits }).notNull(),
 });
 
+// Templates done in turn, e.g. Push → Pull → Legs, deciding which is next up
+// whatever the weekday.
+export const rotations = sqliteTable('rotations', {
+  ...rowColumns,
+  name: text('name').notNull(),
+  // The one next up comes from. At most one Rotation is active.
+  isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+});
+
+// A Template in a Rotation, at its place in the turn.
+export const rotationEntries = sqliteTable('rotation_entries', {
+  ...rowColumns,
+  rotationId: text('rotation_id')
+    .notNull()
+    .references(() => rotations.id),
+  templateId: text('template_id')
+    .notNull()
+    .references(() => templates.id),
+  position: integer('position').notNull(),
+});
+
 export const workouts = sqliteTable('workouts', {
   ...rowColumns,
   // The phone's local calendar date the Workout counts toward, as YYYY-MM-DD:
@@ -109,6 +130,9 @@ export const workouts = sqliteTable('workouts', {
   restEndsAt: integer('rest_ends_at', { mode: 'timestamp_ms' }),
   // The Template it was started from; empty when started empty.
   templateId: text('template_id').references(() => templates.id),
+  // The Rotation it counted toward: the active one, when it was started from
+  // one of its Templates. Empty otherwise.
+  rotationId: text('rotation_id').references(() => rotations.id),
 });
 
 // An Exercise within a Workout.
@@ -169,6 +193,15 @@ export const templateExercisesRelations = relations(templateExercises, ({ one })
     fields: [templateExercises.exerciseId],
     references: [exercises.id],
   }),
+}));
+
+export const rotationsRelations = relations(rotations, ({ many }) => ({
+  entries: many(rotationEntries),
+}));
+
+export const rotationEntriesRelations = relations(rotationEntries, ({ one }) => ({
+  rotation: one(rotations, { fields: [rotationEntries.rotationId], references: [rotations.id] }),
+  template: one(templates, { fields: [rotationEntries.templateId], references: [templates.id] }),
 }));
 
 export const workoutsRelations = relations(workouts, ({ many }) => ({

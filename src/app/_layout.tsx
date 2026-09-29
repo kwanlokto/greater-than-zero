@@ -61,6 +61,13 @@ export default function RootLayout() {
               options={{ title: 'Add exercise', presentation: 'modal' }}
             />
             <Stack.Screen name="templates/target" options={{ title: 'Target' }} />
+            <Stack.Screen name="rotations/index" options={{ title: 'Rotations' }} />
+            <Stack.Screen name="rotations/new" options={{ title: 'New rotation' }} />
+            <Stack.Screen name="rotations/[id]" options={{ title: 'Rotation' }} />
+            <Stack.Screen
+              name="rotations/choose-template"
+              options={{ title: 'Add template', presentation: 'modal' }}
+            />
             <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
             {/* The Workout takes over the screen, covering the tabs. */}
             <Stack.Screen

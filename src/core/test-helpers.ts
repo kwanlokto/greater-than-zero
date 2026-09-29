@@ -106,3 +106,25 @@ export async function targetsOf(tracker: Tracker, templateId: string) {
     target.weightUnit,
   ]);
 }
+
+// A Rotation of new Templates with these names, in order, each holding one
+// Exercise with the same Target.
+export async function createRotationWith(tracker: Tracker, name: string, templateNames: string[]) {
+  const rotation = await tracker.createRotation(name);
+  const templates = [];
+  const entries = [];
+  for (const templateName of templateNames) {
+    const { template } = await createTemplateWith(tracker, templateName, ['Bench Press']);
+    templates.push(template);
+    entries.push(await tracker.addTemplateToRotation(rotation.id, template.id));
+  }
+  return { rotation, templates, entries };
+}
+
+// Starts a Workout from the Template, logs a Set and finishes it.
+export async function doTemplateWorkout(tracker: Tracker, templateId: string, start?: NewWorkout) {
+  const workout = await tracker.startWorkout({ ...start, templateId });
+  const [entry] = await entriesOf(tracker, workout.id);
+  await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+  return { workout, summary: await tracker.finishWorkout(workout.id) };
+}

@@ -17,6 +17,7 @@ export default function SettingsScreen() {
         <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
       </View>
       <LinkRow href="/templates" label="Templates" />
+      <LinkRow href="/rotations" label="Rotations" />
       <LinkRow href="/exercises" label="Exercise library" />
     </View>
   );

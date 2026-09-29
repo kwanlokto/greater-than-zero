@@ -1,8 +1,6 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { PrimaryButton } from '@/components/primary-button';
+import { NameForm } from '@/components/name-form';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 
@@ -30,10 +28,8 @@ function creationFor(fromWorkoutId: string | undefined) {
 export default function NewTemplateScreen() {
   const creation = creationFor(useLocalSearchParams<{ fromWorkoutId?: string }>().fromWorkoutId);
   const router = useRouter();
-  const { colors } = useTheme();
-  const [name, setName] = useState('');
 
-  async function create() {
+  async function create(name: string) {
     let id: string | undefined;
     const created = await runOrAlert(creation.failure, async () => {
       id = (await creation.run(name)).id;
@@ -42,45 +38,9 @@ export default function NewTemplateScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <>
       <Stack.Screen options={{ title: creation.title }} />
-      <View style={styles.field}>
-        <Text style={[styles.label, { color: colors.text }]}>Name</Text>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Push"
-          placeholderTextColor="#8e8e93"
-          autoCapitalize="words"
-          autoFocus
-          style={[
-            styles.input,
-            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        />
-      </View>
-      <PrimaryButton label={creation.submitLabel} disabled={name.trim() === ''} onPress={create} />
-    </ScrollView>
+      <NameForm placeholder="e.g. Push" submitLabel={creation.submitLabel} onSubmit={create} />
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 24,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-});

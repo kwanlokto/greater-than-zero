@@ -1,15 +1,14 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { useState, type ComponentProps } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { IconButton } from '@/components/icon-button';
+import { NameField } from '@/components/name-field';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextButton } from '@/components/text-button';
 import type { Template, TemplateExercise } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { describeTarget } from '@/template-labels';
-import { useGuardedPress } from '@/use-guarded-press';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // One Template: its name, and its Exercises in order with their Targets. Every
@@ -27,24 +26,35 @@ export default function TemplateScreen() {
   }
 
   const confirmDelete = () => {
-    Alert.alert(`Delete ${template.name}?`, 'Its exercises and targets will be removed.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't delete the template", () => tracker.deleteTemplate(id))) {
-            router.back();
-          }
+    Alert.alert(
+      `Delete ${template.name}?`,
+      "Its exercises and targets will be removed, and it will leave any rotation it's in.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (
+              await runOrAlert("Couldn't delete the template", () => tracker.deleteTemplate(id))
+            ) {
+              router.back();
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: template.name }} />
-      <TemplateName template={template} />
+      <NameField
+        name={template.name}
+        accessibilityLabel="Template name"
+        failureTitle="Couldn't rename the template"
+        rename={name => tracker.renameTemplate(id, name)}
+      />
       {template.exercises.length === 0 ? (
         <Text style={[styles.message, { color: colors.text }]}>No exercises yet.</Text>
       ) : (
@@ -65,34 +75,6 @@ export default function TemplateScreen() {
       />
       <TextButton label="Delete template" destructive onPress={confirmDelete} />
     </ScrollView>
-  );
-}
-
-// Saved when the lifter is done typing. A blank name is refused and put back.
-function TemplateName({ template }: { template: Template }) {
-  const { colors } = useTheme();
-  const [name, setName] = useState(template.name);
-
-  async function save() {
-    if (name === template.name) return;
-    const renamed = await runOrAlert("Couldn't rename the template", () =>
-      tracker.renameTemplate(template.id, name),
-    );
-    if (!renamed) setName(template.name);
-  }
-
-  return (
-    <TextInput
-      value={name}
-      onChangeText={setName}
-      onEndEditing={save}
-      autoCapitalize="words"
-      accessibilityLabel="Template name"
-      style={[
-        styles.name,
-        { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    />
   );
 }
 
@@ -159,48 +141,10 @@ function TemplateExerciseRow({ template, templateExercise, index }: RowProps) {
   );
 }
 
-type IconButtonProps = {
-  icon: ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  disabled?: boolean;
-  onPress: () => void | Promise<unknown>;
-};
-
-function IconButton({ icon, label, disabled = false, onPress }: IconButtonProps) {
-  const { colors } = useTheme();
-  // A double tap moves an Exercise one place, not two.
-  const { press, busy } = useGuardedPress(async () => {
-    await onPress();
-  });
-  const inactive = disabled || busy;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: inactive }}
-      disabled={inactive}
-      hitSlop={6}
-      onPress={press}
-      style={[styles.iconButton, { opacity: inactive ? 0.3 : 1 }]}
-    >
-      <Ionicons name={icon} size={22} color={colors.text} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     padding: 16,
     gap: 16,
-  },
-  name: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 18,
-    fontWeight: '600',
   },
   card: {
     flexDirection: 'row',
@@ -223,9 +167,6 @@ const styles = StyleSheet.create({
   target: {
     fontSize: 14,
     opacity: 0.7,
-  },
-  iconButton: {
-    padding: 6,
   },
   message: {
     padding: 24,
