@@ -3,7 +3,7 @@ import { Link, Stack, useRouter, useTheme } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { tracker } from '@/database';
-import { describeTurn } from '@/rotation-labels';
+import { describeTemplateOrder } from '@/rotation-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function RotationsScreen() {
@@ -25,7 +25,9 @@ export default function RotationsScreen() {
           >
             <View style={styles.rowText}>
               <Text style={[styles.name, { color: colors.text }]}>{item.name}</Text>
-              <Text style={[styles.details, { color: colors.text }]}>{describeTurn(item)}</Text>
+              <Text style={[styles.details, { color: colors.text }]}>
+                {describeTemplateOrder(item)}
+              </Text>
             </View>
             {item.isActive && (
               <Text style={[styles.active, { color: colors.primary }]}>Active</Text>

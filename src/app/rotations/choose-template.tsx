@@ -2,15 +2,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { Template } from '@/core/tracker';
+import { canAddToRotation, type Template } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseCount } from '@/template-labels';
 import { useGuardedPress } from '@/use-guarded-press';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// Picks a Template to add to the end of a Rotation. Only ones not in it yet
-// are offered, as a Template comes up once in a Rotation.
+// Picks a Template to add to the end of a Rotation, from those it can take.
 export default function ChooseRotationTemplateScreen() {
   const { rotationId } = useLocalSearchParams<{ rotationId: string }>();
   const router = useRouter();
@@ -20,8 +19,10 @@ export default function ChooseRotationTemplateScreen() {
       tracker.getTemplates(),
       tracker.getRotation(rotationId),
     ]);
-    const inRotation = new Set(rotation?.entries.map(({ template }) => template.id));
-    return { any: all.length > 0, addable: all.filter(({ id }) => !inRotation.has(id)) };
+    return {
+      hasTemplates: all.length > 0,
+      addable: rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [],
+    };
   }, [rotationId]);
 
   async function add(template: Template) {
@@ -38,7 +39,7 @@ export default function ChooseRotationTemplateScreen() {
       renderItem={({ item }) => <TemplateRow template={item} onPress={() => add(item)} />}
       ListEmptyComponent={
         templates &&
-        (templates.any ? (
+        (templates.hasTemplates ? (
           <Text style={[styles.empty, { color: colors.text }]}>
             Every template is already in this rotation.
           </Text>

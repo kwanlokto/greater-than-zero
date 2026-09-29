@@ -101,7 +101,7 @@ export const rotations = sqliteTable('rotations', {
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
 });
 
-// A Template in a Rotation, at its place in the turn.
+// A Template in a Rotation, at its place in the order.
 export const rotationEntries = sqliteTable('rotation_entries', {
   ...rowColumns,
   rotationId: text('rotation_id')

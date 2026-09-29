@@ -5,7 +5,7 @@ import { PrimaryButton } from '@/components/primary-button';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
-import { exerciseCount } from '@/template-labels';
+import { exerciseList } from '@/template-labels';
 import { useGuardedPress } from '@/use-guarded-press';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -108,12 +108,6 @@ function TemplateButton({ template, onPress }: TemplateButtonProps) {
       <Text style={[styles.details, { color: colors.text }]}>{exerciseList(template)}</Text>
     </Pressable>
   );
-}
-
-// "Bench Press, Dip", under a Template's name on Today.
-function exerciseList({ exercises }: Template): string {
-  if (exercises.length === 0) return exerciseCount(0);
-  return exercises.map(({ exercise }) => exercise.name).join(', ');
 }
 
 const styles = StyleSheet.create({

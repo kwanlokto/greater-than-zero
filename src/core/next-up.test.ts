@@ -5,6 +5,7 @@ import {
   createTemplateWith,
   doTemplateWorkout,
   doWorkout,
+  entriesOf,
 } from './test-helpers';
 import { createTracker, type Tracker } from './tracker';
 
@@ -168,6 +169,42 @@ describe('Next up', () => {
     await doTemplateWorkout(tracker, push.id);
 
     await tracker.setActiveRotation(ppl.id);
+
+    expect(await nextUpName(tracker)).toBe('Push');
+  });
+
+  it('counts a Workout toward the Rotation active when it started, whatever is active at finish', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const {
+      rotation: ppl,
+      templates: [push],
+    } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
+    const { rotation: upperLower } = await createRotationWith(tracker, 'Upper Lower', [
+      'Upper',
+      'Lower',
+    ]);
+    await tracker.setActiveRotation(ppl.id);
+    const workout = await tracker.startWorkout({ templateId: push.id });
+    const [entry] = await entriesOf(tracker, workout.id);
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+
+    await tracker.setActiveRotation(upperLower.id);
+    await tracker.finishWorkout(workout.id);
+
+    expect(await nextUpName(tracker)).toBe('Upper');
+    await tracker.setActiveRotation(ppl.id);
+    expect(await nextUpName(tracker)).toBe('Pull');
+  });
+
+  it("doesn't count Workouts done before their Template was in the active Rotation", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const {
+      rotation,
+      templates: [push],
+    } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
+    await doTemplateWorkout(tracker, push.id);
+
+    await tracker.setActiveRotation(rotation.id);
 
     expect(await nextUpName(tracker)).toBe('Push');
   });

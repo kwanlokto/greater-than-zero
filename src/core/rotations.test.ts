@@ -1,6 +1,6 @@
 import { createTestDatabase } from './test-database';
 import { createRotationWith, createTemplateWith, names } from './test-helpers';
-import { createTracker, type Rotation, type Tracker } from './tracker';
+import { canAddToRotation, createTracker, type Rotation, type Tracker } from './tracker';
 
 function templateNamesOf(rotation: Rotation | undefined) {
   return rotation?.entries.map(({ template }) => template.name);
@@ -160,6 +160,19 @@ describe('Rotations', () => {
       'Push is already in that Rotation',
     );
     expect(templateNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push']);
+  });
+
+  it('tell screens which Templates can still be added', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    const { template: pull } = await createTemplateWith(tracker, 'Pull', ['Pull-up']);
+    const rotation = await tracker.createRotation('PPL');
+    await tracker.addTemplateToRotation(rotation.id, push.id);
+
+    const saved = await tracker.getRotation(rotation.id);
+
+    expect(saved && canAddToRotation(saved, push.id)).toBe(false);
+    expect(saved && canAddToRotation(saved, pull.id)).toBe(true);
   });
 
   it("can't take a deleted Template, or go in a deleted Rotation", async () => {

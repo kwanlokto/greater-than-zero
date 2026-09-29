@@ -57,7 +57,7 @@ export default function RotationScreen() {
       />
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.cardText}>
-          <Text style={[styles.templateName, { color: colors.text }]}>Active</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Active</Text>
           <Text style={[styles.details, { color: colors.text }]}>
             Today shows its next-up template
           </Text>
@@ -119,7 +119,7 @@ function RotationEntryRow({ rotation, entry, index }: RowProps) {
 
   return (
     <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.cardText, styles.templateName, { color: colors.text }]}>
+      <Text style={[styles.cardText, styles.title, { color: colors.text }]}>
         {index + 1}. {name}
       </Text>
       <IconButton
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  templateName: {
+  title: {
     fontSize: 16,
     fontWeight: '600',
   },

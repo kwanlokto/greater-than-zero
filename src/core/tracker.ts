@@ -383,6 +383,13 @@ export function canFinishWorkout(workout: Pick<Workout, 'entries'>): boolean {
   return workout.entries.some(entry => entry.sets.length > 0);
 }
 
+// A Template comes up once in a Rotation, so next up knows where it's at.
+// addTemplateToRotation enforces it; screens use it to decide which Templates
+// to offer.
+export function canAddToRotation(rotation: Pick<Rotation, 'entries'>, templateId: string): boolean {
+  return rotation.entries.every(({ template }) => template.id !== templateId);
+}
+
 // A Workout can be added to a date before today's, to backfill a session that
 // wasn't logged; today's are started as they happen. startWorkout enforces it;
 // screens use it to decide whether to offer adding one.
@@ -1188,9 +1195,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // Template of the last finished Workout that counted toward it, wrapping
   // around. The first one when there's no such Workout, or its Template has
   // since left the Rotation. Null with no active Rotation, or an empty one.
-  // The Workout `finishing` counts as finished already, so finishWorkout can
-  // work it out before finishing.
-  async function findNextUp(finishing?: string): Promise<Template | null> {
+  // The Workout finishingWorkoutId counts as finished already, so
+  // finishWorkout can work it out before finishing it.
+  async function findNextUp(finishingWorkoutId?: string): Promise<Template | null> {
     const [active] = await findRotations(activeRotation());
     if (!active || active.entries.length === 0) return null;
     const [last] = await db
@@ -1199,7 +1206,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .where(
         and(
           eq(workouts.rotationId, active.id),
-          or(finished(), finishing === undefined ? undefined : eq(workouts.id, finishing)),
+          or(
+            finished(),
+            finishingWorkoutId === undefined ? undefined : eq(workouts.id, finishingWorkoutId),
+          ),
         ),
       )
       .orderBy(...latestWorkoutFirst)
@@ -1855,8 +1865,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .get();
     },
 
-    // Appends the Template after the ones already in the Rotation. A Template
-    // comes up once in a Rotation, so next up knows where it's at.
+    // Appends the Template after the ones already in the Rotation. Enforces
+    // canAddToRotation's rule against the saved Rotation.
     async addTemplateToRotation(rotationId: string, templateId: string): Promise<{ id: string }> {
       // Checked and inserted together, so a double tap adds it once.
       return db.transaction(tx => {
