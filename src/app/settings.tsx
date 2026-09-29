@@ -1,9 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Link, useTheme, type Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PrimaryButton } from '@/components/primary-button';
 import { UnitPicker } from '@/components/unit-picker';
 import { tracker } from '@/database';
+import { runOrAlert } from '@/run-or-alert';
+import { shareBackup } from '@/share-backup';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function SettingsScreen() {
@@ -11,7 +14,7 @@ export default function SettingsScreen() {
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.section}>
         <Text style={[styles.heading, { color: colors.text }]}>Display unit</Text>
         <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
@@ -19,7 +22,19 @@ export default function SettingsScreen() {
       <LinkRow href="/templates" label="Templates" />
       <LinkRow href="/rotations" label="Rotations" />
       <LinkRow href="/exercises" label="Exercise library" />
-    </View>
+      <View style={styles.section}>
+        <Text style={[styles.heading, { color: colors.text }]}>Backup</Text>
+        <Text style={[styles.details, { color: colors.text }]}>
+          Save all your data to a file you can keep in Drive or send by email.
+        </Text>
+        <PrimaryButton
+          label="Export backup"
+          onPress={async () => {
+            await runOrAlert("Couldn't export the backup", shareBackup);
+          }}
+        />
+      </View>
+    </ScrollView>
   );
 }
 
@@ -50,6 +65,10 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  details: {
+    fontSize: 14,
+    opacity: 0.7,
   },
   linkRow: {
     flexDirection: 'row',
