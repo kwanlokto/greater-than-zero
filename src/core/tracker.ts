@@ -26,13 +26,15 @@ import {
   type BackupFile,
 } from './backup';
 import {
-  caloriesFromMacros,
   defaultMealName,
-  foodItemColumns,
+  foodItemOf,
+  requireMealName,
+  requireValidFoodItem,
+  timeOnDay,
   totalsOf,
   type FoodItemValues,
   type Meal,
-  type MealChanges,
+  type TimeOfDay,
 } from './food';
 import * as schema from './schema';
 import {
@@ -62,7 +64,7 @@ export {
   type FoodItemValues,
   type Macros,
   type Meal,
-  type MealChanges,
+  type TimeOfDay,
 } from './food';
 export {
   muscleGroups,
@@ -669,12 +671,6 @@ function requireExerciseName(typed: string): string {
 function requireTemplateName(typed: string): string {
   const name = typed.trim();
   if (!name) throw new Error('A Template needs a name');
-  return name;
-}
-
-function requireMealName(typed: string): string {
-  const name = typed.trim();
-  if (!name) throw new Error('A Meal needs a name');
   return name;
 }
 
@@ -1298,12 +1294,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       },
     });
     return found.map(({ items, ...meal }) => {
-      const withCalories = items.map(({ calories, ...item }) => ({
-        ...item,
-        typedCalories: calories,
-        calories: calories ?? caloriesFromMacros(item),
-      }));
-      return { ...meal, items: withCalories, totals: totalsOf(withCalories) };
+      const foodItems = items.map(foodItemOf);
+      return { ...meal, items: foodItems, totals: totalsOf(foodItems) };
     });
   }
 
@@ -2147,7 +2139,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     // A new Meal eaten now, on today's date, named for the time of day.
-    async addMeal(): Promise<{ id: string }> {
+    async createMeal(): Promise<{ id: string }> {
       const eatenAt = now();
       return db
         .insert(meals)
@@ -2156,44 +2148,53 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .get();
     },
 
-    // The time must be on the day the Meal is recorded on, which doesn't change.
-    async editMeal(mealId: string, { name, eatenAt }: MealChanges): Promise<void> {
-      const values = { name: requireMealName(name), eatenAt };
+    async renameMeal(id: string, name: string): Promise<void> {
+      const renamed = await db
+        .update(meals)
+        .set({ name: requireMealName(name) })
+        .where(mealStillThere(id))
+        .returning({ id: meals.id });
+      if (renamed.length === 0) throw new Error('No such Meal');
+    },
+
+    // Moves the Meal to another time on the day it's recorded on, which
+    // doesn't change.
+    async setMealTime(id: string, time: TimeOfDay): Promise<void> {
       db.transaction(tx => {
         const meal = tx
           .select({ localDate: meals.localDate })
           .from(meals)
-          .where(mealStillThere(mealId))
+          .where(mealStillThere(id))
           .get();
         if (!meal) throw new Error('No such Meal');
-        if (localDateOf(eatenAt) !== meal.localDate) {
-          throw new Error("A Meal's time must be on the day it's recorded on");
-        }
-        tx.update(meals).set(values).where(eq(meals.id, mealId)).run();
+        tx.update(meals)
+          .set({ eatenAt: timeOnDay(meal.localDate, time) })
+          .where(eq(meals.id, id))
+          .run();
       });
     },
 
     // Soft-deletes the Meal with its Food items, together.
-    async deleteMeal(mealId: string): Promise<void> {
+    async deleteMeal(id: string): Promise<void> {
       const deletedAt = now();
       db.transaction(tx => {
         const deleted = tx
           .update(meals)
           .set({ deletedAt })
-          .where(mealStillThere(mealId))
+          .where(mealStillThere(id))
           .returning({ id: meals.id })
           .all();
         if (deleted.length === 0) throw new Error('No such Meal');
         tx.update(foodItems)
           .set({ deletedAt })
-          .where(and(eq(foodItems.mealId, mealId), isNull(foodItems.deletedAt)))
+          .where(and(eq(foodItems.mealId, id), isNull(foodItems.deletedAt)))
           .run();
       });
     },
 
     // Adds a Food item after the Meal's others. Enforces problemWithFoodItem.
     async addFoodItem(mealId: string, values: FoodItemValues): Promise<{ id: string }> {
-      const columns = foodItemColumns(values);
+      const columns = requireValidFoodItem(values);
       return db.transaction(tx => {
         const meal = tx.select({ id: meals.id }).from(meals).where(mealStillThere(mealId)).get();
         if (!meal) throw new Error('No such Meal');
@@ -2216,7 +2217,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     async editFoodItem(foodItemId: string, values: FoodItemValues): Promise<void> {
       const changed = await db
         .update(foodItems)
-        .set(foodItemColumns(values))
+        .set(requireValidFoodItem(values))
         .where(foodItemStillThere(foodItemId))
         .returning({ id: foodItems.id });
       if (changed.length === 0) throw new Error('No such Food item');

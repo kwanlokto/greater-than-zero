@@ -1,8 +1,9 @@
 import { useTheme } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Chip } from '@/components/chip';
+import { Field } from '@/components/field';
 import { OptionPicker } from '@/components/option-picker';
 import { PrimaryButton } from '@/components/primary-button';
 import { muscleGroups, trackingTypes, type NewExercise, type TrackingType } from '@/core/tracker';
@@ -77,27 +78,9 @@ export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, 
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.text }]}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   form: {
     gap: 24,
-  },
-  field: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   input: {
     borderWidth: 1,

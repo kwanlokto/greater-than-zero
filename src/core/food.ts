@@ -44,11 +44,10 @@ export type Meal = {
   totals: Macros;
 };
 
-// What the lifter can change about a Meal. Its day stays the one it was
-// added on.
-export type MealChanges = {
-  name: string;
-  eatenAt: Date;
+// A time on a clock, e.g. 7:15 as { hours: 7, minutes: 15 }.
+export type TimeOfDay = {
+  hours: number;
+  minutes: number;
 };
 
 // A new Meal's name, from the time of day it's added. Always editable.
@@ -58,6 +57,24 @@ export function defaultMealName(time: Date): string {
   if (hour >= 11 && hour < 15) return 'Lunch';
   if (hour >= 17 && hour < 22) return 'Dinner';
   return 'Snack';
+}
+
+export function requireMealName(typed: string): string {
+  const name = typed.trim();
+  if (!name) throw new Error('A Meal needs a name');
+  return name;
+}
+
+// The moment `time` comes on a YYYY-MM-DD local date, so a Meal moved to
+// another time stays on its day.
+export function timeOnDay(localDate: string, { hours, minutes }: TimeOfDay): Date {
+  const isWhole = (value: number, below: number) =>
+    Number.isInteger(value) && value >= 0 && value < below;
+  if (!isWhole(hours, 24) || !isWhole(minutes, 60)) {
+    throw new Error('A time of day is 0–23 hours and 0–59 minutes');
+  }
+  const [year, month, day] = localDate.split('-').map(Number);
+  return new Date(year, month - 1, day, hours, minutes);
 }
 
 // Calories from the macros: 4 kcal per gram of protein and of carbs, 9 per
@@ -94,9 +111,19 @@ export function problemWithFoodItem(values: FoodItemValues): string | undefined 
   return undefined;
 }
 
-// The values to save: checked, with the name and unit trimmed.
-export function foodItemColumns(values: FoodItemValues): FoodItemValues {
+// The values to save: checked against problemWithFoodItem, with the name and
+// unit trimmed.
+export function requireValidFoodItem(values: FoodItemValues): FoodItemValues {
   const problem = problemWithFoodItem(values);
   if (problem) throw new Error(problem);
   return { ...values, name: values.name.trim(), unit: values.unit.trim() };
+}
+
+// A Food item as read back: its calories as typed, or worked out from its
+// macros when none were, so they follow any change to the macros.
+export function foodItemOf({
+  calories,
+  ...row
+}: Omit<FoodItem, 'typedCalories' | 'calories'> & { calories: number | null }): FoodItem {
+  return { ...row, typedCalories: calories, calories: calories ?? caloriesFromMacros(row) };
 }

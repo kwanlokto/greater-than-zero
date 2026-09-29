@@ -28,7 +28,7 @@ describe('Meals', () => {
     const clock = clockAt(`2026-09-29T${time}:00`);
     const tracker = createTracker(createTestDatabase(), clock);
 
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
 
     expect(await tracker.getMeal(meal.id)).toMatchObject({
       name,
@@ -40,13 +40,13 @@ describe('Meals', () => {
   it("are grouped by the phone's local date they were added on, in the order eaten", async () => {
     const clock = clockAt('2026-09-28T23:30:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.addMeal();
+    await tracker.createMeal();
     clock.setTime('2026-09-29T08:00:00');
-    const breakfast = await tracker.addMeal();
+    const breakfast = await tracker.createMeal();
     clock.setTime('2026-09-29T07:30:00');
-    const coffee = await tracker.addMeal();
+    const coffee = await tracker.createMeal();
     clock.setTime('2026-09-30T00:15:00');
-    await tracker.addMeal();
+    await tracker.createMeal();
 
     const meals = await tracker.getMeals('2026-09-29');
 
@@ -54,44 +54,53 @@ describe('Meals', () => {
     expect((await tracker.getMeals('2026-09-28')).map(meal => meal.name)).toEqual(['Snack']);
   });
 
-  it('can be renamed and moved to another time that day, keeping the order eaten', async () => {
-    const clock = clockAt('2026-09-29T08:00:00');
-    const tracker = createTracker(createTestDatabase(), clock);
-    const breakfast = await tracker.addMeal();
-    clock.setTime('2026-09-29T12:30:00');
-    const lunch = await tracker.addMeal();
-
-    await tracker.editMeal(lunch.id, {
-      name: ' Second breakfast ',
-      eatenAt: new Date('2026-09-29T07:15:00'),
-    });
-
-    const meals = await tracker.getMeals('2026-09-29');
-    expect(meals.map(({ id, name }) => [id, name])).toEqual([
-      [lunch.id, 'Second breakfast'],
-      [breakfast.id, 'Breakfast'],
-    ]);
-  });
-
-  it("need a name, and a time on the day they're recorded on", async () => {
+  it('can be renamed, leaving their time as it was', async () => {
     const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T08:00:00'));
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
 
-    await expect(
-      tracker.editMeal(meal.id, { name: ' ', eatenAt: new Date('2026-09-29T09:00:00') }),
-    ).rejects.toThrow('A Meal needs a name');
-    await expect(
-      tracker.editMeal(meal.id, { name: 'Brunch', eatenAt: new Date('2026-09-28T23:00:00') }),
-    ).rejects.toThrow("A Meal's time must be on the day it's recorded on");
+    await tracker.renameMeal(meal.id, ' Second breakfast ');
+    await expect(tracker.renameMeal(meal.id, ' ')).rejects.toThrow('A Meal needs a name');
+
     expect(await tracker.getMeal(meal.id)).toMatchObject({
-      name: 'Breakfast',
+      name: 'Second breakfast',
       eatenAt: new Date('2026-09-29T08:00:00'),
     });
   });
 
+  it('can be moved to another time of day, staying on their day, in the order eaten', async () => {
+    const clock = clockAt('2026-09-29T08:00:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const breakfast = await tracker.createMeal();
+    clock.setTime('2026-09-29T12:30:00');
+    const lunch = await tracker.createMeal();
+    clock.setTime('2026-09-30T09:00:00');
+
+    await tracker.setMealTime(lunch.id, { hours: 7, minutes: 15 });
+
+    const meals = await tracker.getMeals('2026-09-29');
+    expect(meals.map(({ id, eatenAt }) => [id, eatenAt])).toEqual([
+      [lunch.id, new Date('2026-09-29T07:15:00')],
+      [breakfast.id, new Date('2026-09-29T08:00:00')],
+    ]);
+  });
+
+  it.each([
+    { hours: 24, minutes: 0 },
+    { hours: 7, minutes: 60 },
+    { hours: 7.5, minutes: 0 },
+  ])('only move to a time of day there is, not %j', async time => {
+    const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T08:00:00'));
+    const meal = await tracker.createMeal();
+
+    await expect(tracker.setMealTime(meal.id, time)).rejects.toThrow(
+      'A time of day is 0–23 hours and 0–59 minutes',
+    );
+    expect((await tracker.getMeal(meal.id))?.eatenAt).toEqual(new Date('2026-09-29T08:00:00'));
+  });
+
   it('can be deleted with their Food items', async () => {
     const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T08:00:00'));
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
     const item = await tracker.addFoodItem(meal.id, yogurt);
 
     await tracker.deleteMeal(meal.id);
@@ -106,9 +115,9 @@ describe('Meals', () => {
   it("show in their day's History", async () => {
     const clock = clockAt('2026-09-28T19:00:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.addMeal();
+    await tracker.createMeal();
     clock.setTime('2026-09-29T08:00:00');
-    await tracker.addMeal();
+    await tracker.createMeal();
 
     const day = await tracker.getDay('2026-09-28');
 
@@ -119,17 +128,9 @@ describe('Meals', () => {
 describe('Food items', () => {
   it('keep typed calories, and work out blank ones at 4/4/9 kcal per gram of protein, carbs and fat', async () => {
     const tracker = createTracker(createTestDatabase());
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
 
-    await tracker.addFoodItem(meal.id, {
-      name: 'Greek yogurt',
-      quantity: 170,
-      unit: 'g',
-      calories: null,
-      protein: 17,
-      carbs: 6,
-      fat: 1,
-    });
+    await tracker.addFoodItem(meal.id, yogurt);
     // The label says 600, though 4/4/9 comes to 565.
     await tracker.addFoodItem(meal.id, {
       name: 'Granola',
@@ -165,18 +166,32 @@ describe('Food items', () => {
     ],
   ])('need %s', async (_, change, problem) => {
     const tracker = createTracker(createTestDatabase());
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
 
     expect(problemWithFoodItem({ ...yogurt, ...change })).toBe(problem);
     await expect(tracker.addFoodItem(meal.id, { ...yogurt, ...change })).rejects.toThrow(problem);
     expect((await tracker.getMeal(meal.id))?.items).toEqual([]);
   });
 
-  it('keep their name and unit without spaces around them', async () => {
-    const tracker = createTracker(createTestDatabase());
-    const meal = await tracker.addMeal();
+  it('take a name, an amount, and calories and macros of 0 or more', () => {
+    const water = {
+      ...yogurt,
+      name: 'Water',
+      quantity: 500,
+      unit: 'ml',
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    };
 
     expect(problemWithFoodItem(yogurt)).toBeUndefined();
+    expect(problemWithFoodItem({ ...water, calories: 0 })).toBeUndefined();
+  });
+
+  it('keep their name and unit without spaces around them', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const meal = await tracker.createMeal();
+
     await tracker.addFoodItem(meal.id, { ...yogurt, name: ' Greek yogurt ', unit: ' g ' });
 
     const [item] = (await tracker.getMeal(meal.id))?.items ?? [];
@@ -191,7 +206,7 @@ describe('Food items', () => {
 
   it('can be edited, working calories out again once they are cleared', async () => {
     const tracker = createTracker(createTestDatabase());
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
     const item = await tracker.addFoodItem(meal.id, { ...yogurt, calories: 150 });
 
     await tracker.editFoodItem(item.id, { ...yogurt, quantity: 340, protein: 34, calories: null });
@@ -208,9 +223,20 @@ describe('Food items', () => {
     );
   });
 
+  it('keep typed calories when their macros change', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const meal = await tracker.createMeal();
+    const item = await tracker.addFoodItem(meal.id, { ...yogurt, calories: 150 });
+
+    await tracker.editFoodItem(item.id, { ...yogurt, calories: 150, protein: 20 });
+
+    const [edited] = (await tracker.getMeal(meal.id))?.items ?? [];
+    expect([edited.protein, edited.calories, edited.typedCalories]).toEqual([20, 150, 150]);
+  });
+
   it('can be deleted, leaving the Meal and its totals', async () => {
     const tracker = createTracker(createTestDatabase());
-    const meal = await tracker.addMeal();
+    const meal = await tracker.createMeal();
     const item = await tracker.addFoodItem(meal.id, yogurt);
     await tracker.addFoodItem(meal.id, { ...yogurt, name: 'Honey', protein: 0, carbs: 17, fat: 0 });
 

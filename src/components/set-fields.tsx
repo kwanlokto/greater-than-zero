@@ -10,6 +10,7 @@ import {
   type WeightUnit,
   type WorkoutSet,
 } from '@/core/tracker';
+import { parseDecimal, parseWholeNumber } from '@/numbers';
 
 function formatWeight(weight: Weight | null): string {
   return weight ? `${weight.value} ${weight.unit}` : '';
@@ -164,19 +165,6 @@ function typedSet(
   if (parsedWeight === undefined || parsedReps === undefined) return undefined;
   const values = { weight: parsedWeight, reps: parsedReps, isWarmUp };
   return problemWithSet(trackingType, values) === undefined ? values : undefined;
-}
-
-// Null when blank, undefined when it isn't a number. Accepts a comma as the
-// decimal separator too, as some keyboards type one.
-export function parseDecimal(text: string): number | null | undefined {
-  const trimmed = text.trim();
-  if (trimmed === '') return null;
-  const value = Number(trimmed.replace(',', '.'));
-  return Number.isFinite(value) ? value : undefined;
-}
-
-export function parseWholeNumber(text: string): number | undefined {
-  return /^\d+$/.test(text.trim()) ? Number(text) : undefined;
 }
 
 const styles = StyleSheet.create({

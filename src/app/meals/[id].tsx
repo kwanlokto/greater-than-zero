@@ -9,7 +9,7 @@ import { TextButton } from '@/components/text-button';
 import type { FoodItem, Meal } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatTimeOfDay } from '@/dates';
-import { describeMacros, describeQuantity } from '@/food-labels';
+import { describeFoodItem, describeMacros } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -49,7 +49,7 @@ export default function MealScreen() {
         name={meal.name}
         accessibilityLabel="Meal name"
         failureTitle="Couldn't rename the meal"
-        rename={name => tracker.editMeal(id, { name, eatenAt: meal.eatenAt })}
+        rename={name => tracker.renameMeal(id, name)}
       />
       <MealTime meal={meal} />
       <Text style={[styles.totals, { color: colors.text }]}>{describeMacros(meal.totals)}</Text>
@@ -77,12 +77,8 @@ function MealTime({ meal }: { meal: Meal }) {
       mode: 'time',
       onChange: (event, picked) => {
         if (event.type !== 'set' || !picked) return;
-        // Only the time changes; the Meal stays on its day.
-        const eatenAt = new Date(meal.eatenAt);
-        eatenAt.setHours(picked.getHours(), picked.getMinutes(), 0, 0);
-        runOrAlert("Couldn't change the time", () =>
-          tracker.editMeal(meal.id, { name: meal.name, eatenAt }),
-        );
+        const time = { hours: picked.getHours(), minutes: picked.getMinutes() };
+        runOrAlert("Couldn't change the time", () => tracker.setMealTime(meal.id, time));
       },
     });
   };
@@ -120,9 +116,7 @@ function FoodItemRow({ meal, item }: { meal: Meal; item: FoodItem }) {
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
       <View style={styles.cardText}>
-        <Text style={[styles.itemName, { color: colors.text }]}>
-          {item.name} · {describeQuantity(item)}
-        </Text>
+        <Text style={[styles.itemName, { color: colors.text }]}>{describeFoodItem(item)}</Text>
         <Text style={[styles.details, { color: colors.text }]}>{describeMacros(item)}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={colors.text} />

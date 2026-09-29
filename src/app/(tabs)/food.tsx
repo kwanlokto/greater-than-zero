@@ -3,23 +3,23 @@ import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { MealCard } from '@/components/meal-card';
 import { PrimaryButton } from '@/components/primary-button';
-import { localDateOf } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
+import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // Today's Meals, in the order eaten, and a way to add one.
 export default function FoodScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const today = localDateOf(new Date());
+  const today = useToday();
   const meals = useTrackerQuery(() => tracker.getMeals(today), [today]);
 
   // A new Meal, eaten now and named for the time of day, opened to add food.
   async function addMeal() {
     let id: string | undefined;
     const added = await runOrAlert("Couldn't add a meal", async () => {
-      id = (await tracker.addMeal()).id;
+      id = (await tracker.createMeal()).id;
     });
     if (added && id) router.push({ pathname: '/meals/[id]', params: { id } });
   }

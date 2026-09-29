@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Meal } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
-import { describeMacros, describeQuantity } from '@/food-labels';
+import { describeFoodItem, describeMacros, formatCalories } from '@/food-labels';
 
 type Props = {
   meal: Meal;
@@ -25,20 +25,22 @@ export function MealCard({ meal, onPress }: Props) {
     >
       <View style={styles.header}>
         <Text style={[styles.name, { color: colors.text }]}>{meal.name}</Text>
-        <Text style={[styles.faint, { color: colors.text }]}>{formatTimeOfDay(meal.eatenAt)}</Text>
+        <Text style={[styles.detail, styles.faint, { color: colors.text }]}>
+          {formatTimeOfDay(meal.eatenAt)}
+        </Text>
         <Ionicons name="create-outline" size={18} color={colors.text} style={styles.faint} />
       </View>
       <Text style={[styles.totals, { color: colors.text }]}>{describeMacros(meal.totals)}</Text>
       {meal.items.length === 0 && (
-        <Text style={[styles.faint, { color: colors.text }]}>No food yet</Text>
+        <Text style={[styles.detail, styles.faint, { color: colors.text }]}>No food yet</Text>
       )}
       {meal.items.map(item => (
         <View key={item.id} style={styles.item}>
           <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
-            {item.name} · {describeQuantity(item)}
+            {describeFoodItem(item)}
           </Text>
-          <Text style={[styles.faint, { color: colors.text }]}>
-            {Math.round(item.calories)} kcal
+          <Text style={[styles.detail, styles.faint, { color: colors.text }]}>
+            {formatCalories(item.calories)} kcal
           </Text>
         </View>
       ))}
@@ -74,8 +76,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
   },
-  faint: {
+  detail: {
     fontSize: 14,
+  },
+  faint: {
     opacity: 0.7,
   },
 });

@@ -1,9 +1,10 @@
 import { useTheme } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { Field } from '@/components/field';
 import { PrimaryButton } from '@/components/primary-button';
-import { parseDecimal, parseWholeNumber, setPresentationFor } from '@/components/set-fields';
+import { setPresentationFor } from '@/components/set-fields';
 import { UnitPicker } from '@/components/unit-picker';
 import {
   problemWithTarget,
@@ -12,6 +13,7 @@ import {
   type TrackingType,
   type WeightUnit,
 } from '@/core/tracker';
+import { parseDecimal, parseWholeNumber } from '@/numbers';
 
 type Props = {
   trackingType: TrackingType;
@@ -105,17 +107,6 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  const { colors } = useTheme();
-
-  return (
-    <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.text }]}>{label}</Text>
-      {children}
-    </View>
-  );
-}
-
 function fieldsOf(target: Target) {
   return {
     sets: String(target.sets),
@@ -145,13 +136,6 @@ function typedTarget(text: {
 const styles = StyleSheet.create({
   form: {
     gap: 24,
-  },
-  field: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 16,
-    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',
