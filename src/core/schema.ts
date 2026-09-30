@@ -33,7 +33,7 @@ export const settings = sqliteTable('settings', {
   defaultRestSeconds: integer('default_rest_seconds').notNull().default(120),
   // The Macro targets: how much to eat in a day, in calories and grams. Each
   // is empty until the lifter sets it.
-  calorieTarget: real('calorie_target'),
+  caloriesTarget: real('calories_target'),
   proteinTarget: real('protein_target'),
   carbsTarget: real('carbs_target'),
   fatTarget: real('fat_target'),

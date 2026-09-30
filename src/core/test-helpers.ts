@@ -1,4 +1,4 @@
-import type { NewWorkout, SetValues, TargetValues, Tracker } from './tracker';
+import type { FoodItemValues, NewWorkout, SetValues, TargetValues, Tracker } from './tracker';
 
 export function names(items: { name: string }[]) {
   return items.map(item => item.name);
@@ -27,11 +27,7 @@ export async function startWorkoutWithEach(
 }
 
 // Starts a Workout with one Exercise in it.
-export async function startWorkoutWith(
-  tracker: Tracker,
-  exerciseName: string,
-  start?: NewWorkout,
-) {
+export async function startWorkoutWith(tracker: Tracker, exerciseName: string, start?: NewWorkout) {
   const { workout, entries } = await startWorkoutWithEach(tracker, [exerciseName], start);
   return { workout, entry: entries[0] };
 }
@@ -128,3 +124,26 @@ export async function doTemplateWorkout(tracker: Tracker, templateId: string, st
   await tracker.logSet(entry.id, { weight: 60, reps: 10 });
   return { workout, summary: await tracker.finishWorkout(workout.id) };
 }
+
+// A Food item whose 101 kcal are worked out from its macros (4/4/9).
+export const yogurt: FoodItemValues = {
+  name: 'Greek yogurt',
+  quantity: 170,
+  unit: 'g',
+  calories: null,
+  protein: 17,
+  carbs: 6,
+  fat: 1,
+};
+
+// A Food item with calories typed from its label: 600, though 4/4/9 comes to
+// 565.
+export const granola: FoodItemValues = {
+  name: 'Granola',
+  quantity: 1,
+  unit: 'cup',
+  calories: 600,
+  protein: 12,
+  carbs: 64,
+  fat: 29,
+};

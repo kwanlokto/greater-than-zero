@@ -1,32 +1,37 @@
 import { useTheme } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { DailyTotals, Macros } from '@/core/tracker';
-import { describeEaten, describeLeft, macroNames } from '@/food-labels';
+import type { DailyTotals } from '@/core/tracker';
+import { describeEaten, describeLeft, isOver, macroNames, macros } from '@/food-labels';
 
 type Props = {
   totals: DailyTotals;
+  // What pressing it does, in words.
+  hint: string;
   onPress: () => void;
 };
 
-const macros = Object.keys(macroNames) as (keyof Macros)[];
-
 // A day's calories and macros, each against its target when one is set: how
 // much was eaten, a bar filling towards the target, and what's left or over.
-export function DailyTotalsCard({ totals, onPress }: Props) {
+export function DailyTotalsCard({ totals, hint, onPress }: Props) {
   const { colors } = useTheme();
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityHint="Opens today's meals"
+      accessibilityHint={hint}
       onPress={onPress}
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
       {macros.map(macro => {
         const progress = totals[macro];
         const left = describeLeft(macro, progress);
-        const over = progress.left !== null && progress.left < 0;
+        const over = isOver(macro, progress);
+        // Only a target above 0 to fill towards; one imported below that isn't.
+        const filled =
+          progress.target !== null && progress.target > 0
+            ? Math.min(1, progress.eaten / progress.target)
+            : undefined;
         return (
           <View key={macro} style={styles.macro}>
             <View style={styles.row}>
@@ -35,14 +40,14 @@ export function DailyTotalsCard({ totals, onPress }: Props) {
                 {describeEaten(macro, progress)}
               </Text>
             </View>
-            {progress.target !== null && (
+            {filled !== undefined && (
               <View style={[styles.track, { backgroundColor: colors.border }]}>
                 <View
                   style={[
                     styles.fill,
                     {
                       backgroundColor: over ? colors.notification : colors.primary,
-                      width: `${Math.min(100, (progress.eaten / progress.target) * 100)}%`,
+                      width: `${filled * 100}%`,
                     },
                   ]}
                 />

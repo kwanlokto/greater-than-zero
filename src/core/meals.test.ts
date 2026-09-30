@@ -1,16 +1,6 @@
 import { createTestDatabase } from './test-database';
-import { clockAt } from './test-helpers';
+import { clockAt, granola, yogurt } from './test-helpers';
 import { createTracker, problemWithFoodItem, type FoodItemValues } from './tracker';
-
-const yogurt: FoodItemValues = {
-  name: 'Greek yogurt',
-  quantity: 170,
-  unit: 'g',
-  calories: null,
-  protein: 17,
-  carbs: 6,
-  fat: 1,
-};
 
 describe('Meals', () => {
   it.each([
@@ -131,16 +121,7 @@ describe('Food items', () => {
     const meal = await tracker.createMeal();
 
     await tracker.addFoodItem(meal.id, yogurt);
-    // The label says 600, though 4/4/9 comes to 565.
-    await tracker.addFoodItem(meal.id, {
-      name: 'Granola',
-      quantity: 1,
-      unit: 'cup',
-      calories: 600,
-      protein: 12,
-      carbs: 64,
-      fat: 29,
-    });
+    await tracker.addFoodItem(meal.id, granola);
 
     const saved = await tracker.getMeal(meal.id);
     expect(saved?.items.map(item => [item.name, item.quantity, item.unit, item.calories])).toEqual([
@@ -251,8 +232,6 @@ describe('Food items', () => {
 });
 
 describe('Copying a Meal', () => {
-  const granola = { ...yogurt, name: 'Granola', quantity: 1, unit: 'cup', calories: 600 };
-
   it('makes a new Meal today, eaten now, with its name and its Food items as logged', async () => {
     const clock = clockAt('2026-09-27T08:15:00');
     const tracker = createTracker(createTestDatabase(), clock);

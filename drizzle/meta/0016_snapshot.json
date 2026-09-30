@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ee66ccff-01fc-4a40-bbd8-09d4838e5496",
+  "id": "3c5b4fe5-676c-468b-ab65-451f88d7e892",
   "prevId": "efdeeb75-59c4-4a90-b546-582f0c9ce4d0",
   "tables": {
     "exercise_entries": {
@@ -878,8 +878,8 @@
           "autoincrement": false,
           "default": 120
         },
-        "calorie_target": {
-          "name": "calorie_target",
+        "calories_target": {
+          "name": "calories_target",
           "type": "real",
           "primaryKey": false,
           "notNull": false,

@@ -10,15 +10,25 @@ export type Macros = {
 
 // How much to eat in a day: calories, and grams of each macro. Null for one
 // the lifter hasn't set.
-export type MacroTargets = { [Macro in keyof Macros]: number | null };
+export type MacroTargets = Record<Macro, number | null>;
+
+// Calories or one of the macros.
+export type Macro = keyof Macros;
 
 // Why these Macro targets can't be set, or undefined when they can: each is
 // left blank or a number above 0. setMacroTargets enforces it; screens use it
 // to decide when to allow saving.
 export function problemWithMacroTargets(targets: MacroTargets): string | undefined {
-  const set = Object.values(targets).filter(target => target !== null);
-  if (set.every(target => Number.isFinite(target) && target > 0)) return undefined;
+  const chosen = Object.values(targets).filter(target => target !== null);
+  if (chosen.every(target => Number.isFinite(target) && target > 0)) return undefined;
   return 'Macro targets must be numbers above 0, or left blank';
+}
+
+export function requireValidMacroTargets(targets: MacroTargets): MacroTargets {
+  const problem = problemWithMacroTargets(targets);
+  if (problem) throw new Error(problem);
+  const { calories, protein, carbs, fat } = targets;
+  return { calories, protein, carbs, fat };
 }
 
 // What the lifter enters for a Food item. Calories are left null to work them
@@ -269,12 +279,12 @@ export type MacroProgress = {
 };
 
 // What was eaten in a day against the Macro targets.
-export type DailyTotals = { [Macro in keyof Macros]: MacroProgress };
+export type DailyTotals = Record<Macro, MacroProgress>;
 
 // A day's Meals added up and compared with the Macro targets.
 export function dailyTotalsOf(meals: Meal[], targets: MacroTargets): DailyTotals {
   const eaten = totalsOf(meals.map(meal => meal.totals));
-  const progressOf = (macro: keyof Macros): MacroProgress => {
+  const progressOf = (macro: Macro): MacroProgress => {
     const target = targets[macro];
     return { eaten: eaten[macro], target, left: target === null ? null : target - eaten[macro] };
   };

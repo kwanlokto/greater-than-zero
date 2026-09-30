@@ -1,11 +1,6 @@
 import { createTestDatabase } from './test-database';
-import { clockAt } from './test-helpers';
-import {
-  createTracker,
-  problemWithMacroTargets,
-  type FoodItemValues,
-  type MacroTargets,
-} from './tracker';
+import { clockAt, granola, yogurt } from './test-helpers';
+import { createTracker, problemWithMacroTargets, type MacroTargets } from './tracker';
 
 const cutting: MacroTargets = { calories: 2400, protein: 180, carbs: 250, fat: 70 };
 
@@ -52,27 +47,6 @@ describe('Macro targets', () => {
 });
 
 describe('Daily totals', () => {
-  // 101 kcal worked out from its macros.
-  const yogurt: FoodItemValues = {
-    name: 'Greek yogurt',
-    quantity: 170,
-    unit: 'g',
-    calories: null,
-    protein: 17,
-    carbs: 6,
-    fat: 1,
-  };
-  // 600 kcal as typed.
-  const granola: FoodItemValues = {
-    name: 'Granola',
-    quantity: 1,
-    unit: 'cup',
-    calories: 600,
-    protein: 12,
-    carbs: 64,
-    fat: 29,
-  };
-
   it("add up the Meals added on a local date, and only that day's", async () => {
     const clock = clockAt('2026-09-28T23:30:00');
     const tracker = createTracker(createTestDatabase(), clock);
@@ -93,6 +67,8 @@ describe('Daily totals', () => {
     expect([day.calories.eaten, day.protein.eaten, day.carbs.eaten, day.fat.eaten]).toEqual([
       701, 29, 70, 30,
     ]);
+    const dayBefore = await tracker.getDailyTotals('2026-09-28');
+    expect(dayBefore.calories.eaten).toBe(600);
   });
 
   it('compare what was eaten with each target set, going below 0 once over', async () => {
@@ -108,6 +84,18 @@ describe('Daily totals', () => {
       carbs: { eaten: 70, target: null, left: null },
       fat: { eaten: 30, target: null, left: null },
     });
+  });
+
+  it('leave 0 when what was eaten is right on the target', async () => {
+    const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T08:00:00'));
+    await tracker.setMacroTargets({ calories: 701, protein: null, carbs: null, fat: null });
+    const breakfast = await tracker.createMeal();
+    await tracker.addFoodItem(breakfast.id, yogurt);
+    await tracker.addFoodItem(breakfast.id, granola);
+
+    const day = await tracker.getDailyTotals('2026-09-29');
+
+    expect(day.calories).toEqual({ eaten: 701, target: 701, left: 0 });
   });
 
   it('are nothing eaten on a day without Meals', async () => {

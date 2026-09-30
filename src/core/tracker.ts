@@ -29,7 +29,7 @@ import {
   dailyTotalsOf,
   defaultMealName,
   foodItemFromSavedFood,
-  problemWithMacroTargets,
+  requireValidMacroTargets,
   requireMealName,
   requireValidFoodItem,
   requireValidSavedFood,
@@ -77,6 +77,7 @@ export {
   type FoodItem,
   type FoodItemValues,
   type FoodValues,
+  type Macro,
   type MacroProgress,
   type MacroTargets,
   type Macros,
@@ -770,7 +771,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   async function getMacroTargets(): Promise<MacroTargets> {
     const [row] = await db
       .select({
-        calories: settings.calorieTarget,
+        calories: settings.caloriesTarget,
         protein: settings.proteinTarget,
         carbs: settings.carbsTarget,
         fat: settings.fatTarget,
@@ -1386,6 +1387,11 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return found.map(withCaloriesWorkedOut);
   }
 
+  // The Meals added on a local date, as YYYY-MM-DD, in the order eaten.
+  function mealsOn(localDate: string): Promise<Meal[]> {
+    return findMeals(eq(meals.localDate, localDate));
+  }
+
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const [workout] = await findWorkouts(eq(workouts.id, id));
     return workout;
@@ -1405,13 +1411,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Replaces all four; null leaves one unset. Enforces problemWithMacroTargets.
     async setMacroTargets(targets: MacroTargets): Promise<void> {
-      const problem = problemWithMacroTargets(targets);
-      if (problem) throw new Error(problem);
+      const { calories, protein, carbs, fat } = requireValidMacroTargets(targets);
       await db.update(settings).set({
-        calorieTarget: targets.calories,
-        proteinTarget: targets.protein,
-        carbsTarget: targets.carbs,
-        fatTarget: targets.fat,
+        caloriesTarget: calories,
+        proteinTarget: protein,
+        carbsTarget: carbs,
+        fatTarget: fat,
       });
     },
 
@@ -2202,7 +2207,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return {
         localDate,
         workouts: await findWorkouts(and(eq(workouts.localDate, localDate), finished())),
-        meals: await findMeals(eq(meals.localDate, localDate)),
+        meals: await mealsOn(localDate),
       };
     },
 
@@ -2376,13 +2381,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // The Meals added on a local date, as YYYY-MM-DD, in the order eaten.
     getMeals(localDate: string): Promise<Meal[]> {
-      return findMeals(eq(meals.localDate, localDate));
+      return mealsOn(localDate);
     },
 
     // What was eaten on a local date, as YYYY-MM-DD, against the Macro targets.
     async getDailyTotals(localDate: string): Promise<DailyTotals> {
-      const dayMeals = await findMeals(eq(meals.localDate, localDate));
-      return dailyTotalsOf(dayMeals, await getMacroTargets());
+      return dailyTotalsOf(await mealsOn(localDate), await getMacroTargets());
     },
 
     // The latest Meals from before a local date, as YYYY-MM-DD, up to `limit`,

@@ -5,6 +5,7 @@ import { DailyTotalsCard } from '@/components/daily-totals-card';
 import { PrimaryButton } from '@/components/primary-button';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
+import { hasMacroTargets } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseList } from '@/template-labels';
 import { useGuardedPress } from '@/use-guarded-press';
@@ -59,8 +60,12 @@ export default function TodayScreen() {
       {dailyTotals && (
         <View style={styles.section}>
           <Text style={[styles.heading, { color: colors.text }]}>Today's food</Text>
-          <DailyTotalsCard totals={dailyTotals} onPress={() => router.navigate('/food')} />
-          {Object.values(dailyTotals).every(({ target }) => target === null) && (
+          <DailyTotalsCard
+            totals={dailyTotals}
+            hint="Opens today's meals"
+            onPress={() => router.navigate('/food')}
+          />
+          {!hasMacroTargets(dailyTotals) && (
             <Link href="/macro-targets" style={[styles.details, { color: colors.primary }]}>
               Set daily targets
             </Link>

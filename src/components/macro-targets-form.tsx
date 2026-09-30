@@ -4,8 +4,8 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Field } from '@/components/field';
 import { PrimaryButton } from '@/components/primary-button';
-import { problemWithMacroTargets, type MacroTargets, type Macros } from '@/core/tracker';
-import { macroNames } from '@/food-labels';
+import { problemWithMacroTargets, type Macro, type MacroTargets } from '@/core/tracker';
+import { macroNames, macros, macroUnits } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
 
 type Props = {
@@ -13,8 +13,6 @@ type Props = {
   submitLabel: string;
   onSubmit: (targets: MacroTargets) => Promise<void>;
 };
-
-const macros = Object.keys(macroNames) as (keyof Macros)[];
 
 // How much to eat in a day, in calories and grams of each macro. A field left
 // blank sets no target for it.
@@ -48,9 +46,7 @@ export function MacroTargetsForm({ initial, submitLabel, onSubmit }: Props) {
               placeholderTextColor="#8e8e93"
               style={inputStyle}
             />
-            <Text style={[styles.unit, { color: colors.text }]}>
-              {macro === 'calories' ? 'kcal a day' : 'g a day'}
-            </Text>
+            <Text style={[styles.unit, { color: colors.text }]}>{macroUnits[macro]} a day</Text>
           </View>
         </Field>
       ))}
@@ -61,7 +57,7 @@ export function MacroTargetsForm({ initial, submitLabel, onSubmit }: Props) {
 }
 
 // The targets as they're typed in: blank for none.
-function textOf(targets: MacroTargets): Record<keyof Macros, string> {
+function textOf(targets: MacroTargets): Record<Macro, string> {
   const textOfTarget = (target: number | null) => (target === null ? '' : String(target));
   return {
     calories: textOfTarget(targets.calories),
@@ -72,7 +68,7 @@ function textOf(targets: MacroTargets): Record<keyof Macros, string> {
 }
 
 // Undefined while a field holds something that isn't a number. Blank is null.
-function typedTargets(text: Record<keyof Macros, string>): MacroTargets | undefined {
+function typedTargets(text: Record<Macro, string>): MacroTargets | undefined {
   const calories = parseDecimal(text.calories);
   const protein = parseDecimal(text.protein);
   const carbs = parseDecimal(text.carbs);

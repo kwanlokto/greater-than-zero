@@ -22,6 +22,7 @@ async function phoneWithData() {
   const clock = clockAt('2026-09-28T18:00:00-04:00');
   const tracker = createTracker(createTestDatabase(), clock);
   await tracker.setDisplayUnit('lb');
+  await tracker.setMacroTargets({ calories: 2400, protein: 180, carbs: null, fat: null });
   const landmine = await tracker.createExercise({
     name: 'Landmine Press',
     trackingType: 'weighted',
