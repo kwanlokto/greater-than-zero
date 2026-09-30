@@ -28,7 +28,10 @@ export default function FoodScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <PrimaryButton label="Add meal" onPress={addMeal} />
-      <TextButton label="Copy a past meal" onPress={() => router.navigate('/meals/copy')} />
+      <TextButton
+        label="Copy a past meal"
+        onPress={() => router.navigate('/meals/choose-past-meal')}
+      />
       <TextButton label="Saved foods" onPress={() => router.navigate('/saved-foods')} />
       {meals?.length === 0 && (
         <Text style={[styles.note, { color: colors.text }]}>No meals yet today.</Text>

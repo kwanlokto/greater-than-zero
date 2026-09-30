@@ -277,6 +277,18 @@ describe('Copying a Meal', () => {
     expect(copied?.items.map(item => item.typedCalories)).toEqual([null, 600]);
   });
 
+  it('leaves out Food items deleted from the Meal', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const past = await tracker.createMeal();
+    const deleted = await tracker.addFoodItem(past.id, yogurt);
+    await tracker.addFoodItem(past.id, granola);
+    await tracker.deleteFoodItem(deleted.id);
+
+    const copy = await tracker.copyMeal(past.id);
+
+    expect((await tracker.getMeal(copy.id))?.items.map(item => item.name)).toEqual(['Granola']);
+  });
+
   it('leaves the copy and the original to change apart', async () => {
     const clock = clockAt('2026-09-28T08:00:00');
     const tracker = createTracker(createTestDatabase(), clock);

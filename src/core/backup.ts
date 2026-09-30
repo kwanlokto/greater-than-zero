@@ -178,7 +178,9 @@ function damaged(why: string): Error {
 // Replaces every table's rows with the file's, as part of a larger
 // transaction. Foreign keys are checked once all the rows are in, so tables
 // can be emptied and filled in any order. A table the file doesn't have, from
-// before it was added, is left empty.
+// before it was added, is left empty. Rows go back in the order readTables
+// wrote them, which is their rowid order: recent foods rely on that
+// (getSavedFoodsByRecentUse).
 export function writeTables(tx: TrackerDatabase, tables: BackupFile['tables']) {
   tx.run(sql`PRAGMA defer_foreign_keys = ON`);
   for (const table of backedUpTables) tx.run(sql`DELETE FROM ${table}`);

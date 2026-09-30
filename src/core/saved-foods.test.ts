@@ -1,4 +1,5 @@
 import { createTestDatabase } from './test-database';
+import { clockAt } from './test-helpers';
 import {
   createTracker,
   problemWithPortion,
@@ -254,6 +255,21 @@ describe('Recent foods', () => {
     await tracker.addSavedFoodToMeal(lunch.id, ids.Whey, 30);
 
     expect(await namesByRecentUse(tracker)).toEqual(['Whey', 'Rice', 'Oats', 'Almonds', 'Banana']);
+  });
+
+  it('go by when a food was added, not by when its Meal was eaten', async () => {
+    const clock = clockAt('2026-09-29T08:00:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const ids = await createSavedFoods(tracker, ['Oats', 'Whey']);
+    const breakfast = await tracker.createMeal();
+    clock.setTime('2026-09-29T12:30:00');
+    const lunch = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(lunch.id, ids.Whey, 1);
+
+    // Remembered for breakfast after lunch was logged.
+    await tracker.addSavedFoodToMeal(breakfast.id, ids.Oats, 50);
+
+    expect(await namesByRecentUse(tracker)).toEqual(['Oats', 'Whey']);
   });
 
   it("don't count a Food item since deleted, alone or with its Meal", async () => {

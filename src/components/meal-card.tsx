@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from 'expo-router';
+import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Meal } from '@/core/tracker';
@@ -8,21 +9,22 @@ import { describeFoodItem, describeMacros, formatCalories } from '@/food-labels'
 
 type Props = {
   meal: Meal;
-  // What pressing it does: open it for editing, or copy it into today.
-  action?: 'edit' | 'copy';
+  // What pressing it does, as an icon and in words; opening it for editing
+  // unless said otherwise.
+  icon?: ComponentProps<typeof Ionicons>['name'];
+  hint?: string;
   onPress: () => void;
 };
 
-const actions = {
-  edit: { icon: 'create-outline', hint: 'Opens this meal for editing' },
-  copy: { icon: 'copy-outline', hint: 'Copies this meal into today' },
-} as const;
-
 // A Meal: its name and time, its totals, then each Food item with its amount
 // and calories.
-export function MealCard({ meal, action = 'edit', onPress }: Props) {
+export function MealCard({
+  meal,
+  icon = 'create-outline',
+  hint = 'Opens this meal for editing',
+  onPress,
+}: Props) {
   const { colors } = useTheme();
-  const { icon, hint } = actions[action];
 
   return (
     <Pressable

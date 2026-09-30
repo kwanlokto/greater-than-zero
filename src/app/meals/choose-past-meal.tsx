@@ -13,26 +13,22 @@ import { useTrackerQuery } from '@/use-tracker-query';
 // How many past Meals to offer: about a week's worth.
 const pastMealsShown = 30;
 
-// The latest Meals from before today, by day, the most recent first. Tapping
-// one copies it into today, eaten now, and goes back to today's Meals.
-export default function CopyMealScreen() {
+// Picks a Meal to copy into today: the latest from before today, by day, the
+// most recent first. Tapping one copies it, eaten now, and goes back to
+// today's Meals.
+export default function ChoosePastMealScreen() {
   const router = useRouter();
   const { colors } = useTheme();
   const today = useToday();
   const meals = useTrackerQuery(() => tracker.getMealsBefore(today, pastMealsShown), [today]);
-  // A double tap copies it once.
+  // One tap copies one Meal, even if the lifter taps again while leaving.
   const copying = useRef(false);
 
   async function copy(meal: Meal) {
     if (copying.current) return;
     copying.current = true;
-    try {
-      if (await runOrAlert("Couldn't copy the meal", () => tracker.copyMeal(meal.id))) {
-        router.back();
-      }
-    } finally {
-      copying.current = false;
-    }
+    if (await runOrAlert("Couldn't copy the meal", () => tracker.copyMeal(meal.id))) router.back();
+    else copying.current = false;
   }
 
   return (
@@ -47,7 +43,12 @@ export default function CopyMealScreen() {
               {formatLocalDateWithWeekday(meal.localDate)}
             </Text>
           )}
-          <MealCard meal={meal} action="copy" onPress={() => copy(meal)} />
+          <MealCard
+            meal={meal}
+            icon="copy-outline"
+            hint="Copies this meal into today"
+            onPress={() => copy(meal)}
+          />
         </Fragment>
       ))}
     </ScrollView>

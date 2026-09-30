@@ -475,6 +475,23 @@ const latestWorkoutFirst = [
   desc(workouts.startedAt),
 ];
 
+// Meals go in order by date, then by when they were eaten; latestMealFirst is
+// the other way round. Meals added at the same moment go in the order added.
+const mealOrder = [asc(meals.localDate), asc(meals.eatenAt), asc(meals.createdAt)];
+const latestMealFirst = [desc(meals.localDate), desc(meals.eatenAt), desc(meals.createdAt)];
+
+// A Saved food's columns, for selecting one.
+const savedFoodColumns = {
+  id: savedFoods.id,
+  name: savedFoods.name,
+  servingAmount: savedFoods.servingAmount,
+  servingUnit: savedFoods.servingUnit,
+  calories: savedFoods.calories,
+  protein: savedFoods.protein,
+  carbs: savedFoods.carbs,
+  fat: savedFoods.fat,
+};
+
 // A Workout's place in that order. One about to start has no ID yet.
 type WorkoutPlace = Pick<Workout, 'localDate' | 'startedAt' | 'isBackfilled'> & { id?: string };
 
@@ -1294,9 +1311,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   ): Promise<Meal[]> {
     const found = await db.query.meals.findMany({
       where: and(where, isNull(meals.deletedAt)),
-      orderBy: latestFirst
-        ? [desc(meals.localDate), desc(meals.eatenAt), desc(meals.createdAt)]
-        : [asc(meals.localDate), asc(meals.eatenAt), asc(meals.createdAt)],
+      orderBy: latestFirst ? latestMealFirst : mealOrder,
       limit,
       columns: { id: true, localDate: true, eatenAt: true, name: true },
       with: {
@@ -1341,37 +1356,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .get();
   }
 
-  // The Saved foods matching `where`, by name, or with the most recently used
-  // first (see getSavedFoodsByRecentUse). Deleted ones are left out.
-  async function findSavedFoods(
-    where: SQL | undefined,
-    { recentFirst = false } = {},
-  ): Promise<SavedFood[]> {
-    // The last Food item added from it that's still logged. Rowids go up as
-    // rows are added, rows are only ever soft-deleted, and a Backup import
-    // puts them back in the same order, so the highest is the latest.
-    const lastUse = sql`max(${foodItems}.rowid)`;
-    const byName = sql`${savedFoods.name} COLLATE NOCASE`;
+  // The Saved foods matching `where`, by name. Deleted ones are left out.
+  async function findSavedFoods(where: SQL | undefined): Promise<SavedFood[]> {
     const found = await db
-      .select({
-        id: savedFoods.id,
-        name: savedFoods.name,
-        servingAmount: savedFoods.servingAmount,
-        servingUnit: savedFoods.servingUnit,
-        calories: savedFoods.calories,
-        protein: savedFoods.protein,
-        carbs: savedFoods.carbs,
-        fat: savedFoods.fat,
-      })
+      .select(savedFoodColumns)
       .from(savedFoods)
-      // Deleting a Meal deletes its Food items too.
-      .leftJoin(
-        foodItems,
-        and(eq(foodItems.savedFoodId, savedFoods.id), isNull(foodItems.deletedAt)),
-      )
       .where(and(where, isNull(savedFoods.deletedAt)))
-      .groupBy(savedFoods.id)
-      .orderBy(...(recentFirst ? [sql`${lastUse} IS NULL`, desc(lastUse), byName] : [byName]));
+      .orderBy(sql`${savedFoods.name} COLLATE NOCASE`);
     return found.map(withCaloriesWorkedOut);
   }
 
@@ -2403,8 +2394,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Every Saved food, those most recently added to a Meal first, for adding
     // food quickly; then those never added, or whose Food items were all
     // deleted, by name.
-    getSavedFoodsByRecentUse(): Promise<SavedFood[]> {
-      return findSavedFoods(undefined, { recentFirst: true });
+    async getSavedFoodsByRecentUse(): Promise<SavedFood[]> {
+      // Its last Food item still logged: rowids go up as rows are added, rows
+      // are only ever soft-deleted, and a Backup import puts them back in the
+      // same order (see writeTables), so the highest is the latest. Null, for
+      // one never used, sorts after every rowid.
+      const lastUse = sql`max(${foodItems}.rowid)`;
+      const found = await db
+        .select(savedFoodColumns)
+        .from(savedFoods)
+        // Deleting a Meal deletes its Food items too.
+        .leftJoin(
+          foodItems,
+          and(eq(foodItems.savedFoodId, savedFoods.id), isNull(foodItems.deletedAt)),
+        )
+        .where(isNull(savedFoods.deletedAt))
+        .groupBy(savedFoods.id)
+        .orderBy(desc(lastUse), sql`${savedFoods.name} COLLATE NOCASE`);
+      return found.map(withCaloriesWorkedOut);
     },
 
     async getSavedFood(id: string): Promise<SavedFood | undefined> {
