@@ -1,12 +1,14 @@
 import { Link, useRouter, useTheme } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { DailyTotalsCard } from '@/components/daily-totals-card';
 import { PrimaryButton } from '@/components/primary-button';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseList } from '@/template-labels';
 import { useGuardedPress } from '@/use-guarded-press';
+import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
@@ -16,6 +18,8 @@ export default function TodayScreen() {
   const workoutInProgress = useWorkoutInProgress();
   const templates = useTrackerQuery(() => tracker.getTemplates(), []);
   const nextUp = useTrackerQuery(() => tracker.getNextUp(), []);
+  const today = useToday();
+  const dailyTotals = useTrackerQuery(() => tracker.getDailyTotals(today), [today]);
 
   async function start(templateId?: string) {
     const started = await runOrAlert("Couldn't start the workout", () =>
@@ -52,8 +56,19 @@ export default function TodayScreen() {
           </View>
         </>
       )}
+      {dailyTotals && (
+        <View style={styles.section}>
+          <Text style={[styles.heading, { color: colors.text }]}>Today's food</Text>
+          <DailyTotalsCard totals={dailyTotals} onPress={() => router.navigate('/food')} />
+          {Object.values(dailyTotals).every(({ target }) => target === null) && (
+            <Link href="/macro-targets" style={[styles.details, { color: colors.primary }]}>
+              Set daily targets
+            </Link>
+          )}
+        </View>
+      )}
       <Text style={[styles.placeholder, { color: colors.text }]}>
-        Today's food and weigh-in will show here.
+        Today's weigh-in will show here.
       </Text>
     </ScrollView>
   );

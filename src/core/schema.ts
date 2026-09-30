@@ -31,6 +31,12 @@ export const settings = sqliteTable('settings', {
   displayUnit: text('display_unit', { enum: weightUnits }).notNull().default('kg'),
   // The rest after a Set, for Exercises without their own.
   defaultRestSeconds: integer('default_rest_seconds').notNull().default(120),
+  // The Macro targets: how much to eat in a day, in calories and grams. Each
+  // is empty until the lifter sets it.
+  calorieTarget: real('calorie_target'),
+  proteinTarget: real('protein_target'),
+  carbsTarget: real('carbs_target'),
+  fatTarget: real('fat_target'),
 });
 
 // How an Exercise's Sets are recorded. Stored as plain text with no CHECK

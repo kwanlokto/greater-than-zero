@@ -21,6 +21,7 @@ export default function SettingsScreen() {
         <Text style={[styles.heading, { color: colors.text }]}>Display unit</Text>
         <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
       </View>
+      <LinkRow href="/macro-targets" label="Macro targets" />
       <LinkRow href="/templates" label="Templates" />
       <LinkRow href="/rotations" label="Rotations" />
       <LinkRow href="/exercises" label="Exercise library" />
