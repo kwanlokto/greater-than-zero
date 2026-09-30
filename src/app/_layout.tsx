@@ -76,6 +76,7 @@ export default function RootLayout() {
               options={{ title: 'Add food', presentation: 'modal' }}
             />
             <Stack.Screen name="meals/portion" options={{ title: 'Add food' }} />
+            <Stack.Screen name="meals/copy" options={{ title: 'Copy a past meal' }} />
             <Stack.Screen name="saved-foods/index" options={{ title: 'Saved foods' }} />
             <Stack.Screen name="saved-foods/new" options={{ title: 'New saved food' }} />
             <Stack.Screen name="saved-foods/[id]" options={{ title: 'Saved food' }} />

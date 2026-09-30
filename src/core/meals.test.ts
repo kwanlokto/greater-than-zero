@@ -249,3 +249,79 @@ describe('Food items', () => {
     await expect(tracker.editFoodItem(item.id, yogurt)).rejects.toThrow('No such Food item');
   });
 });
+
+describe('Copying a Meal', () => {
+  const granola = { ...yogurt, name: 'Granola', quantity: 1, unit: 'cup', calories: 600 };
+
+  it('makes a new Meal today, eaten now, with its name and its Food items as logged', async () => {
+    const clock = clockAt('2026-09-27T08:15:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const past = await tracker.createMeal();
+    await tracker.renameMeal(past.id, 'Usual breakfast');
+    await tracker.addFoodItem(past.id, yogurt);
+    await tracker.addFoodItem(past.id, granola);
+    clock.setTime('2026-09-29T07:40:00');
+
+    const copy = await tracker.copyMeal(past.id);
+
+    const original = await tracker.getMeal(past.id);
+    const copied = await tracker.getMeal(copy.id);
+    expect(copied).toMatchObject({
+      localDate: '2026-09-29',
+      eatenAt: new Date('2026-09-29T07:40:00'),
+      name: 'Usual breakfast',
+      totals: original?.totals,
+    });
+    const withoutIds = (meal: typeof copied) => meal?.items.map(({ id, ...item }) => item);
+    expect(withoutIds(copied)).toEqual(withoutIds(original));
+    expect(copied?.items.map(item => item.typedCalories)).toEqual([null, 600]);
+  });
+
+  it('leaves the copy and the original to change apart', async () => {
+    const clock = clockAt('2026-09-28T08:00:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const past = await tracker.createMeal();
+    await tracker.addFoodItem(past.id, yogurt);
+    clock.setTime('2026-09-29T08:00:00');
+    const copy = await tracker.copyMeal(past.id);
+
+    const [copiedItem] = (await tracker.getMeal(copy.id))?.items ?? [];
+    await tracker.editFoodItem(copiedItem.id, { ...yogurt, quantity: 250 });
+    await tracker.renameMeal(copy.id, 'Big breakfast');
+
+    expect(await tracker.getMeal(past.id)).toMatchObject({
+      name: 'Breakfast',
+      items: [expect.objectContaining({ quantity: 170 })],
+    });
+  });
+
+  it('needs a Meal still there', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const meal = await tracker.createMeal();
+    await tracker.deleteMeal(meal.id);
+
+    await expect(tracker.copyMeal(meal.id)).rejects.toThrow('No such Meal');
+  });
+});
+
+describe('Past Meals', () => {
+  it('are listed from before a day, the most recent first, up to a limit', async () => {
+    const clock = clockAt('2026-09-26T19:00:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    await tracker.createMeal();
+    clock.setTime('2026-09-27T08:00:00');
+    const breakfast27 = await tracker.createMeal();
+    clock.setTime('2026-09-27T12:30:00');
+    const lunch27 = await tracker.createMeal();
+    clock.setTime('2026-09-28T08:00:00');
+    const breakfast28 = await tracker.createMeal();
+    const deleted = await tracker.createMeal();
+    await tracker.deleteMeal(deleted.id);
+    clock.setTime('2026-09-29T08:00:00');
+    await tracker.createMeal();
+
+    const past = await tracker.getMealsBefore('2026-09-29', 3);
+
+    expect(past.map(meal => meal.id)).toEqual([breakfast28.id, lunch27.id, breakfast27.id]);
+  });
+});

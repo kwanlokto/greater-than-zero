@@ -27,6 +27,15 @@ export default function MealScreen() {
     return <Text style={[styles.message, { color: colors.text }]}>This meal was deleted.</Text>;
   }
 
+  // A new Meal today, eaten now, with this one's food, opened in its place.
+  async function copyToToday() {
+    let copyId: string | undefined;
+    const copied = await runOrAlert("Couldn't copy the meal", async () => {
+      copyId = (await tracker.copyMeal(id)).id;
+    });
+    if (copied && copyId) router.replace({ pathname: '/meals/[id]', params: { id: copyId } });
+  }
+
   const confirmDelete = () => {
     Alert.alert(`Delete ${meal.name}?`, 'Its food will be removed too.', [
       { text: 'Cancel', style: 'cancel' },
@@ -62,6 +71,7 @@ export default function MealScreen() {
         label="Add food"
         onPress={() => router.push({ pathname: '/meals/choose-food', params: { mealId: id } })}
       />
+      <TextButton label="Copy to today" onPress={copyToToday} />
       <TextButton label="Delete meal" destructive onPress={confirmDelete} />
     </ScrollView>
   );

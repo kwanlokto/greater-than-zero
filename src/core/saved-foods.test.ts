@@ -4,6 +4,7 @@ import {
   problemWithPortion,
   problemWithSavedFood,
   type SavedFoodValues,
+  type Tracker,
 } from './tracker';
 
 // Per 100 g, as on the label.
@@ -227,5 +228,61 @@ describe('Adding a Saved food to a Meal', () => {
       'No such Meal',
     );
     expect((await tracker.getMeal(meal.id))?.items).toEqual([]);
+  });
+});
+
+describe('Recent foods', () => {
+  // Saved foods named in `names`, created in that order.
+  async function createSavedFoods(tracker: Tracker, names: string[]) {
+    const ids: Record<string, string> = {};
+    for (const name of names) ids[name] = (await tracker.createSavedFood({ ...oats, name })).id;
+    return ids;
+  }
+
+  async function namesByRecentUse(tracker: Tracker) {
+    return (await tracker.getSavedFoodsByRecentUse()).map(food => food.name);
+  }
+
+  it('offer the Saved foods most recently added to a Meal first, then the rest by name', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const ids = await createSavedFoods(tracker, ['Oats', 'Banana', 'Whey', 'Almonds', 'Rice']);
+    const breakfast = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(breakfast.id, ids.Whey, 30);
+    await tracker.addSavedFoodToMeal(breakfast.id, ids.Oats, 50);
+    const lunch = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(lunch.id, ids.Rice, 150);
+    await tracker.addSavedFoodToMeal(lunch.id, ids.Whey, 30);
+
+    expect(await namesByRecentUse(tracker)).toEqual(['Whey', 'Rice', 'Oats', 'Almonds', 'Banana']);
+  });
+
+  it("don't count a Food item since deleted, alone or with its Meal", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const ids = await createSavedFoods(tracker, ['Oats', 'Whey', 'Rice']);
+    const breakfast = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(breakfast.id, ids.Oats, 50);
+    const lunch = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(lunch.id, ids.Rice, 150);
+    const mistake = await tracker.addSavedFoodToMeal(breakfast.id, ids.Whey, 30);
+
+    await tracker.deleteFoodItem(mistake.id);
+    await tracker.deleteMeal(lunch.id);
+
+    expect(await namesByRecentUse(tracker)).toEqual(['Oats', 'Rice', 'Whey']);
+  });
+
+  it('count a Meal copied into today as using its Saved foods again', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const ids = await createSavedFoods(tracker, ['Oats', 'Whey']);
+    const breakfast = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(breakfast.id, ids.Oats, 50);
+    const shake = await tracker.createMeal();
+    await tracker.addSavedFoodToMeal(shake.id, ids.Whey, 1);
+
+    const copy = await tracker.copyMeal(breakfast.id);
+
+    const [copiedItem] = (await tracker.getMeal(copy.id))?.items ?? [];
+    expect(copiedItem.savedFoodId).toBe(ids.Oats);
+    expect(await namesByRecentUse(tracker)).toEqual(['Oats', 'Whey']);
   });
 });

@@ -8,18 +8,26 @@ import { describeFoodItem, describeMacros, formatCalories } from '@/food-labels'
 
 type Props = {
   meal: Meal;
+  // What pressing it does: open it for editing, or copy it into today.
+  action?: 'edit' | 'copy';
   onPress: () => void;
 };
 
+const actions = {
+  edit: { icon: 'create-outline', hint: 'Opens this meal for editing' },
+  copy: { icon: 'copy-outline', hint: 'Copies this meal into today' },
+} as const;
+
 // A Meal: its name and time, its totals, then each Food item with its amount
-// and calories. Pressing it opens it for editing.
-export function MealCard({ meal, onPress }: Props) {
+// and calories.
+export function MealCard({ meal, action = 'edit', onPress }: Props) {
   const { colors } = useTheme();
+  const { icon, hint } = actions[action];
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityHint="Opens this meal for editing"
+      accessibilityHint={hint}
       onPress={onPress}
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
@@ -28,7 +36,7 @@ export function MealCard({ meal, onPress }: Props) {
         <Text style={[styles.detail, styles.faint, { color: colors.text }]}>
           {formatTimeOfDay(meal.eatenAt)}
         </Text>
-        <Ionicons name="create-outline" size={18} color={colors.text} style={styles.faint} />
+        <Ionicons name={icon} size={18} color={colors.text} style={styles.faint} />
       </View>
       <Text style={[styles.totals, { color: colors.text }]}>{describeMacros(meal.totals)}</Text>
       {meal.items.length === 0 && (

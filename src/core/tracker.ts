@@ -1285,12 +1285,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return template ?? null;
   }
 
-  // The Meals matching `where`, in the order they were eaten, each with its
-  // Food items in the order they were added. Deleted ones are left out.
-  async function findMeals(where: SQL | undefined): Promise<Meal[]> {
+  // The Meals matching `where`, in the order they were eaten, or the latest
+  // first, up to `limit`, each with its Food items in the order they were
+  // added. Deleted ones are left out.
+  async function findMeals(
+    where: SQL | undefined,
+    { latestFirst = false, limit }: { latestFirst?: boolean; limit?: number } = {},
+  ): Promise<Meal[]> {
     const found = await db.query.meals.findMany({
       where: and(where, isNull(meals.deletedAt)),
-      orderBy: [asc(meals.eatenAt), asc(meals.createdAt)],
+      orderBy: latestFirst
+        ? [desc(meals.localDate), desc(meals.eatenAt), desc(meals.createdAt)]
+        : [asc(meals.localDate), asc(meals.eatenAt), asc(meals.createdAt)],
+      limit,
       columns: { id: true, localDate: true, eatenAt: true, name: true },
       with: {
         items: {
@@ -1334,8 +1341,17 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .get();
   }
 
-  // The Saved foods matching `where`, by name. Deleted ones are left out.
-  async function findSavedFoods(where: SQL | undefined): Promise<SavedFood[]> {
+  // The Saved foods matching `where`, by name, or with the most recently used
+  // first (see getSavedFoodsByRecentUse). Deleted ones are left out.
+  async function findSavedFoods(
+    where: SQL | undefined,
+    { recentFirst = false } = {},
+  ): Promise<SavedFood[]> {
+    // The last Food item added from it that's still logged. Rowids go up as
+    // rows are added, rows are only ever soft-deleted, and a Backup import
+    // puts them back in the same order, so the highest is the latest.
+    const lastUse = sql`max(${foodItems}.rowid)`;
+    const byName = sql`${savedFoods.name} COLLATE NOCASE`;
     const found = await db
       .select({
         id: savedFoods.id,
@@ -1348,8 +1364,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         fat: savedFoods.fat,
       })
       .from(savedFoods)
+      // Deleting a Meal deletes its Food items too.
+      .leftJoin(
+        foodItems,
+        and(eq(foodItems.savedFoodId, savedFoods.id), isNull(foodItems.deletedAt)),
+      )
       .where(and(where, isNull(savedFoods.deletedAt)))
-      .orderBy(sql`${savedFoods.name} COLLATE NOCASE`);
+      .groupBy(savedFoods.id)
+      .orderBy(...(recentFirst ? [sql`${lastUse} IS NULL`, desc(lastUse), byName] : [byName]));
     return found.map(withCaloriesWorkedOut);
   }
 
@@ -2228,6 +2250,42 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       });
     },
 
+    // A new Meal eaten now, on today's date, with the Meal's name and a copy
+    // of each of its Food items as logged: the same amounts and macros (typed
+    // calories kept, blank ones still worked out), and the same Saved food
+    // links, so the copy counts as using them again.
+    async copyMeal(id: string): Promise<{ id: string }> {
+      const eatenAt = now();
+      return db.transaction(tx => {
+        const meal = tx.select({ name: meals.name }).from(meals).where(mealStillThere(id)).get();
+        if (!meal) throw new Error('No such Meal');
+        const items = tx
+          .select({
+            name: foodItems.name,
+            quantity: foodItems.quantity,
+            unit: foodItems.unit,
+            calories: foodItems.calories,
+            protein: foodItems.protein,
+            carbs: foodItems.carbs,
+            fat: foodItems.fat,
+            savedFoodId: foodItems.savedFoodId,
+          })
+          .from(foodItems)
+          .where(and(eq(foodItems.mealId, id), isNull(foodItems.deletedAt)))
+          .orderBy(asc(foodItems.position))
+          .all();
+        const copy = tx
+          .insert(meals)
+          .values({ localDate: localDateOf(eatenAt), eatenAt, name: meal.name })
+          .returning({ id: meals.id })
+          .get();
+        for (const { savedFoodId, ...values } of items) {
+          insertFoodItem(tx, copy.id, values, savedFoodId);
+        }
+        return copy;
+      });
+    },
+
     // Soft-deletes the Meal with its Food items, together.
     async deleteMeal(id: string): Promise<void> {
       const deletedAt = now();
@@ -2296,6 +2354,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       return findMeals(eq(meals.localDate, localDate));
     },
 
+    // The latest Meals from before a local date, as YYYY-MM-DD, up to `limit`,
+    // the most recent first: the ones to copy into today from.
+    getMealsBefore(localDate: string, limit: number): Promise<Meal[]> {
+      return findMeals(lt(meals.localDate, localDate), { latestFirst: true, limit });
+    },
+
     async getMeal(id: string): Promise<Meal | undefined> {
       const [meal] = await findMeals(eq(meals.id, id));
       return meal;
@@ -2334,6 +2398,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Every Saved food, by name.
     getSavedFoods(): Promise<SavedFood[]> {
       return findSavedFoods(undefined);
+    },
+
+    // Every Saved food, those most recently added to a Meal first, for adding
+    // food quickly; then those never added, or whose Food items were all
+    // deleted, by name.
+    getSavedFoodsByRecentUse(): Promise<SavedFood[]> {
+      return findSavedFoods(undefined, { recentFirst: true });
     },
 
     async getSavedFood(id: string): Promise<SavedFood | undefined> {

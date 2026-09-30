@@ -13,7 +13,7 @@ export default function ChooseFoodScreen() {
   const { mealId } = useLocalSearchParams<{ mealId: string }>();
   const router = useRouter();
   const { colors } = useTheme();
-  const savedFoods = useTrackerQuery(() => tracker.getSavedFoods(), []);
+  const savedFoods = useTrackerQuery(() => tracker.getSavedFoodsByRecentUse(), []);
 
   return (
     <FlatList
@@ -33,7 +33,9 @@ export default function ChooseFoodScreen() {
             details="Save a food you eat often, then add it"
             onPress={() => router.replace({ pathname: '/saved-foods/new', params: { mealId } })}
           />
-          <Text style={[styles.heading, { color: colors.text }]}>Saved foods</Text>
+          <Text style={[styles.heading, { color: colors.text }]}>
+            Saved foods, most recently used first
+          </Text>
         </>
       }
       renderItem={({ item }) => (
