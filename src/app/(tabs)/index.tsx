@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { DailyTotalsCard } from '@/components/daily-totals-card';
 import { PrimaryButton } from '@/components/primary-button';
+import { WeighInCard } from '@/components/weigh-in-card';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
 import { hasMacroTargets } from '@/food-labels';
@@ -21,6 +22,9 @@ export default function TodayScreen() {
   const nextUp = useTrackerQuery(() => tracker.getNextUp(), []);
   const today = useToday();
   const dailyTotals = useTrackerQuery(() => tracker.getDailyTotals(today), [today]);
+  // Null once loaded with no Weigh-in today.
+  const weighIn = useTrackerQuery(() => tracker.getWeighIn(today), [today]);
+  const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
   async function start(templateId?: string) {
     const started = await runOrAlert("Couldn't start the workout", () =>
@@ -72,9 +76,18 @@ export default function TodayScreen() {
           )}
         </View>
       )}
-      <Text style={[styles.placeholder, { color: colors.text }]}>
-        Today's weigh-in will show here.
-      </Text>
+      {weighIn !== undefined && displayUnit && (
+        <View style={styles.section}>
+          <Text style={[styles.heading, { color: colors.text }]}>Today's weigh-in</Text>
+          <WeighInCard
+            weighIn={weighIn}
+            displayUnit={displayUnit}
+            onSave={weight =>
+              runOrAlert("Couldn't save the weigh-in", () => tracker.setWeighIn(weight))
+            }
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -156,10 +169,5 @@ const styles = StyleSheet.create({
   },
   startNextUp: {
     marginTop: 8,
-  },
-  placeholder: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
   },
 });

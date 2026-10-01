@@ -52,6 +52,7 @@ import {
   type ProgressPoint,
   type ProgressSeries,
 } from './progress';
+import { problemWithWeighIn, type BodyWeightTrend, type WeighIn } from './body-weight';
 import * as schema from './schema';
 import {
   exerciseEntries,
@@ -66,6 +67,7 @@ import {
   settings,
   templateExercises,
   templates,
+  weighIns,
   workouts,
   type MuscleGroup,
   type TrackingType,
@@ -74,6 +76,12 @@ import {
 
 export { schema };
 export type { BackupFile } from './backup';
+export {
+  problemWithWeighIn,
+  type BodyWeightTrend,
+  type TrendPoint,
+  type WeighIn,
+} from './body-weight';
 export {
   progressMeasuresFor,
   type ProgressMeasure,
@@ -243,6 +251,7 @@ export type Day = {
   workouts: Workout[];
   // Its Meals, in the order eaten.
   meals: Meal[];
+  weighIn: WeighIn | null;
 };
 
 // An Exercise's working Sets from the most recent finished Workout before the
@@ -1410,6 +1419,23 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return findMeals(eq(meals.localDate, localDate));
   }
 
+  // The Weigh-in for a local date, as YYYY-MM-DD; null when there's none.
+  async function getWeighIn(localDate: string): Promise<WeighIn | null> {
+    const [row] = await db
+      .select({
+        localDate: weighIns.localDate,
+        weight: weighIns.weight,
+        weightUnit: weighIns.weightUnit,
+        weighedAt: weighIns.weighedAt,
+      })
+      .from(weighIns)
+      .where(and(eq(weighIns.localDate, localDate), isNull(weighIns.deletedAt)));
+    if (!row) return null;
+    const displayUnit = await getDisplayUnit();
+    const shown = roundedForDisplay(convertWeight(row.weight, row.weightUnit, displayUnit));
+    return { ...row, displayWeight: { value: shown, unit: displayUnit } };
+  }
+
   async function getWorkout(id: string): Promise<Workout | undefined> {
     const [workout] = await findWorkouts(eq(workouts.id, id));
     return workout;
@@ -2221,6 +2247,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         localDate,
         workouts: await findWorkouts(and(eq(workouts.localDate, localDate), finished())),
         meals: await mealsOn(localDate),
+        weighIn: await getWeighIn(localDate),
       };
     },
 
@@ -2545,6 +2572,45 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         );
         const displayValue = unit === 'reps' ? value : roundedForDisplay(value);
         return { workoutId, localDate: workout.localDate, value, displayValue };
+      });
+      return { unit, points };
+    },
+
+    // Records today's Weigh-in, in the display unit the lifter sees while
+    // typing it, replacing one already entered today. Enforces
+    // problemWithWeighIn.
+    async setWeighIn(weight: number): Promise<void> {
+      const problem = problemWithWeighIn(weight);
+      if (problem) throw new Error(problem);
+      const weighedAt = now();
+      const entered = { weighedAt, weight, weightUnit: await getDisplayUnit() };
+      await db
+        .insert(weighIns)
+        .values({ localDate: localDateOf(weighedAt), ...entered })
+        .onConflictDoUpdate({
+          target: weighIns.localDate,
+          set: { ...entered, deletedAt: null, updatedAt: new Date() },
+        });
+    },
+
+    getWeighIn,
+
+    // Every Weigh-in, by date, each converted from the unit it was entered in
+    // to the display unit at full precision.
+    async getBodyWeightTrend(): Promise<BodyWeightTrend> {
+      const entered = await db
+        .select({
+          localDate: weighIns.localDate,
+          weight: weighIns.weight,
+          weightUnit: weighIns.weightUnit,
+        })
+        .from(weighIns)
+        .where(isNull(weighIns.deletedAt))
+        .orderBy(asc(weighIns.localDate));
+      const unit = await getDisplayUnit();
+      const points = entered.map(({ localDate, weight, weightUnit }) => {
+        const value = convertWeight(weight, weightUnit, unit);
+        return { localDate, value, displayValue: roundedForDisplay(value) };
       });
       return { unit, points };
     },

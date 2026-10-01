@@ -71,6 +71,7 @@ export default function RootLayout() {
             />
             <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
             <Stack.Screen name="progress/[exerciseId]" options={{ title: 'Progress' }} />
+            <Stack.Screen name="weigh-ins" options={{ title: 'Weigh-ins' }} />
             <Stack.Screen name="meals/[id]" options={{ title: 'Meal' }} />
             <Stack.Screen name="meals/food-item" options={{ title: 'Food' }} />
             <Stack.Screen

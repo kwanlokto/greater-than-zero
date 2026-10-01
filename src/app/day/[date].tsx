@@ -2,6 +2,7 @@ import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { formatBodyWeight } from '@/body-weight-labels';
 import { MealCard } from '@/components/meal-card';
 import { PrimaryButton } from '@/components/primary-button';
 import { TextButton } from '@/components/text-button';
@@ -77,6 +78,17 @@ export default function DayScreen() {
           ))}
         </DaySection>
       )}
+      {day && (
+        <DaySection title="Weigh-in">
+          {day.weighIn ? (
+            <Text style={[styles.weighIn, { color: colors.text }]}>
+              {formatBodyWeight(day.weighIn.displayWeight.value, day.weighIn.displayWeight.unit)}
+            </Text>
+          ) : (
+            <Text style={[styles.note, { color: colors.text }]}>No weigh-in.</Text>
+          )}
+        </DaySection>
+      )}
     </ScrollView>
   );
 }
@@ -109,5 +121,9 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 16,
     opacity: 0.7,
+  },
+  weighIn: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

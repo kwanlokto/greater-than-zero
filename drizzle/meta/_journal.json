@@ -120,6 +120,13 @@
       "when": 1790773179724,
       "tag": "0016_add_macro_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790849912974,
+      "tag": "0017_create_weigh_ins",
+      "breakpoints": true
     }
   ]
 }

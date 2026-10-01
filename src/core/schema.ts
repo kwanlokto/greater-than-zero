@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const nowMs = sql`(CAST(unixepoch('subsec') * 1000 AS INTEGER))`;
 
@@ -241,6 +241,23 @@ export const foodItems = sqliteTable('food_items', {
   // from: its copies of the name and macros stay as they were logged.
   savedFoodId: text('saved_food_id').references(() => savedFoods.id),
 });
+
+// The lifter's body weight on a day.
+export const weighIns = sqliteTable(
+  'weigh_ins',
+  {
+    ...rowColumns,
+    // The phone's local calendar date it's for, as YYYY-MM-DD. There's one
+    // per date: entering another the same day replaces it.
+    localDate: text('local_date').notNull(),
+    // When it was entered, or last replaced.
+    weighedAt: integer('weighed_at', { mode: 'timestamp_ms' }).notNull(),
+    // Exactly as entered, in the unit it was entered in.
+    weight: real('weight').notNull(),
+    weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
+  },
+  table => [uniqueIndex('weigh_ins_local_date').on(table.localDate)],
+);
 
 export const templatesRelations = relations(templates, ({ many }) => ({
   exercises: many(templateExercises),

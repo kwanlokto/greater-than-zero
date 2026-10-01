@@ -18,6 +18,7 @@ import m0013 from './0013_create_rotations.sql';
 import m0014 from './0014_create_meals.sql';
 import m0015 from './0015_create_saved_foods.sql';
 import m0016 from './0016_add_macro_targets.sql';
+import m0017 from './0017_create_weigh_ins.sql';
 
   export default {
     journal,
@@ -38,7 +39,8 @@ m0012,
 m0013,
 m0014,
 m0015,
-m0016
+m0016,
+m0017
     }
   }
   
