@@ -6,8 +6,8 @@ import { LineChart } from '@/components/line-chart';
 import { OptionPicker } from '@/components/option-picker';
 import { progressMeasuresFor, type ProgressMeasure } from '@/core/tracker';
 import { tracker } from '@/database';
-import { formatLocalDate, formatLocalDateWithWeekday } from '@/dates';
-import { formatProgressValue, measureName, measureNamesFor } from '@/progress-labels';
+import { formatLocalDateWithWeekday } from '@/dates';
+import { describeProgress, formatProgressValue, measureNames } from '@/progress-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // How an Exercise has progressed: a chart of one value per finished Workout,
@@ -33,15 +33,18 @@ export default function ExerciseProgressScreen() {
 
   const { trackingType } = exercise;
   const { unit, points } = series;
-  const format = (value: number) => formatProgressValue(unit, value);
-  const latestFirst = [...points].reverse();
+  const chartPoints = points.map(point => ({
+    ...point,
+    label: formatProgressValue(unit, point.displayValue),
+  }));
+  const latestFirst = [...chartPoints].reverse();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Stack.Screen options={{ title: exercise.name }} />
       <OptionPicker
         options={progressMeasuresFor[trackingType]}
-        labels={measureNamesFor(trackingType)}
+        labels={measureNames[trackingType]}
         value={measure}
         onChange={setChosen}
       />
@@ -52,10 +55,9 @@ export default function ExerciseProgressScreen() {
       ) : (
         <>
           <LineChart
-            points={points}
-            formatValue={format}
+            points={chartPoints}
             wholeNumbers={unit === 'reps'}
-            description={describeChart(measureName(trackingType, measure), points, format)}
+            description={describeProgress(measureNames[trackingType][measure], series)}
           />
           <View style={styles.section}>
             <Text style={[styles.heading, { color: colors.text }]}>Each workout</Text>
@@ -67,29 +69,13 @@ export default function ExerciseProgressScreen() {
                 <Text style={[styles.rowDate, { color: colors.text }]}>
                   {formatLocalDateWithWeekday(point.localDate)}
                 </Text>
-                <Text style={[styles.rowValue, { color: colors.text }]}>{format(point.value)}</Text>
+                <Text style={[styles.rowValue, { color: colors.text }]}>{point.label}</Text>
               </View>
             ))}
           </View>
         </>
       )}
     </ScrollView>
-  );
-}
-
-// "Estimated 1-rep max over 3 workouts, from 116.7 kg on 20 Sep to 130 kg on
-// 24 Sep", for screen readers.
-function describeChart(
-  name: string,
-  points: { localDate: string; value: number }[],
-  format: (value: number) => string,
-): string {
-  const first = points[0];
-  const last = points[points.length - 1];
-  const workouts = points.length === 1 ? '1 workout' : `${points.length} workouts`;
-  return (
-    `${name} over ${workouts}, from ${format(first.value)} on ${formatLocalDate(first.localDate)} ` +
-    `to ${format(last.value)} on ${formatLocalDate(last.localDate)}`
   );
 }
 

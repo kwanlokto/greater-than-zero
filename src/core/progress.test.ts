@@ -6,7 +6,7 @@ import {
   startWorkoutWith,
   startWorkoutWithEach,
 } from './test-helpers';
-import { createTracker, type ProgressMeasure, type Tracker } from './tracker';
+import { createTracker, progressMeasuresFor, type ProgressMeasure, type Tracker } from './tracker';
 
 // An Exercise's progress chart as [local date, value] pairs, values to three
 // decimal places.
@@ -20,9 +20,10 @@ describe('Progress of a weighted Exercise', () => {
   it("charts each finished Workout's best working Set as an estimated one-rep max", async () => {
     const clock = clockAt('2026-09-20T18:00:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    // 100 × (1 + 5/30) beats 105 × (1 + 3/30) = 115.5.
+    // 100 × (1 + 5/30) beats 105 × (1 + 3/30) = 115.5; the warm-up's 121
+    // doesn't count.
     await doWorkout(tracker, 'Bench Press', [
-      { weight: 40, reps: 10, isWarmUp: true },
+      { weight: 110, reps: 3, isWarmUp: true },
       { weight: 100, reps: 5 },
       { weight: 105, reps: 3 },
     ]);
@@ -42,7 +43,7 @@ describe('Progress of a weighted Exercise', () => {
     ]);
   });
 
-  it('switches to the heaviest working weight, leaving out warm-ups and unfinished Workouts', async () => {
+  it('switches to the heaviest working weight, leaving out warm-ups and Workouts not finished or since deleted', async () => {
     const clock = clockAt('2026-09-20T18:00:00');
     const tracker = createTracker(createTestDatabase(), clock);
     await doWorkout(tracker, 'Bench Press', [
@@ -77,10 +78,18 @@ describe('Progress of a weighted Exercise', () => {
     await tracker.logSet(entry.id, { weight: 100, reps: 5 });
     await tracker.finishWorkout(workout.id);
 
+    const squat = await findExerciseByName(tracker, 'Squat');
     expect(await chartOf(tracker, 'Squat', 'heaviestWeight')).toEqual([['2026-09-20', 102.058]]);
+    // 225 lb × (1 + 5/30) is 262.5 lb, or 119.068 kg.
+    expect(await chartOf(tracker, 'Squat', 'estimatedOneRepMax')).toEqual([
+      ['2026-09-20', 119.068],
+    ]);
+    // Shown to one decimal place, like a Set's weight.
+    const [shown] = (await tracker.getProgress(squat.id, 'heaviestWeight')).points;
+    expect(shown.displayValue).toBe(102.1);
     await tracker.setDisplayUnit('lb');
     expect(await chartOf(tracker, 'Squat', 'heaviestWeight')).toEqual([['2026-09-20', 225]]);
-    const squat = await findExerciseByName(tracker, 'Squat');
+    expect(await chartOf(tracker, 'Squat', 'estimatedOneRepMax')).toEqual([['2026-09-20', 262.5]]);
     expect((await tracker.getProgress(squat.id, 'heaviestWeight')).unit).toBe('lb');
   });
 
@@ -200,5 +209,44 @@ describe('Exercises to chart', () => {
       'Bench Press',
       'Landmine Press',
     ]);
+  });
+
+  it("rank each by its latest Workout in the order Workouts go in, a day's backfilled ones first", async () => {
+    const clock = clockAt('2026-09-22T18:00:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    await doWorkout(tracker, 'Bench Press', [{ weight: 100, reps: 5 }]);
+    clock.setTime('2026-09-22T19:00:00');
+    await doWorkout(tracker, 'Squat', [{ weight: 140, reps: 5 }]);
+    clock.setTime('2026-09-25T18:00:00');
+    // Entered after both, but its date is the 10th.
+    await backfill(tracker, 'Bench Press', '2026-09-10');
+    // Entered last, onto the 22nd, where backfilled Workouts come first.
+    clock.setTime('2026-09-25T20:00:00');
+    await backfill(tracker, 'Deadlift', '2026-09-22');
+
+    const exercises = await tracker.getProgressExercises();
+
+    expect(exercises.map(exercise => exercise.name)).toEqual(['Squat', 'Bench Press', 'Deadlift']);
+  });
+
+  async function backfill(tracker: Tracker, exerciseName: string, localDate: string) {
+    const { workout, entry } = await startWorkoutWith(tracker, exerciseName, { localDate });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.finishWorkout(workout.id);
+  }
+});
+
+describe('Progress measures', () => {
+  it.each<[string, ProgressMeasure, string]>([
+    ['Bench Press', 'mostReps', 'weighted'],
+    ['Pull-up', 'estimatedOneRepMax', 'bodyweight'],
+  ])("aren't charted for %s by %s", async (exerciseName, measure, trackingType) => {
+    const tracker = createTracker(createTestDatabase());
+    const exercise = await findExerciseByName(tracker, exerciseName);
+
+    expect(progressMeasuresFor[exercise.trackingType]).not.toContain(measure);
+    await expect(tracker.getProgress(exercise.id, measure)).rejects.toThrow(
+      `A ${trackingType} Exercise isn't charted that way`,
+    );
   });
 });

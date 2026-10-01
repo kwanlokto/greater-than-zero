@@ -79,3 +79,10 @@ export function calendarWeeks(month: string): (string | null)[][] {
 export function formatTimeOfDay(time: Date): string {
   return time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+
+// A YYYY-MM-DD local date as a count of days, for spacing dates by how far
+// apart they are.
+export function dayNumberOf(localDate: string): number {
+  const [year, month, day] = localDate.split('-').map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}

@@ -3,15 +3,14 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
-import { formatLocalDate } from '@/dates';
+import { dayNumberOf, formatLocalDate } from '@/dates';
 
-// A value on a local date, as YYYY-MM-DD.
-export type ChartPoint = { localDate: string; value: number };
+// A value on a local date, as YYYY-MM-DD, and how it reads, e.g. "116.7 kg".
+export type ChartPoint = { localDate: string; value: number; label: string };
 
 type Props = {
   // In order. Points on the same date sit side by side.
   points: ChartPoint[];
-  formatValue: (value: number) => string;
   // Ticks on the value axis are whole numbers, e.g. for reps.
   wholeNumbers?: boolean;
   // What the chart shows, for screen readers; the screen lists the values too.
@@ -20,20 +19,21 @@ type Props = {
 
 const height = 200;
 const margin = { top: 12, right: 12, bottom: 24, left: 40 };
-// Past this many, only the selected point gets a marker.
-const mostMarkers = 40;
+// Past this many points, only the selected one gets a marker.
+const maxMarkedPoints = 40;
 
 // One series over time: a 2px line with a faint wash under it, hairline
 // gridlines at clean values, and the first and last dates. The readout above
 // leads with the latest point's value and date; touching the chart moves a
 // crosshair to the nearest point and reads that one out instead.
-export function LineChart({ points, formatValue, wholeNumbers = false, description }: Props) {
+export function LineChart({ points, wholeNumbers = false, description }: Props) {
   const { colors } = useTheme();
   const [width, setWidth] = useState(0);
-  const [touched, setTouched] = useState<number>();
+  const [touchedIndex, setTouchedIndex] = useState<number>();
 
   if (points.length === 0) return null;
-  const selected = touched !== undefined && touched < points.length ? touched : points.length - 1;
+  const touched = touchedIndex !== undefined && touchedIndex < points.length;
+  const selected = touched ? touchedIndex : points.length - 1;
   const days = dayPositions(points);
   const ticks = niceTicks(
     Math.min(...points.map(point => point.value)),
@@ -54,7 +54,7 @@ export function LineChart({ points, formatValue, wholeNumbers = false, descripti
   const line = xs.map((x, index) => `${index === 0 ? 'M' : 'L'}${x},${ys[index]}`).join(' ');
   const baseline = margin.top + plotHeight;
   const wash = `${line} L${xs[xs.length - 1]},${baseline} L${xs[0]},${baseline} Z`;
-  const markers = points.length <= mostMarkers ? points.map((_, index) => index) : [selected];
+  const markers = points.length <= maxMarkedPoints ? points.map((_, index) => index) : [selected];
 
   // The nearest point to where the chart is touched.
   const touch = (event: GestureResponderEvent) => {
@@ -63,15 +63,13 @@ export function LineChart({ points, formatValue, wholeNumbers = false, descripti
     xs.forEach((pointX, index) => {
       if (Math.abs(pointX - x) < Math.abs(xs[nearest] - x)) nearest = index;
     });
-    setTouched(nearest);
+    setTouchedIndex(nearest);
   };
 
   return (
     <View style={styles.chart}>
       <View style={styles.readout}>
-        <Text style={[styles.value, { color: colors.text }]}>
-          {formatValue(points[selected].value)}
-        </Text>
+        <Text style={[styles.value, { color: colors.text }]}>{points[selected].label}</Text>
         <Text style={[styles.date, { color: colors.text }]}>
           {formatLocalDate(points[selected].localDate)}
         </Text>
@@ -120,7 +118,7 @@ export function LineChart({ points, formatValue, wholeNumbers = false, descripti
               strokeLinejoin="round"
               strokeLinecap="round"
             />
-            {touched !== undefined && (
+            {touched && (
               <Line
                 x1={xs[selected]}
                 x2={xs[selected]}
@@ -174,11 +172,13 @@ export function LineChart({ points, formatValue, wholeNumbers = false, descripti
 // Where each point sits along the time axis, in days. Points on the same date
 // share the day, spread across part of it in their order.
 function dayPositions(points: ChartPoint[]): number[] {
-  return points.map((point, index) => {
-    const sameDay = points.filter(other => other.localDate === point.localDate);
-    const nth = points.slice(0, index).filter(other => other.localDate === point.localDate).length;
-    const [year, month, day] = point.localDate.split('-').map(Number);
-    return Date.UTC(year, month - 1, day) / 86_400_000 + (nth / sameDay.length) * 0.6;
+  const onDate = new Map<string, number>();
+  for (const { localDate } of points) onDate.set(localDate, (onDate.get(localDate) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return points.map(({ localDate }) => {
+    const nth = seen.get(localDate) ?? 0;
+    seen.set(localDate, nth + 1);
+    return dayNumberOf(localDate) + (nth / (onDate.get(localDate) ?? 1)) * 0.6;
   });
 }
 

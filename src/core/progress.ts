@@ -19,7 +19,10 @@ export type ProgressPoint = {
   workoutId: string;
   // Its local date, as YYYY-MM-DD.
   localDate: string;
+  // At full precision, for plotting.
   value: number;
+  // What to show: a weight to one decimal place, like a Set's, or reps.
+  displayValue: number;
 };
 
 // A progress chart: its points in the order Workouts go in, and the unit of
@@ -35,10 +38,15 @@ export function estimatedOneRepMax(weight: number, reps: number): number {
   return reps === 1 ? weight : weight * (1 + reps / 30);
 }
 
-// A Workout's value for a measure, from its working Sets of the Exercise, each
-// weight in the unit charted. Plain bodyweight, stored as null, is no added
-// weight.
-export function measureOf(
+// What a measure's values are in: reps, or weights in the display unit.
+export function unitOf(measure: ProgressMeasure, displayUnit: WeightUnit): ProgressSeries['unit'] {
+  return measure === 'mostReps' ? 'reps' : displayUnit;
+}
+
+// A Workout's value for a measure: the best of its working Sets of the
+// Exercise, each weight in the unit charted. Plain bodyweight, stored as null,
+// is no added weight.
+export function bestValueOf(
   measure: ProgressMeasure,
   workingSets: { weight: number | null; reps: number }[],
 ): number {

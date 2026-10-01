@@ -45,7 +45,9 @@ import {
   type TimeOfDay,
 } from './food';
 import {
-  measureOf,
+  bestValueOf,
+  progressMeasuresFor,
+  unitOf,
   type ProgressMeasure,
   type ProgressPoint,
   type ProgressSeries,
@@ -73,7 +75,6 @@ import {
 export { schema };
 export type { BackupFile } from './backup';
 export {
-  estimatedOneRepMax,
   progressMeasuresFor,
   type ProgressMeasure,
   type ProgressPoint,
@@ -371,11 +372,14 @@ function displayWeightOf(
   displayUnit: WeightUnit,
 ): Weight | null {
   if (weight === null) return null;
-  const converted = convertWeight(weight, unit, displayUnit);
-  // To one decimal place, halves away from zero, so help from an assisted
-  // machine rounds the same way as added weight.
-  const tenths = Math.round(Math.abs(converted) * 10) / 10;
-  return { value: converted < 0 ? -tenths : tenths, unit: displayUnit };
+  return { value: roundedForDisplay(convertWeight(weight, unit, displayUnit)), unit: displayUnit };
+}
+
+// A weight as shown: to one decimal place, halves away from zero, so help from
+// an assisted machine rounds the same way as added weight.
+function roundedForDisplay(weight: number): number {
+  const tenths = Math.round(Math.abs(weight) * 10) / 10;
+  return weight < 0 ? -tenths : tenths;
 }
 
 function withDisplayWeight(
@@ -544,6 +548,11 @@ function plannedSetStillThere() {
 // joining Sets to their Exercise entries.
 function setStillLogged() {
   return and(isNull(sets.deletedAt), isNull(exerciseEntries.deletedAt));
+}
+
+// The same, for a working Set rather than a warm-up.
+function workingSetStillLogged() {
+  return and(setStillLogged(), eq(sets.isWarmUp, false));
 }
 
 // A Template that hasn't been deleted.
@@ -1056,11 +1065,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     workout: WorkoutPlace,
   ): Promise<LastTime | null> {
     const workingSetOfExercise = () =>
-      and(
-        eq(exerciseEntries.exerciseId, exerciseId),
-        setStillLogged(),
-        eq(sets.isWarmUp, false),
-      );
+      and(eq(exerciseEntries.exerciseId, exerciseId), workingSetStillLogged());
 
     const [latest] = await db
       .select({ workoutId: workouts.id, localDate: workouts.localDate })
@@ -1793,12 +1798,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .limit(1);
       if (!latest) return false;
       const workingSets = await setsForIt().where(
-        and(
-          doneForIt,
-          setStillLogged(),
-          eq(sets.isWarmUp, false),
-          eq(workouts.id, latest.workoutId),
-        ),
+        and(doneForIt, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
       );
       return setsMeetTarget(
         workingSets,
@@ -2477,22 +2477,26 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     },
 
     // The Exercises there's progress to chart for: those with a working Set
-    // in a finished Workout, the most recently done first. Hidden ones keep
-    // their history, so they're here too.
+    // in a finished Workout, the one whose latest such Workout comes last in
+    // the order Workouts go in first. Hidden ones keep their history, so
+    // they're here too.
     async getProgressExercises(): Promise<Exercise[]> {
-      return db
+      // Each Exercise once per Workout it was done in, the latest Workouts
+      // first, so its first row is its latest.
+      const done = await db
         .select(exerciseColumns)
         .from(exercises)
         .innerJoin(exerciseEntries, eq(exerciseEntries.exerciseId, exercises.id))
         .innerJoin(sets, eq(sets.exerciseEntryId, exerciseEntries.id))
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(and(setStillLogged(), eq(sets.isWarmUp, false), finished()))
-        .groupBy(exercises.id)
-        .orderBy(
-          desc(sql`max(${workouts.localDate})`),
-          desc(sql`max(${workouts.startedAt})`),
-          sql`${exercises.name} COLLATE NOCASE`,
-        );
+        .where(and(workingSetStillLogged(), finished()))
+        .groupBy(exercises.id, workouts.id)
+        .orderBy(...latestWorkoutFirst, sql`${exercises.name} COLLATE NOCASE`);
+      const latestFirst = new Map<string, Exercise>();
+      for (const exercise of done) {
+        if (!latestFirst.has(exercise.id)) latestFirst.set(exercise.id, exercise);
+      }
+      return [...latestFirst.values()];
     },
 
     // A progress chart for an Exercise: a point for each finished Workout with
@@ -2500,6 +2504,15 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // across that Workout's working Sets of it. Weights are converted from
     // each Set as entered to the display unit, at full precision.
     async getProgress(exerciseId: string, measure: ProgressMeasure): Promise<ProgressSeries> {
+      const [exercise] = await db
+        .select({ trackingType: exercises.trackingType })
+        .from(exercises)
+        .where(eq(exercises.id, exerciseId));
+      if (!exercise) throw new Error('No such Exercise');
+      // Each kind of Exercise has its own two (see progressMeasuresFor).
+      if (!progressMeasuresFor[exercise.trackingType].includes(measure)) {
+        throw new Error(`A ${exercise.trackingType} Exercise isn't charted that way`);
+      }
       const workingSets = await db
         .select({
           workoutId: workouts.id,
@@ -2511,16 +2524,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .from(sets)
         .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(
-          and(
-            eq(exerciseEntries.exerciseId, exerciseId),
-            setStillLogged(),
-            eq(sets.isWarmUp, false),
-            finished(),
-          ),
-        )
+        .where(and(eq(exerciseEntries.exerciseId, exerciseId), workingSetStillLogged(), finished()))
         .orderBy(...workoutOrder);
       const displayUnit = await getDisplayUnit();
+      const unit = unitOf(measure, displayUnit);
       // Each Workout's Sets, Workouts in the order their first Set came.
       const byWorkout = new Map<string, { localDate: string; sets: typeof workingSets }>();
       for (const set of workingSets) {
@@ -2528,18 +2535,18 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         workout.sets.push(set);
         byWorkout.set(set.workoutId, workout);
       }
-      const points: ProgressPoint[] = [...byWorkout].map(([workoutId, workout]) => ({
-        workoutId,
-        localDate: workout.localDate,
-        value: measureOf(
+      const points: ProgressPoint[] = [...byWorkout].map(([workoutId, workout]) => {
+        const value = bestValueOf(
           measure,
           workout.sets.map(({ weight, weightUnit, reps }) => ({
             weight: weight === null ? null : convertWeight(weight, weightUnit, displayUnit),
             reps,
           })),
-        ),
-      }));
-      return { unit: measure === 'mostReps' ? 'reps' : displayUnit, points };
+        );
+        const displayValue = unit === 'reps' ? value : roundedForDisplay(value);
+        return { workoutId, localDate: workout.localDate, value, displayValue };
+      });
+      return { unit, points };
     },
 
     // Null when no Workout is in progress.
