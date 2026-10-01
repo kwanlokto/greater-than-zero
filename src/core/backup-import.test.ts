@@ -23,6 +23,7 @@ async function phoneWithData() {
   const tracker = createTracker(createTestDatabase(), clock);
   await tracker.setDisplayUnit('lb');
   await tracker.setMacroTargets({ calories: 2400, protein: 180, carbs: null, fat: null });
+  await tracker.setWeighIn(182.4);
   const landmine = await tracker.createExercise({
     name: 'Landmine Press',
     trackingType: 'weighted',

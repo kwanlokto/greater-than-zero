@@ -2,7 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter, useTheme } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { describeTrend, formatBodyWeight } from '@/body-weight-labels';
+import { formatBodyWeight } from '@/body-weight-labels';
+import { describeChart } from '@/chart-labels';
 import { LineChart } from '@/components/line-chart';
 import { TextButton } from '@/components/text-button';
 import { tracker } from '@/database';
@@ -16,6 +17,12 @@ export default function ProgressScreen() {
   const { colors } = useTheme();
   const trend = useTrackerQuery(() => tracker.getBodyWeightTrend(), []);
   const exercises = useTrackerQuery(() => tracker.getProgressExercises(), []);
+  const trendPoints = trend
+    ? trend.points.map(point => ({
+        ...point,
+        label: formatBodyWeight({ value: point.displayValue, unit: trend.unit }),
+      }))
+    : [];
 
   return (
     <FlatList
@@ -33,11 +40,12 @@ export default function ProgressScreen() {
             {trend && trend.points.length > 0 && (
               <>
                 <LineChart
-                  points={trend.points.map(point => ({
-                    ...point,
-                    label: formatBodyWeight(point.displayValue, trend.unit),
-                  }))}
-                  description={describeTrend(trend)}
+                  points={trendPoints}
+                  description={describeChart(
+                    'Body weight',
+                    { one: 'weigh-in', many: 'weigh-ins' },
+                    trendPoints,
+                  )}
                 />
                 <TextButton label="All weigh-ins" onPress={() => router.navigate('/weigh-ins')} />
               </>

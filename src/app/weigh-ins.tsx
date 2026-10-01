@@ -21,7 +21,7 @@ export default function WeighInsScreen() {
             {formatLocalDateWithWeekday(item.localDate)}
           </Text>
           <Text style={[styles.weight, { color: colors.text }]}>
-            {trend && formatBodyWeight(item.displayValue, trend.unit)}
+            {trend && formatBodyWeight({ value: item.displayValue, unit: trend.unit })}
           </Text>
         </View>
       )}

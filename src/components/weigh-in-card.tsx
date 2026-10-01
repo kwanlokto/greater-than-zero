@@ -37,12 +37,11 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
   const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
 
   if (weighIn && !changing) {
-    const { value, unit } = weighIn.displayWeight;
     return (
       <View style={card}>
         <View style={styles.row}>
           <Text style={[styles.weight, { color: colors.text }]}>
-            {formatBodyWeight(value, unit)}
+            {formatBodyWeight(weighIn.displayWeight)}
           </Text>
           <Text style={[styles.details, { color: colors.text }]}>
             at {formatTimeOfDay(weighIn.weighedAt)}

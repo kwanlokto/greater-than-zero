@@ -7,7 +7,8 @@ import { OptionPicker } from '@/components/option-picker';
 import { progressMeasuresFor, type ProgressMeasure } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
-import { describeProgress, formatProgressValue, measureNames } from '@/progress-labels';
+import { describeChart } from '@/chart-labels';
+import { formatProgressValue, measureNames } from '@/progress-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // How an Exercise has progressed: a chart of one value per finished Workout,
@@ -57,7 +58,11 @@ export default function ExerciseProgressScreen() {
           <LineChart
             points={chartPoints}
             wholeNumbers={unit === 'reps'}
-            description={describeProgress(measureNames[trackingType][measure], series)}
+            description={describeChart(
+              measureNames[trackingType][measure],
+              { one: 'workout', many: 'workouts' },
+              chartPoints,
+            )}
           />
           <View style={styles.section}>
             <Text style={[styles.heading, { color: colors.text }]}>Each workout</Text>

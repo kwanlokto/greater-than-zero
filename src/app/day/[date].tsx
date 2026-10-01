@@ -82,7 +82,7 @@ export default function DayScreen() {
         <DaySection title="Weigh-in">
           {day.weighIn ? (
             <Text style={[styles.weighIn, { color: colors.text }]}>
-              {formatBodyWeight(day.weighIn.displayWeight.value, day.weighIn.displayWeight.unit)}
+              {formatBodyWeight(day.weighIn.displayWeight)}
             </Text>
           ) : (
             <Text style={[styles.note, { color: colors.text }]}>No weigh-in.</Text>

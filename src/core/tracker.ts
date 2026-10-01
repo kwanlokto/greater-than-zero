@@ -25,6 +25,7 @@ import {
   writeTables,
   type BackupFile,
 } from './backup';
+import { problemWithWeighIn, type BodyWeightTrend, type WeighIn } from './body-weight';
 import {
   dailyTotalsOf,
   defaultMealName,
@@ -52,7 +53,6 @@ import {
   type ProgressPoint,
   type ProgressSeries,
 } from './progress';
-import { problemWithWeighIn, type BodyWeightTrend, type WeighIn } from './body-weight';
 import * as schema from './schema';
 import {
   exerciseEntries,
@@ -78,8 +78,8 @@ export { schema };
 export type { BackupFile } from './backup';
 export {
   problemWithWeighIn,
+  type BodyWeightPoint,
   type BodyWeightTrend,
-  type TrendPoint,
   type WeighIn,
 } from './body-weight';
 export {
@@ -251,6 +251,7 @@ export type Day = {
   workouts: Workout[];
   // Its Meals, in the order eaten.
   meals: Meal[];
+  // Null when none was entered that day.
   weighIn: WeighIn | null;
 };
 
@@ -381,6 +382,11 @@ function displayWeightOf(
   displayUnit: WeightUnit,
 ): Weight | null {
   if (weight === null) return null;
+  return displayedWeight(weight, unit, displayUnit);
+}
+
+// The same, for a weight that's always there.
+function displayedWeight(weight: number, unit: WeightUnit, displayUnit: WeightUnit): Weight {
   return { value: roundedForDisplay(convertWeight(weight, unit, displayUnit)), unit: displayUnit };
 }
 
@@ -1419,9 +1425,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     return findMeals(eq(meals.localDate, localDate));
   }
 
-  // The Weigh-in for a local date, as YYYY-MM-DD; null when there's none.
-  async function getWeighIn(localDate: string): Promise<WeighIn | null> {
-    const [row] = await db
+  // The Weigh-ins matching `where`, by date. Deleted ones are left out.
+  async function findWeighIns(where: SQL | undefined): Promise<WeighIn[]> {
+    const found = await db
       .select({
         localDate: weighIns.localDate,
         weight: weighIns.weight,
@@ -1429,11 +1435,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         weighedAt: weighIns.weighedAt,
       })
       .from(weighIns)
-      .where(and(eq(weighIns.localDate, localDate), isNull(weighIns.deletedAt)));
-    if (!row) return null;
+      .where(and(where, isNull(weighIns.deletedAt)))
+      .orderBy(asc(weighIns.localDate));
     const displayUnit = await getDisplayUnit();
-    const shown = roundedForDisplay(convertWeight(row.weight, row.weightUnit, displayUnit));
-    return { ...row, displayWeight: { value: shown, unit: displayUnit } };
+    return found.map(row => ({
+      ...row,
+      displayWeight: displayedWeight(row.weight, row.weightUnit, displayUnit),
+    }));
+  }
+
+  // The Weigh-in for a local date, as YYYY-MM-DD; null when there's none.
+  async function getWeighIn(localDate: string): Promise<WeighIn | null> {
+    const [weighIn] = await findWeighIns(eq(weighIns.localDate, localDate));
+    return weighIn ?? null;
   }
 
   async function getWorkout(id: string): Promise<Workout | undefined> {
@@ -2589,7 +2603,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .values({ localDate: localDateOf(weighedAt), ...entered })
         .onConflictDoUpdate({
           target: weighIns.localDate,
-          set: { ...entered, deletedAt: null, updatedAt: new Date() },
+          // One deleted that day (only a Backup file can hold one) comes back.
+          set: { ...entered, deletedAt: null },
         });
     },
 
@@ -2598,15 +2613,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Every Weigh-in, by date, each converted from the unit it was entered in
     // to the display unit at full precision.
     async getBodyWeightTrend(): Promise<BodyWeightTrend> {
-      const entered = await db
-        .select({
-          localDate: weighIns.localDate,
-          weight: weighIns.weight,
-          weightUnit: weighIns.weightUnit,
-        })
-        .from(weighIns)
-        .where(isNull(weighIns.deletedAt))
-        .orderBy(asc(weighIns.localDate));
+      const entered = await findWeighIns(undefined);
       const unit = await getDisplayUnit();
       const points = entered.map(({ localDate, weight, weightUnit }) => {
         const value = convertWeight(weight, weightUnit, unit);

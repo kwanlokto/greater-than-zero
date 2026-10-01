@@ -1,9 +1,7 @@
 // The lifter's body weight: one Weigh-in a day, and its trend.
 
 import type { WeightUnit } from './schema';
-
-// A weight in a unit, as shown.
-type Weight = { value: number; unit: WeightUnit };
+import type { Weight } from './tracker';
 
 // The lifter's body weight on a day.
 export type WeighIn = {
@@ -26,7 +24,8 @@ export function problemWithWeighIn(weight: number): string | undefined {
 }
 
 // A Weigh-in on the body-weight trend.
-export type TrendPoint = {
+export type BodyWeightPoint = {
+  // Its local date, as YYYY-MM-DD.
   localDate: string;
   // In the display unit, at full precision, for plotting.
   value: number;
@@ -37,5 +36,5 @@ export type TrendPoint = {
 // Every Weigh-in by date, in the display unit.
 export type BodyWeightTrend = {
   unit: WeightUnit;
-  points: TrendPoint[];
+  points: BodyWeightPoint[];
 };

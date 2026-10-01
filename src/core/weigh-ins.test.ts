@@ -42,6 +42,30 @@ describe('Weigh-ins', () => {
       weightUnit: 'kg',
       displayWeight: { value: 181.7, unit: 'lb' },
     });
+    const { points } = await tracker.getBodyWeightTrend();
+    expect(points.map(({ localDate, displayValue }) => [localDate, displayValue])).toEqual([
+      ['2026-09-28', 181.7],
+      ['2026-09-29', 180.5],
+    ]);
+  });
+
+  it('come back on a date whose Weigh-in a Backup file had deleted', async () => {
+    const clock = clockAt('2026-09-29T07:30:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    await tracker.setWeighIn(82.1);
+    const backup = JSON.parse(await tracker.exportBackup('1.2.3'));
+    backup.tables.weigh_ins[0].deleted_at = clock.now().getTime();
+    await tracker.importBackup(JSON.stringify(backup));
+    expect(await tracker.getWeighIn('2026-09-29')).toBeNull();
+    expect((await tracker.getBodyWeightTrend()).points).toEqual([]);
+
+    clock.setTime('2026-09-29T08:00:00');
+    await tracker.setWeighIn(81.9);
+
+    expect(await tracker.getWeighIn('2026-09-29')).toMatchObject({
+      weight: 81.9,
+      weighedAt: new Date('2026-09-29T08:00:00'),
+    });
   });
 
   it.each([0, -80, Number.NaN])('need a weight above 0, not %s', async weight => {
