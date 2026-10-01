@@ -44,6 +44,12 @@ import {
   type SavedFoodValues,
   type TimeOfDay,
 } from './food';
+import {
+  measureOf,
+  type ProgressMeasure,
+  type ProgressPoint,
+  type ProgressSeries,
+} from './progress';
 import * as schema from './schema';
 import {
   exerciseEntries,
@@ -66,6 +72,13 @@ import {
 
 export { schema };
 export type { BackupFile } from './backup';
+export {
+  estimatedOneRepMax,
+  progressMeasuresFor,
+  type ProgressMeasure,
+  type ProgressPoint,
+  type ProgressSeries,
+} from './progress';
 export {
   caloriesFromMacros,
   portionOf,
@@ -2461,6 +2474,72 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     async getSavedFood(id: string): Promise<SavedFood | undefined> {
       const [savedFood] = await findSavedFoods(eq(savedFoods.id, id));
       return savedFood;
+    },
+
+    // The Exercises there's progress to chart for: those with a working Set
+    // in a finished Workout, the most recently done first. Hidden ones keep
+    // their history, so they're here too.
+    async getProgressExercises(): Promise<Exercise[]> {
+      return db
+        .select(exerciseColumns)
+        .from(exercises)
+        .innerJoin(exerciseEntries, eq(exerciseEntries.exerciseId, exercises.id))
+        .innerJoin(sets, eq(sets.exerciseEntryId, exerciseEntries.id))
+        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
+        .where(and(setStillLogged(), eq(sets.isWarmUp, false), finished()))
+        .groupBy(exercises.id)
+        .orderBy(
+          desc(sql`max(${workouts.localDate})`),
+          desc(sql`max(${workouts.startedAt})`),
+          sql`${exercises.name} COLLATE NOCASE`,
+        );
+    },
+
+    // A progress chart for an Exercise: a point for each finished Workout with
+    // a working Set of it, in the order Workouts go in, valued by `measure`
+    // across that Workout's working Sets of it. Weights are converted from
+    // each Set as entered to the display unit, at full precision.
+    async getProgress(exerciseId: string, measure: ProgressMeasure): Promise<ProgressSeries> {
+      const workingSets = await db
+        .select({
+          workoutId: workouts.id,
+          localDate: workouts.localDate,
+          weight: sets.weight,
+          weightUnit: sets.weightUnit,
+          reps: sets.reps,
+        })
+        .from(sets)
+        .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
+        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
+        .where(
+          and(
+            eq(exerciseEntries.exerciseId, exerciseId),
+            setStillLogged(),
+            eq(sets.isWarmUp, false),
+            finished(),
+          ),
+        )
+        .orderBy(...workoutOrder);
+      const displayUnit = await getDisplayUnit();
+      // Each Workout's Sets, Workouts in the order their first Set came.
+      const byWorkout = new Map<string, { localDate: string; sets: typeof workingSets }>();
+      for (const set of workingSets) {
+        const workout = byWorkout.get(set.workoutId) ?? { localDate: set.localDate, sets: [] };
+        workout.sets.push(set);
+        byWorkout.set(set.workoutId, workout);
+      }
+      const points: ProgressPoint[] = [...byWorkout].map(([workoutId, workout]) => ({
+        workoutId,
+        localDate: workout.localDate,
+        value: measureOf(
+          measure,
+          workout.sets.map(({ weight, weightUnit, reps }) => ({
+            weight: weight === null ? null : convertWeight(weight, weightUnit, displayUnit),
+            reps,
+          })),
+        ),
+      }));
+      return { unit: measure === 'mostReps' ? 'reps' : displayUnit, points };
     },
 
     // Null when no Workout is in progress.

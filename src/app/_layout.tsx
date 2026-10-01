@@ -70,6 +70,7 @@ export default function RootLayout() {
               options={{ title: 'Add template', presentation: 'modal' }}
             />
             <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
+            <Stack.Screen name="progress/[exerciseId]" options={{ title: 'Progress' }} />
             <Stack.Screen name="meals/[id]" options={{ title: 'Meal' }} />
             <Stack.Screen name="meals/food-item" options={{ title: 'Food' }} />
             <Stack.Screen
