@@ -1,5 +1,4 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
@@ -9,7 +8,7 @@ import { RestLengthPicker } from '@/components/rest-length-picker';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { exerciseDetails } from '@/exercise-labels';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // One Exercise in the library. Every Exercise has a rest length to choose;
@@ -21,23 +20,19 @@ export default function ExerciseScreen() {
 
   if (!exercise) return null;
 
-  const confirmHide = () => {
-    Alert.alert(
-      `Hide ${exercise.name}?`,
-      'It will no longer appear in the library. Workouts that used it keep its name.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Hide',
-          style: 'destructive',
-          onPress: async () => {
-            if (await runOrAlert("Couldn't hide the exercise", () => tracker.hideExercise(id))) {
-              router.back();
-            }
-          },
-        },
-      ],
+  const confirmHide = async () => {
+    const done = await confirmThenRun(
+      {
+        title: `Hide ${exercise.name}?`,
+        message: 'It will no longer appear in the library. Workouts that used it keep its name.',
+        decline: 'Cancel',
+        accept: 'Hide',
+        destructive: true,
+      },
+      "Couldn't hide the exercise",
+      () => tracker.hideExercise(id),
     );
+    if (done) router.back();
   };
 
   return (

@@ -1,5 +1,4 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
@@ -7,7 +6,7 @@ import { SavedFoodForm } from '@/components/saved-food-form';
 import { Screen } from '@/components/screen';
 import type { SavedFoodValues } from '@/core/tracker';
 import { tracker } from '@/database';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // One Saved food, to change or delete. Meals it was added to keep the macros
@@ -33,19 +32,19 @@ export default function SavedFoodScreen() {
     }
   }
 
-  const confirmDelete = () => {
-    Alert.alert(`Delete ${savedFood.name}?`, 'Meals it was added to keep it as it was logged.', [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmDelete = async () => {
+    const done = await confirmThenRun(
       {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't delete the food", () => tracker.deleteSavedFood(id))) {
-            router.back();
-          }
-        },
+        title: `Delete ${savedFood.name}?`,
+        message: 'Meals it was added to keep it as it was logged.',
+        decline: 'Cancel',
+        accept: 'Delete',
+        destructive: true,
       },
-    ]);
+      "Couldn't delete the food",
+      () => tracker.deleteSavedFood(id),
+    );
+    if (done) router.back();
   };
 
   return (

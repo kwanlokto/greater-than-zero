@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
@@ -11,7 +11,7 @@ import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import type { Template, TemplateExercise } from '@/core/tracker';
 import { tracker } from '@/database';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { describeTarget } from '@/template-labels';
 import { space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -33,25 +33,20 @@ export default function TemplateScreen() {
     );
   }
 
-  const confirmDelete = () => {
-    Alert.alert(
-      `Delete ${template.name}?`,
-      "Its exercises and targets will be removed, and it will leave any rotation it's in.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            if (
-              await runOrAlert("Couldn't delete the template", () => tracker.deleteTemplate(id))
-            ) {
-              router.back();
-            }
-          },
-        },
-      ],
+  const confirmDelete = async () => {
+    const done = await confirmThenRun(
+      {
+        title: `Delete ${template.name}?`,
+        message:
+          "Its exercises and targets will be removed, and it will leave any rotation it's in.",
+        decline: 'Cancel',
+        accept: 'Delete',
+        destructive: true,
+      },
+      "Couldn't delete the template",
+      () => tracker.deleteTemplate(id),
     );
+    if (done) router.back();
   };
 
   return (
@@ -113,16 +108,17 @@ function TemplateExerciseRow({ template, templateExercise, index }: RowProps) {
   const moveTo = (toIndex: number) =>
     runOrAlert("Couldn't move the exercise", () => tracker.moveTemplateExercise(id, toIndex));
 
-  const confirmRemove = () => {
-    Alert.alert(`Remove ${exercise.name} from ${template.name}?`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmRemove = async () => {
+    await confirmThenRun(
       {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () =>
-          runOrAlert("Couldn't remove the exercise", () => tracker.removeExerciseFromTemplate(id)),
+        title: `Remove ${exercise.name} from ${template.name}?`,
+        decline: 'Cancel',
+        accept: 'Remove',
+        destructive: true,
       },
-    ]);
+      "Couldn't remove the exercise",
+      () => tracker.removeExerciseFromTemplate(id),
+    );
   };
 
   return (

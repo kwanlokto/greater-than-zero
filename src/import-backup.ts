@@ -1,20 +1,18 @@
-import { File } from 'expo-file-system';
-
-import { ask, tell } from '@/ask';
-import { localDateOf } from '@/core/tracker';
-import { tracker } from '@/database';
+import { localDateOf, type Tracker } from '@/core/tracker';
 import { formatLocalDateWithWeekday } from '@/dates';
+import type { Prompter } from '@/prompter';
 
-// Picks a Backup file with the system file picker, checks it, warns that
-// importing replaces everything on this phone, and imports it once the lifter
-// confirms. Throws, saying why, for a file that can't be imported, leaving the
-// data as it was.
-export async function importBackupFromFile() {
-  const picked = await File.pickFileAsync();
-  if (picked.canceled) return;
-  const contents = await picked.result.text();
+// Imports a Backup file's contents once the lifter confirms, after checking it
+// and warning that importing replaces everything on this phone. Throws, saying
+// why, for a file that can't be imported, leaving the data as it was. True if
+// it was imported.
+export async function importBackup(
+  tracker: Tracker,
+  prompter: Prompter,
+  contents: string,
+): Promise<boolean> {
   const { exportedAt } = await tracker.checkBackup(contents);
-  const replace = await ask({
+  const replace = await prompter.ask({
     title: 'Replace all your data?',
     message:
       `This backup is from ${formatLocalDateWithWeekday(localDateOf(exportedAt))}. ` +
@@ -23,7 +21,8 @@ export async function importBackupFromFile() {
     accept: 'Replace',
     destructive: true,
   });
-  if (!replace) return;
+  if (!replace) return false;
   await tracker.importBackup(contents);
-  await tell('Backup imported', 'Your data is back as it was in the backup.');
+  await prompter.tell('Backup imported', 'Your data is back as it was in the backup.');
+  return true;
 }

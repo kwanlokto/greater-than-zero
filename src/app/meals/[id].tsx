@@ -1,6 +1,5 @@
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -14,7 +13,7 @@ import type { Meal } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatTimeOfDay } from '@/dates';
 import { describeFoodItem, describeMacros } from '@/food-labels';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // One Meal: its name, when it was eaten, its Food items and their totals.
@@ -43,19 +42,19 @@ export default function MealScreen() {
     if (copied && copyId) router.replace({ pathname: '/meals/[id]', params: { id: copyId } });
   }
 
-  const confirmDelete = () => {
-    Alert.alert(`Delete ${meal.name}?`, 'Its food will be removed too.', [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmDelete = async () => {
+    const done = await confirmThenRun(
       {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't delete the meal", () => tracker.deleteMeal(id))) {
-            router.back();
-          }
-        },
+        title: `Delete ${meal.name}?`,
+        message: 'Its food will be removed too.',
+        decline: 'Cancel',
+        accept: 'Delete',
+        destructive: true,
       },
-    ]);
+      "Couldn't delete the meal",
+      () => tracker.deleteMeal(id),
+    );
+    if (done) router.back();
   };
 
   return (

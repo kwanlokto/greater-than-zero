@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ActionSheet, type SheetAction } from '@/components/action-sheet';
 import { AppText } from '@/components/app-text';
@@ -29,7 +29,7 @@ import {
 } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDate } from '@/dates';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { minTouch, radius, space, useAppTheme } from '@/theme';
 
 type Props = {
@@ -68,18 +68,23 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   }
 
   function confirmRemove() {
-    const removeNow = () =>
-      runOrAlert("Couldn't remove the exercise", () => tracker.removeExerciseFromWorkout(entry.id));
+    const remove = () => tracker.removeExerciseFromWorkout(entry.id);
     if (entry.sets.length === 0) {
-      removeNow();
+      runOrAlert("Couldn't remove the exercise", remove);
       return;
     }
     // Its Sets go with it, so check first.
     const setCount = entry.sets.length === 1 ? '1 set' : `${entry.sets.length} sets`;
-    Alert.alert(`Remove ${entry.exercise.name} and its ${setCount}?`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: removeNow },
-    ]);
+    confirmThenRun(
+      {
+        title: `Remove ${entry.exercise.name} and its ${setCount}?`,
+        decline: 'Cancel',
+        accept: 'Remove',
+        destructive: true,
+      },
+      "Couldn't remove the exercise",
+      remove,
+    );
   }
 
   const actions: SheetAction[] = [
