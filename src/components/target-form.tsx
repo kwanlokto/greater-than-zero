@@ -1,9 +1,10 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
 import { Field } from '@/components/field';
-import { PrimaryButton } from '@/components/primary-button';
+import { Input } from '@/components/input';
 import { setPresentationFor } from '@/components/set-fields';
 import { UnitPicker } from '@/components/unit-picker';
 import {
@@ -14,6 +15,7 @@ import {
   type WeightUnit,
 } from '@/core/tracker';
 import { parseDecimal, parseWholeNumber } from '@/numbers';
+import { space } from '@/theme';
 
 type Props = {
   trackingType: TrackingType;
@@ -29,7 +31,6 @@ const newTargetDefaults = { sets: '3', minReps: '8', maxReps: '12', weight: '' }
 // Sets × rep range @ weight for an Exercise in a Template. The weight is in the
 // unit chosen here, the display unit to begin with.
 export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Props) {
-  const { colors } = useTheme();
   const fields = 'sets' in initial ? fieldsOf(initial) : newTargetDefaults;
   const [sets, setSets] = useState(fields.sets);
   const [minReps, setMinReps] = useState(fields.minReps);
@@ -43,10 +44,6 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
   const problem = typed && problemWithTarget(trackingType, typed);
   const presentation = setPresentationFor[trackingType];
   const weightField = presentation.weightField(weightUnit);
-  const inputStyle = [
-    styles.input,
-    { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-  ];
 
   async function submit() {
     if (typed && !problem) await onSubmit(typed);
@@ -54,55 +51,62 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
 
   return (
     <View style={styles.form}>
-      <Field label="Sets">
-        <TextInput
-          value={sets}
-          onChangeText={setSets}
-          keyboardType="number-pad"
-          accessibilityLabel="Target sets"
-          style={inputStyle}
+      <View style={styles.row}>
+        <Field label="Sets" style={styles.sets}>
+          <Input
+            value={sets}
+            onChangeText={setSets}
+            keyboardType="number-pad"
+            accessibilityLabel="Target sets"
+            align="center"
+            strong
+            selectTextOnFocus
+          />
+        </Field>
+        <Field label="Rep range" style={styles.reps}>
+          <View style={styles.row}>
+            <Input
+              value={minReps}
+              onChangeText={setMinReps}
+              keyboardType="number-pad"
+              accessibilityLabel="Fewest reps"
+              align="center"
+              strong
+              selectTextOnFocus
+              style={styles.flex}
+            />
+            <AppText tone="muted">to</AppText>
+            <Input
+              value={maxReps}
+              onChangeText={setMaxReps}
+              keyboardType="number-pad"
+              accessibilityLabel="Most reps"
+              align="center"
+              strong
+              selectTextOnFocus
+              style={styles.flex}
+            />
+          </View>
+        </Field>
+      </View>
+      <Field
+        label={trackingType === 'bodyweight' ? 'Added weight' : 'Weight'}
+        hint={presentation.hint}
+      >
+        <Input
+          value={weight}
+          onChangeText={setWeight}
+          keyboardType={weightField.keyboardType}
+          placeholder={weightField.placeholder}
+          accessibilityLabel={weightField.accessibilityLabel}
+          suffix={weightField.unitLabel}
+          align="right"
+          strong
         />
-      </Field>
-      <Field label="Rep range">
-        <View style={styles.row}>
-          <TextInput
-            value={minReps}
-            onChangeText={setMinReps}
-            keyboardType="number-pad"
-            accessibilityLabel="Fewest reps"
-            style={inputStyle}
-          />
-          <Text style={[styles.between, { color: colors.text }]}>to</Text>
-          <TextInput
-            value={maxReps}
-            onChangeText={setMaxReps}
-            keyboardType="number-pad"
-            accessibilityLabel="Most reps"
-            style={inputStyle}
-          />
-          <Text style={[styles.between, { color: colors.text }]}>reps</Text>
-        </View>
-      </Field>
-      <Field label={trackingType === 'bodyweight' ? 'Added weight' : 'Weight'}>
-        <View style={styles.row}>
-          <TextInput
-            value={weight}
-            onChangeText={setWeight}
-            keyboardType={weightField.keyboardType}
-            placeholder={weightField.placeholder}
-            placeholderTextColor="#8e8e93"
-            accessibilityLabel={weightField.accessibilityLabel}
-            style={inputStyle}
-          />
-          <Text style={[styles.between, { color: colors.text }]}>{weightField.unitLabel}</Text>
-        </View>
-        {presentation.hint && (
-          <Text style={[styles.hint, { color: colors.text }]}>{presentation.hint}</Text>
-        )}
         <UnitPicker value={weightUnit} onChange={setWeightUnit} />
       </Field>
-      {problem && <Text style={[styles.problem, { color: colors.notification }]}>{problem}</Text>}
-      <PrimaryButton label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      {problem && <AppText tone="danger">{problem}</AppText>}
+      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
     </View>
   );
 }
@@ -135,31 +139,20 @@ function typedTarget(text: {
 
 const styles = StyleSheet.create({
   form: {
-    gap: 24,
+    gap: space.xl,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: space.sm,
   },
-  input: {
-    width: 80,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'right',
+  sets: {
+    width: 88,
   },
-  between: {
-    fontSize: 16,
-    opacity: 0.7,
+  reps: {
+    flex: 1,
   },
-  hint: {
-    fontSize: 13,
-    opacity: 0.7,
-  },
-  problem: {
-    fontSize: 14,
+  flex: {
+    flex: 1,
   },
 });

@@ -1,23 +1,28 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, useTheme } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { BottomTabBar, Tabs, type BottomTabBarProps } from 'expo-router/js-tabs';
-import type { ComponentProps } from 'react';
-import { Pressable, View, type ColorValue } from 'react-native';
+import { View, type ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { IconName } from '@/components/button';
+import { IconButton } from '@/components/icon-button';
 import { WorkoutBar } from '@/components/workout-bar';
+import { space, useAppTheme } from '@/theme';
 
-type IconName = ComponentProps<typeof Ionicons>['name'];
-
-function tabIcon(name: IconName) {
-  return ({ color, size }: { color: ColorValue; size: number }) => (
-    <Ionicons name={name} color={color} size={size} />
+// Filled while its tab is open, outlined otherwise, so the open tab stands
+// out by more than its colour.
+function tabIcon(name: IconName, focusedName: IconName) {
+  return ({ color, focused }: { color: ColorValue; focused: boolean }) => (
+    <Ionicons name={focused ? focusedName : name} color={color} size={24} />
   );
 }
 
 // The Workout bar sits just above the tabs, so it shows on every tab.
 function TabBarWithWorkout(props: BottomTabBarProps) {
+  const { colors } = useAppTheme();
+
   return (
-    <View>
+    <View style={{ backgroundColor: colors.background }}>
       <WorkoutBar />
       <BottomTabBar {...props} />
     </View>
@@ -25,36 +30,60 @@ function TabBarWithWorkout(props: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  const { colors } = useAppTheme();
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       tabBar={props => <TabBarWithWorkout {...props} />}
-      screenOptions={{ headerRight: () => <SettingsButton /> }}
+      screenOptions={{
+        headerRight: () => <SettingsButton />,
+        headerStyle: { backgroundColor: colors.background },
+        headerShadowVisible: false,
+        headerTitleAlign: 'left',
+        headerTitleStyle: { fontSize: 26, fontWeight: '700', color: colors.text },
+        sceneStyle: { backgroundColor: colors.background },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarStyle: {
+          height: 64 + insets.bottom,
+          paddingTop: space.xs,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
+      }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Today', tabBarIcon: tabIcon('today-outline') }} />
+      <Tabs.Screen
+        name="index"
+        options={{ title: 'Today', tabBarIcon: tabIcon('today-outline', 'today') }}
+      />
       <Tabs.Screen
         name="history"
-        options={{ title: 'History', tabBarIcon: tabIcon('calendar-outline') }}
+        options={{ title: 'History', tabBarIcon: tabIcon('calendar-outline', 'calendar') }}
       />
       <Tabs.Screen
         name="food"
-        options={{ title: 'Food', tabBarIcon: tabIcon('restaurant-outline') }}
+        options={{ title: 'Food', tabBarIcon: tabIcon('restaurant-outline', 'restaurant') }}
       />
       <Tabs.Screen
         name="progress"
-        options={{ title: 'Progress', tabBarIcon: tabIcon('trending-up-outline') }}
+        options={{ title: 'Progress', tabBarIcon: tabIcon('stats-chart-outline', 'stats-chart') }}
       />
     </Tabs>
   );
 }
 
 function SettingsButton() {
-  const { colors } = useTheme();
+  const router = useRouter();
 
   return (
-    <Link href="/settings" asChild>
-      <Pressable accessibilityLabel="Settings" hitSlop={12} style={{ marginRight: 16 }}>
-        <Ionicons name="settings-outline" size={24} color={colors.text} />
-      </Pressable>
-    </Link>
+    <IconButton
+      icon="settings-outline"
+      label="Settings"
+      // navigate, not push, so a double tap can't open Settings twice.
+      onPress={() => router.navigate('/settings')}
+      style={{ marginRight: space.sm }}
+    />
   );
 }

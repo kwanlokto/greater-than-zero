@@ -1,14 +1,14 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
 
 import { ExerciseForm } from '@/components/exercise-form';
+import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 
 export default function NewExerciseScreen() {
   const router = useRouter();
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <ExerciseForm
         initial={{}}
         submitLabel="Add exercise"
@@ -17,12 +17,6 @@ export default function NewExerciseScreen() {
           router.back();
         }}
       />
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-});

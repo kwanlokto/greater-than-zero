@@ -1,9 +1,10 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
+import { StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
+import { AppText } from '@/components/app-text';
 import { dayNumberOf, formatLocalDate } from '@/dates';
+import { space, useAppTheme } from '@/theme';
 
 // A value on a local date, as YYYY-MM-DD, and how it reads, e.g. "116.7 kg".
 export type ChartPoint = { localDate: string; value: number; label: string };
@@ -27,7 +28,7 @@ const maxMarkedPoints = 40;
 // leads with the latest point's value and date; touching the chart moves a
 // crosshair to the nearest point and reads that one out instead.
 export function LineChart({ points, wholeNumbers = false, description }: Props) {
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
   const [width, setWidth] = useState(0);
   const [touchedIndex, setTouchedIndex] = useState<number>();
 
@@ -69,10 +70,11 @@ export function LineChart({ points, wholeNumbers = false, description }: Props) 
   return (
     <View style={styles.chart}>
       <View style={styles.readout}>
-        <Text style={[styles.value, { color: colors.text }]}>{points[selected].label}</Text>
-        <Text style={[styles.date, { color: colors.text }]}>
+        <AppText variant="title">{points[selected].label}</AppText>
+        <AppText tone="muted">
+          {touched ? '' : 'Latest · '}
           {formatLocalDate(points[selected].localDate)}
-        </Text>
+        </AppText>
       </View>
       <View
         accessible
@@ -98,22 +100,22 @@ export function LineChart({ points, wholeNumbers = false, description }: Props) 
             ))}
             {ticks.map(tick => (
               <SvgText
+                fontFamily="sans-serif"
                 key={`tick-${tick}`}
                 x={margin.left - 6}
                 y={yOf(tick) + 4}
-                fontSize={11}
+                fontSize={12}
                 textAnchor="end"
-                fill={colors.text}
-                opacity={0.6}
+                fill={colors.textMuted}
               >
                 {String(tick)}
               </SvgText>
             ))}
-            <Path d={wash} fill={colors.primary} opacity={0.1} />
+            <Path d={wash} fill={colors.mark} opacity={0.1} />
             <Path
               d={line}
               fill="none"
-              stroke={colors.primary}
+              stroke={colors.mark}
               strokeWidth={2}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -124,9 +126,9 @@ export function LineChart({ points, wholeNumbers = false, description }: Props) 
                 x2={xs[selected]}
                 y1={margin.top}
                 y2={baseline}
-                stroke={colors.text}
+                stroke={colors.textMuted}
                 strokeWidth={1}
-                opacity={0.3}
+                opacity={0.6}
               />
             )}
             {markers.map(index => (
@@ -135,29 +137,30 @@ export function LineChart({ points, wholeNumbers = false, description }: Props) 
                 cx={xs[index]}
                 cy={ys[index]}
                 r={index === selected ? 6 : 4}
-                fill={colors.primary}
-                stroke={colors.card}
+                fill={colors.mark}
+                // A ring in the card's colour keeps markers apart where they meet.
+                stroke={colors.surface}
                 strokeWidth={2}
               />
             ))}
             <SvgText
+              fontFamily="sans-serif"
               x={points.length === 1 ? xs[0] : margin.left}
               y={height - 6}
-              fontSize={11}
+              fontSize={12}
               textAnchor={points.length === 1 ? 'middle' : 'start'}
-              fill={colors.text}
-              opacity={0.6}
+              fill={colors.textMuted}
             >
               {formatLocalDate(points[0].localDate)}
             </SvgText>
             {points.length > 1 && (
               <SvgText
+                fontFamily="sans-serif"
                 x={width - margin.right}
                 y={height - 6}
-                fontSize={11}
+                fontSize={12}
                 textAnchor="end"
-                fill={colors.text}
-                opacity={0.6}
+                fill={colors.textMuted}
               >
                 {formatLocalDate(points[points.length - 1].localDate)}
               </SvgText>
@@ -205,19 +208,9 @@ function niceTicks(low: number, high: number, wholeNumbers: boolean): number[] {
 
 const styles = StyleSheet.create({
   chart: {
-    gap: 8,
+    gap: space.sm,
   },
   readout: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  value: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  date: {
-    fontSize: 14,
-    opacity: 0.6,
+    gap: 2,
   },
 });

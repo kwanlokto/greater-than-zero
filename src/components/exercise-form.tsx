@@ -1,13 +1,15 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Field } from '@/components/field';
+import { Input } from '@/components/input';
 import { OptionPicker } from '@/components/option-picker';
-import { PrimaryButton } from '@/components/primary-button';
 import { muscleGroups, trackingTypes, type NewExercise, type TrackingType } from '@/core/tracker';
 import { muscleGroupLabels, trackingTypeLabels } from '@/exercise-labels';
+import { space } from '@/theme';
 
 type Props = {
   initial: Partial<NewExercise>;
@@ -18,7 +20,6 @@ type Props = {
 };
 
 export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, onSubmit }: Props) {
-  const { colors } = useTheme();
   const [name, setName] = useState(initial.name ?? '');
   const [trackingType, setTrackingType] = useState<TrackingType>(
     initial.trackingType ?? 'weighted',
@@ -35,23 +36,24 @@ export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, 
   return (
     <View style={styles.form}>
       <Field label="Name">
-        <TextInput
+        <Input
           value={name}
           onChangeText={setName}
           placeholder="e.g. Arnold Press"
-          placeholderTextColor="#8e8e93"
           autoCapitalize="words"
-          style={[
-            styles.input,
-            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-          ]}
+          strong
         />
       </Field>
-      <Field label="Tracking type">
+      <Field
+        label="Tracking type"
+        hint={
+          trackingTypeFixed
+            ? "Can't be changed once the exercise exists."
+            : 'Bodyweight exercises log any weight added, or taken off by a machine.'
+        }
+      >
         {trackingTypeFixed ? (
-          <Text style={[styles.fixed, { color: colors.text }]}>
-            {trackingTypeLabels[trackingType]} (can't be changed)
-          </Text>
+          <AppText variant="bodyStrong">{trackingTypeLabels[trackingType]}</AppText>
         ) : (
           <OptionPicker
             options={trackingTypes}
@@ -73,29 +75,18 @@ export function ExerciseForm({ initial, trackingTypeFixed = false, submitLabel, 
           ))}
         </View>
       </Field>
-      <PrimaryButton label={submitLabel} disabled={!canSubmit} onPress={submit} />
+      <Button size="large" label={submitLabel} disabled={!canSubmit} onPress={submit} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   form: {
-    gap: 24,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  fixed: {
-    fontSize: 16,
-    opacity: 0.7,
+    gap: space.xl,
   },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: space.sm,
   },
 });

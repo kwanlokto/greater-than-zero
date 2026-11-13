@@ -1,7 +1,8 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
+import { EmptyState } from '@/components/empty-state';
 import { PortionForm } from '@/components/portion-form';
+import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -10,7 +11,6 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function PortionScreen() {
   const { mealId, savedFoodId } = useLocalSearchParams<{ mealId: string; savedFoodId: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's no such Saved food, e.g. after it's deleted.
   const savedFood = useTrackerQuery(
     async () => (await tracker.getSavedFood(savedFoodId)) ?? null,
@@ -19,7 +19,11 @@ export default function PortionScreen() {
 
   if (savedFood === undefined) return null;
   if (savedFood === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>This food was deleted.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="trash-outline" title="This food was deleted." />
+      </Screen>
+    );
   }
 
   async function add(quantity: number) {
@@ -30,21 +34,9 @@ export default function PortionScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: savedFood.name }} />
       <PortionForm savedFood={savedFood} onSubmit={add} />
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

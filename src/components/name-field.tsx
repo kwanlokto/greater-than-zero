@@ -1,7 +1,7 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, TextInput } from 'react-native';
 
+import { Field } from '@/components/field';
+import { Input } from '@/components/input';
 import { runOrAlert } from '@/run-or-alert';
 
 type Props = {
@@ -14,7 +14,6 @@ type Props = {
 // A name, such as a Template's, saved when the lifter is done typing. A blank
 // name is refused and put back.
 export function NameField({ name: savedName, accessibilityLabel, failureTitle, rename }: Props) {
-  const { colors } = useTheme();
   const [name, setName] = useState(savedName);
 
   async function save() {
@@ -23,27 +22,16 @@ export function NameField({ name: savedName, accessibilityLabel, failureTitle, r
   }
 
   return (
-    <TextInput
-      value={name}
-      onChangeText={setName}
-      onEndEditing={save}
-      autoCapitalize="words"
-      accessibilityLabel={accessibilityLabel}
-      style={[
-        styles.input,
-        { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    />
+    <Field label="Name" hint="Saved when you're done typing">
+      <Input
+        value={name}
+        onChangeText={setName}
+        onEndEditing={save}
+        autoCapitalize="words"
+        returnKeyType="done"
+        accessibilityLabel={accessibilityLabel}
+        strong
+      />
+    </Field>
   );
 }
-
-const styles = StyleSheet.create({
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-});

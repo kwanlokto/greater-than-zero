@@ -1,8 +1,10 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
+import { Button } from '@/components/button';
+import { EmptyState } from '@/components/empty-state';
 import { SavedFoodForm } from '@/components/saved-food-form';
-import { TextButton } from '@/components/text-button';
+import { Screen } from '@/components/screen';
 import type { SavedFoodValues } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
@@ -13,13 +15,16 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function SavedFoodScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's no such Saved food, e.g. after it's deleted.
   const savedFood = useTrackerQuery(async () => (await tracker.getSavedFood(id)) ?? null, [id]);
 
   if (savedFood === undefined) return null;
   if (savedFood === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>This food was deleted.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="trash-outline" title="This food was deleted." />
+      </Screen>
+    );
   }
 
   async function save(values: SavedFoodValues) {
@@ -44,23 +49,10 @@ export default function SavedFoodScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: savedFood.name }} />
       <SavedFoodForm initial={savedFood} submitLabel="Save" onSubmit={save} />
-      <TextButton label="Delete saved food" destructive onPress={confirmDelete} />
-    </ScrollView>
+      <Button variant="ghost" destructive label="Delete saved food" onPress={confirmDelete} />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

@@ -1,94 +1,109 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Link, useTheme, type Href } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { PrimaryButton } from '@/components/primary-button';
-import { TextButton } from '@/components/text-button';
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
 import { UnitPicker } from '@/components/unit-picker';
 import { tracker } from '@/database';
+import { formatCalories, formatGrams } from '@/food-labels';
 import { importBackupFromFile } from '@/import-backup';
 import { runOrAlert } from '@/run-or-alert';
 import { shareBackup } from '@/share-backup';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const router = useRouter();
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
+  const targets = useTrackerQuery(() => tracker.getMacroTargets(), []);
+  const templates = useTrackerQuery(() => tracker.getTemplates(), []);
+  const rotations = useTrackerQuery(() => tracker.getRotations(), []);
+  const activeRotation = rotations?.find(rotation => rotation.isActive);
+
+  const targetSummary =
+    targets &&
+    [
+      targets.calories !== null && `${formatCalories(targets.calories)} kcal`,
+      targets.protein !== null && `P ${formatGrams(targets.protein)} g`,
+      targets.carbs !== null && `C ${formatGrams(targets.carbs)} g`,
+      targets.fat !== null && `F ${formatGrams(targets.fat)} g`,
+    ]
+      .filter(Boolean)
+      .join(' · ');
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.section}>
-        <Text style={[styles.heading, { color: colors.text }]}>Display unit</Text>
+    <Screen>
+      <Section title="Display unit">
         <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
-      </View>
-      <LinkRow href="/macro-targets" label="Macro targets" />
-      <LinkRow href="/templates" label="Templates" />
-      <LinkRow href="/rotations" label="Rotations" />
-      <LinkRow href="/exercises" label="Exercise library" />
-      <View style={styles.section}>
-        <Text style={[styles.heading, { color: colors.text }]}>Backup</Text>
-        <Text style={[styles.details, { color: colors.text }]}>
-          Save all your data to a file you can keep in Drive or send by email, and bring it back on
-          a new phone.
-        </Text>
-        <PrimaryButton
-          label="Export backup"
-          onPress={async () => {
-            await runOrAlert("Couldn't export the backup", shareBackup);
-          }}
-        />
-        <TextButton
-          label="Import backup"
-          onPress={async () => {
-            await runOrAlert("Couldn't import the backup", importBackupFromFile);
-          }}
-        />
-      </View>
-    </ScrollView>
+      </Section>
+      <Section title="Training">
+        <ListGroup>
+          <ListRow
+            icon="list"
+            title="Templates"
+            subtitle={
+              templates && (templates.length === 1 ? '1 template' : `${templates.length} templates`)
+            }
+            onPress={() => router.navigate('/templates')}
+          />
+          <ListRow
+            icon="repeat"
+            title="Rotations"
+            subtitle={
+              rotations && (activeRotation ? `${activeRotation.name} is active` : 'None active')
+            }
+            onPress={() => router.navigate('/rotations')}
+          />
+          <ListRow
+            icon="barbell"
+            title="Exercise library"
+            subtitle="Rest times and your own exercises"
+            onPress={() => router.navigate('/exercises')}
+          />
+        </ListGroup>
+      </Section>
+      <Section title="Food">
+        <ListGroup>
+          <ListRow
+            icon="nutrition"
+            title="Macro targets"
+            subtitle={targets && (targetSummary || 'Not set')}
+            onPress={() => router.navigate('/macro-targets')}
+          />
+          <ListRow
+            icon="bookmark"
+            title="Saved foods"
+            subtitle="Foods you eat often"
+            onPress={() => router.navigate('/saved-foods')}
+          />
+        </ListGroup>
+      </Section>
+      <Section title="Backup">
+        <Card>
+          <AppText tone="muted">
+            Save all your data to a file you can keep in Drive or send by email, and bring it back
+            on a new phone.
+          </AppText>
+          <Button
+            icon="share-outline"
+            label="Export backup"
+            onPress={async () => {
+              await runOrAlert("Couldn't export the backup", shareBackup);
+            }}
+            style={{ marginTop: 8 }}
+          />
+          <Button
+            variant="secondary"
+            icon="download-outline"
+            label="Import backup"
+            onPress={async () => {
+              await runOrAlert("Couldn't import the backup", importBackupFromFile);
+            }}
+          />
+        </Card>
+      </Section>
+    </Screen>
   );
 }
-
-function LinkRow({ href, label }: { href: Href; label: string }) {
-  const { colors } = useTheme();
-
-  return (
-    <Link href={href} asChild>
-      <Pressable
-        accessibilityRole="button"
-        style={[styles.linkRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-      >
-        <Text style={[styles.linkLabel, { color: colors.text }]}>{label}</Text>
-        <Ionicons name="chevron-forward" size={20} color={colors.text} />
-      </Pressable>
-    </Link>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 24,
-  },
-  section: {
-    gap: 12,
-  },
-  heading: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  details: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-  },
-  linkLabel: {
-    fontSize: 16,
-  },
-});

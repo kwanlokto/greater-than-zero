@@ -1,10 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
 import { MonthCalendar } from '@/components/month-calendar';
+import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { monthOf } from '@/dates';
+import { space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -13,11 +16,12 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function HistoryScreen() {
   const router = useRouter();
   const today = useToday();
-  const [month, setMonth] = useState(() => monthOf(today));
+  const thisMonth = monthOf(today);
+  const [month, setMonth] = useState(thisMonth);
   const trainingDays = useTrackerQuery(() => tracker.getTrainingDays(month), [month]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen onTab contentStyle={{ gap: space.md }}>
       <MonthCalendar
         month={month}
         trainingDays={trainingDays ?? []}
@@ -26,12 +30,19 @@ export default function HistoryScreen() {
         // navigate, not push, so a double tap can't open the day twice.
         onPressDay={date => router.navigate({ pathname: '/day/[date]', params: { date } })}
       />
-    </ScrollView>
+      <AppText variant="caption" tone="muted" style={{ textAlign: 'center' }}>
+        Tap a day to see its workouts, meals and weigh-in.
+      </AppText>
+      {/* The way back after browsing other months. */}
+      {month !== thisMonth && (
+        <Button
+          variant="tonal"
+          icon="today-outline"
+          label="Back to this month"
+          onPress={() => setMonth(thisMonth)}
+          style={{ alignSelf: 'center' }}
+        />
+      )}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-});

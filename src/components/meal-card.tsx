@@ -1,95 +1,104 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import type { IconName } from '@/components/button';
+import { Card } from '@/components/card';
+import { MacroSummary } from '@/components/macro-summary';
 import type { Meal } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
-import { describeFoodItem, describeMacros, formatCalories } from '@/food-labels';
+import { describeFoodItem, formatCalories } from '@/food-labels';
+import { radius, space, useAppTheme } from '@/theme';
 
 type Props = {
   meal: Meal;
-  // What pressing it does, as an icon and in words; opening it for editing
-  // unless said otherwise.
-  icon?: ComponentProps<typeof Ionicons>['name'];
+  // What pressing it does, in words, and as a labelled badge for anything
+  // other than opening it; opening it for editing unless said otherwise.
   hint?: string;
+  action?: { label: string; icon: IconName };
   onPress: () => void;
 };
 
 // A Meal: its name and time, its totals, then each Food item with its amount
 // and calories.
-export function MealCard({
-  meal,
-  icon = 'create-outline',
-  hint = 'Opens this meal for editing',
-  onPress,
-}: Props) {
-  const { colors } = useTheme();
+export function MealCard({ meal, hint = 'Opens this meal for editing', action, onPress }: Props) {
+  const { colors } = useAppTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint={hint}
-      onPress={onPress}
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
+    <Card onPress={onPress} accessibilityHint={hint} style={styles.card}>
       <View style={styles.header}>
-        <Text style={[styles.name, { color: colors.text }]}>{meal.name}</Text>
-        <Text style={[styles.detail, styles.faint, { color: colors.text }]}>
-          {formatTimeOfDay(meal.eatenAt)}
-        </Text>
-        <Ionicons name={icon} size={18} color={colors.text} style={styles.faint} />
-      </View>
-      <Text style={[styles.totals, { color: colors.text }]}>{describeMacros(meal.totals)}</Text>
-      {meal.items.length === 0 && (
-        <Text style={[styles.detail, styles.faint, { color: colors.text }]}>No food yet</Text>
-      )}
-      {meal.items.map(item => (
-        <View key={item.id} style={styles.item}>
-          <Text style={[styles.itemName, { color: colors.text }]} numberOfLines={1}>
-            {describeFoodItem(item)}
-          </Text>
-          <Text style={[styles.detail, styles.faint, { color: colors.text }]}>
-            {formatCalories(item.calories)} kcal
-          </Text>
+        <View style={styles.title}>
+          <AppText variant="subheading">{meal.name}</AppText>
+          <AppText variant="caption" tone="muted">
+            {formatTimeOfDay(meal.eatenAt)}
+          </AppText>
         </View>
-      ))}
-    </Pressable>
+        {action ? (
+          <View style={[styles.action, { backgroundColor: colors.primarySoft }]}>
+            <Ionicons name={action.icon} size={16} color={colors.onPrimarySoft} />
+            <AppText variant="label" style={{ color: colors.onPrimarySoft }}>
+              {action.label}
+            </AppText>
+          </View>
+        ) : (
+          <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
+        )}
+      </View>
+      <MacroSummary macros={meal.totals} />
+      {meal.items.length > 0 && (
+        <View style={[styles.items, { borderTopColor: colors.border }]}>
+          {meal.items.map(item => (
+            <View key={item.id} style={styles.item}>
+              <AppText numberOfLines={1} style={styles.itemName}>
+                {describeFoodItem(item)}
+              </AppText>
+              <AppText variant="caption" tone="muted">
+                {formatCalories(item.calories)} kcal
+              </AppText>
+            </View>
+          ))}
+        </View>
+      )}
+      {meal.items.length === 0 && (
+        <AppText variant="caption" tone="muted">
+          No food yet
+        </AppText>
+      )}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 6,
+    gap: space.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: space.sm,
   },
-  name: {
+  title: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
   },
-  totals: {
-    fontSize: 14,
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 6,
+  },
+  items: {
+    gap: space.xs,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   item: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'baseline',
+    gap: space.sm,
   },
   itemName: {
     flex: 1,
-    fontSize: 14,
-  },
-  detail: {
-    fontSize: 14,
-  },
-  faint: {
-    opacity: 0.7,
   },
 });

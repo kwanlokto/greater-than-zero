@@ -1,9 +1,12 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { ExerciseForm } from '@/components/exercise-form';
 import { RestLengthPicker } from '@/components/rest-length-picker';
-import { TextButton } from '@/components/text-button';
+import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { exerciseDetails } from '@/exercise-labels';
 import { runOrAlert } from '@/run-or-alert';
@@ -14,7 +17,6 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function ExerciseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   const exercise = useTrackerQuery(() => tracker.getExercise(id), [id]);
 
   if (!exercise) return null;
@@ -39,7 +41,7 @@ export default function ExerciseScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: exercise.name }} />
       {exercise.isCustom ? (
         <ExerciseForm
@@ -57,23 +59,15 @@ export default function ExerciseScreen() {
           }}
         />
       ) : (
-        <Text style={[styles.details, { color: colors.text }]}>
-          {exerciseDetails(exercise)} · Built-in
-        </Text>
+        <Card>
+          <AppText variant="bodyStrong">{exerciseDetails(exercise)}</AppText>
+          <AppText tone="muted">Built in, so only its rest can be changed.</AppText>
+        </Card>
       )}
       <RestLengthPicker exercise={exercise} />
-      {exercise.isCustom && <TextButton label="Hide exercise" destructive onPress={confirmHide} />}
-    </ScrollView>
+      {exercise.isCustom && (
+        <Button variant="ghost" destructive label="Hide exercise" onPress={confirmHide} />
+      )}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 24,
-  },
-  details: {
-    fontSize: 16,
-    opacity: 0.7,
-  },
-});

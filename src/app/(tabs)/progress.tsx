@@ -1,11 +1,13 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useRouter, useTheme } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { formatBodyWeight } from '@/body-weight-labels';
 import { describeChart } from '@/chart-labels';
+import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
 import { LineChart } from '@/components/line-chart';
-import { TextButton } from '@/components/text-button';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
 import { tracker } from '@/database';
 import { exerciseDetails } from '@/exercise-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -14,7 +16,6 @@ import { useTrackerQuery } from '@/use-tracker-query';
 // in a finished Workout, the most recently done first.
 export default function ProgressScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
   const trend = useTrackerQuery(() => tracker.getBodyWeightTrend(), []);
   const exercises = useTrackerQuery(() => tracker.getProgressExercises(), []);
   const trendPoints = trend
@@ -25,101 +26,70 @@ export default function ProgressScreen() {
     : [];
 
   return (
-    <FlatList
-      data={exercises ?? []}
-      keyExtractor={exercise => exercise.id}
-      ListHeaderComponent={
-        <>
-          <Text style={[styles.heading, { color: colors.text }]}>Body weight</Text>
-          <View style={styles.bodyWeight}>
-            {trend && trend.points.length === 0 && (
-              <Text style={[styles.note, { color: colors.text }]}>
-                Record a weigh-in on Today to see your body-weight trend.
-              </Text>
-            )}
-            {trend && trend.points.length > 0 && (
-              <>
-                <LineChart
-                  points={trendPoints}
-                  description={describeChart(
-                    'Body weight',
-                    { one: 'weigh-in', many: 'weigh-ins' },
-                    trendPoints,
-                  )}
-                />
-                <TextButton label="All weigh-ins" onPress={() => router.navigate('/weigh-ins')} />
-              </>
-            )}
-          </View>
-          <Text style={[styles.heading, { color: colors.text }]}>Exercises</Text>
-        </>
-      }
-      renderItem={({ item }) => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint="Opens its progress chart"
-          // navigate, not push, so a double tap can't open it twice.
-          onPress={() =>
-            router.navigate({ pathname: '/progress/[exerciseId]', params: { exerciseId: item.id } })
+    <Screen onTab>
+      {trend && (
+        <Section
+          title="Body weight"
+          action={
+            trendPoints.length > 0
+              ? { label: 'All weigh-ins', onPress: () => router.navigate('/weigh-ins') }
+              : undefined
           }
-          style={[styles.row, { borderBottomColor: colors.border }]}
         >
-          <View style={styles.rowText}>
-            <Text style={[styles.name, { color: colors.text }]}>{item.name}</Text>
-            <Text style={[styles.details, { color: colors.text }]}>{exerciseDetails(item)}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.text} />
-        </Pressable>
+          {trendPoints.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon="scale-outline"
+                title="No weigh-ins yet"
+                message="Record one on Today to see your body-weight trend."
+                action={{ label: 'Go to Today', onPress: () => router.navigate('/') }}
+              />
+            </Card>
+          ) : (
+            <Card>
+              <LineChart
+                points={trendPoints}
+                description={describeChart(
+                  'Body weight',
+                  { one: 'weigh-in', many: 'weigh-ins' },
+                  trendPoints,
+                )}
+              />
+            </Card>
+          )}
+        </Section>
       )}
-      ListEmptyComponent={
-        exercises && (
-          <Text style={[styles.empty, { color: colors.text }]}>
-            Finish a workout to see how each exercise progresses.
-          </Text>
-        )
-      }
-    />
+      {exercises && (
+        <Section title="Exercises">
+          {exercises.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon="barbell-outline"
+                title="Nothing to chart yet"
+                message="Finish a workout to see how each exercise progresses."
+              />
+            </Card>
+          ) : (
+            <ListGroup>
+              {exercises.map(exercise => (
+                <ListRow
+                  key={exercise.id}
+                  title={exercise.name}
+                  subtitle={exerciseDetails(exercise)}
+                  accessibilityHint="Opens its progress chart"
+                  // navigate, not push, so a double tap can't open it twice.
+                  onPress={() =>
+                    router.navigate({
+                      pathname: '/progress/[exerciseId]',
+                      params: { exerciseId: exercise.id },
+                    })
+                  }
+                />
+              ))}
+            </ListGroup>
+          )}
+        </Section>
+      )}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  bodyWeight: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  note: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  heading: {
-    fontSize: 18,
-    fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  rowText: {
-    flex: 1,
-  },
-  name: {
-    fontSize: 16,
-  },
-  details: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  empty: {
-    padding: 24,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

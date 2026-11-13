@@ -1,13 +1,15 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { formatBodyWeight } from '@/body-weight-labels';
-import { PrimaryButton } from '@/components/primary-button';
-import { TextButton } from '@/components/text-button';
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { Input } from '@/components/input';
 import { problemWithWeighIn, type WeighIn, type WeightUnit } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
 import { parseDecimal } from '@/numbers';
+import { space } from '@/theme';
 
 type Props = {
   // Today's, or null before one is entered.
@@ -21,7 +23,6 @@ type Props = {
 // Today's Weigh-in: what was entered, with a way to change it, or a box to
 // enter one. A second one today replaces the first.
 export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
-  const { colors } = useTheme();
   const [changing, setChanging] = useState(false);
   const [text, setText] = useState('');
   const typed = parseDecimal(text);
@@ -34,74 +35,65 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
     setChanging(false);
   }
 
-  const card = [styles.card, { backgroundColor: colors.card, borderColor: colors.border }];
-
   if (weighIn && !changing) {
     return (
-      <View style={card}>
-        <View style={styles.row}>
-          <Text style={[styles.weight, { color: colors.text }]}>
-            {formatBodyWeight(weighIn.displayWeight)}
-          </Text>
-          <Text style={[styles.details, { color: colors.text }]}>
+      <Card style={styles.recorded}>
+        <View style={styles.reading}>
+          <AppText variant="title">{formatBodyWeight(weighIn.displayWeight)}</AppText>
+          <AppText variant="caption" tone="muted">
             at {formatTimeOfDay(weighIn.weighedAt)}
-          </Text>
+          </AppText>
         </View>
-        <TextButton label="Change" onPress={() => setChanging(true)} />
-      </View>
+        <Button variant="tonal" size="small" label="Change" onPress={() => setChanging(true)} />
+      </Card>
     );
   }
 
   return (
-    <View style={card}>
-      <View style={styles.row}>
-        <TextInput
+    <Card>
+      <View style={styles.entry}>
+        <Input
           value={text}
           onChangeText={setText}
           keyboardType="decimal-pad"
           accessibilityLabel={`Body weight in ${displayUnit}`}
           placeholder={weighIn ? String(weighIn.displayWeight.value) : 'e.g. 82.4'}
-          placeholderTextColor="#8e8e93"
-          style={[
-            styles.input,
-            { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
-          ]}
+          suffix={displayUnit}
+          strong
+          style={styles.input}
         />
-        <Text style={[styles.details, { color: colors.text }]}>{displayUnit}</Text>
+        <Button
+          label="Save"
+          accessibilityLabel="Save weigh-in"
+          disabled={!canSave}
+          onPress={save}
+          style={styles.save}
+        />
       </View>
-      <PrimaryButton label="Save weigh-in" disabled={!canSave} onPress={save} />
-      {changing && <TextButton label="Cancel" onPress={() => setChanging(false)} />}
-    </View>
+      {changing && <Button variant="ghost" label="Cancel" onPress={() => setChanging(false)} />}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-  },
-  row: {
+  recorded: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
+    alignItems: 'center',
+    gap: space.md,
   },
-  weight: {
-    fontSize: 24,
-    fontWeight: '600',
+  reading: {
+    flex: 1,
   },
-  details: {
-    fontSize: 16,
-    opacity: 0.7,
+  entry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
   },
   input: {
-    width: 100,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'right',
+    flex: 1,
+  },
+  save: {
+    minHeight: 52,
+    paddingHorizontal: space.xl,
   },
 });

@@ -1,24 +1,32 @@
-import { Link, useRouter, useTheme } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
+import { StyleSheet } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { DailyTotalsCard } from '@/components/daily-totals-card';
-import { PrimaryButton } from '@/components/primary-button';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
 import { WeighInCard } from '@/components/weigh-in-card';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
+import { formatLocalDateWithWeekday } from '@/dates';
 import { hasMacroTargets } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseList } from '@/template-labels';
-import { useGuardedPress } from '@/use-guarded-press';
+import { space, useAppTheme } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
 export default function TodayScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
   const workoutInProgress = useWorkoutInProgress();
   const templates = useTrackerQuery(() => tracker.getTemplates(), []);
+  // Null once loaded with no active Rotation, or an empty one.
   const nextUp = useTrackerQuery(() => tracker.getNextUp(), []);
   const today = useToday();
   const dailyTotals = useTrackerQuery(() => tracker.getDailyTotals(today), [today]);
@@ -34,51 +42,95 @@ export default function TodayScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen onTab>
+      <AppText tone="muted" style={styles.date}>
+        {formatLocalDateWithWeekday(today)}
+      </AppText>
       {/* Only one Workout can be in progress; while one is, the Workout bar
           returns to it. */}
-      {workoutInProgress === null && (
+      {workoutInProgress === null && templates && nextUp !== undefined && (
         <>
           {nextUp && <NextUp template={nextUp} onStart={() => start(nextUp.id)} />}
-          <PrimaryButton label="Start empty workout" onPress={() => start()} />
-          <View style={styles.section}>
-            <Text style={[styles.heading, { color: colors.text }]}>Start from template</Text>
-            {templates?.length === 0 && (
-              <Text style={[styles.details, { color: colors.text }]}>
-                No templates yet.{' '}
-                <Link href="/templates" style={{ color: colors.primary }}>
-                  Create one
-                </Link>
-              </Text>
+          <Section
+            title="Start from template"
+            action={
+              templates.length > 0
+                ? { label: 'Manage', onPress: () => router.navigate('/templates') }
+                : undefined
+            }
+          >
+            {templates.length === 0 ? (
+              <Card>
+                <AppText variant="bodyStrong">No templates yet.</AppText>
+                <AppText tone="muted">
+                  A template is a workout you repeat, with a target for each exercise.
+                </AppText>
+                <Button
+                  variant="tonal"
+                  icon="add"
+                  label="Create one"
+                  onPress={() => router.navigate('/templates/new')}
+                  style={styles.cardAction}
+                />
+              </Card>
+            ) : (
+              <ListGroup>
+                {templates.map(template => (
+                  <ListRow
+                    key={template.id}
+                    title={template.name}
+                    subtitle={exerciseList(template)}
+                    subtitleLines={1}
+                    accessibilityLabel={`Start ${template.name}`}
+                    trailing={<Ionicons name="play-circle" size={32} color={colors.primary} />}
+                    // Guarded by the row: a double tap starts one Workout.
+                    onPress={() => start(template.id)}
+                  />
+                ))}
+                {/* Next up comes from the active Rotation; point the way to one. */}
+                {!nextUp && templates.length > 1 && (
+                  <ListRow
+                    icon="repeat"
+                    title="Set up a rotation"
+                    subtitle="Today then shows which template is next up"
+                    onPress={() => router.navigate('/rotations')}
+                  />
+                )}
+              </ListGroup>
             )}
-            {templates?.map(template => (
-              <TemplateButton
-                key={template.id}
-                template={template}
-                onPress={() => start(template.id)}
-              />
-            ))}
-          </View>
+            <Button
+              variant={nextUp ? 'secondary' : 'primary'}
+              icon="add"
+              label="Start empty workout"
+              onPress={() => start()}
+            />
+          </Section>
         </>
       )}
       {dailyTotals && (
-        <View style={styles.section}>
-          <Text style={[styles.heading, { color: colors.text }]}>Today's food</Text>
+        <Section
+          title="Today's food"
+          action={{ label: 'Meals', onPress: () => router.navigate('/food') }}
+        >
           <DailyTotalsCard
             totals={dailyTotals}
             hint="Opens today's meals"
             onPress={() => router.navigate('/food')}
           />
           {!hasMacroTargets(dailyTotals) && (
-            <Link href="/macro-targets" style={[styles.details, { color: colors.primary }]}>
-              Set daily targets
-            </Link>
+            <Button
+              variant="ghost"
+              label="Set daily targets"
+              onPress={() => router.navigate('/macro-targets')}
+            />
           )}
-        </View>
+        </Section>
       )}
       {weighIn !== undefined && displayUnit && (
-        <View style={styles.section}>
-          <Text style={[styles.heading, { color: colors.text }]}>Today's weigh-in</Text>
+        <Section
+          title="Today's weigh-in"
+          action={{ label: 'All weigh-ins', onPress: () => router.navigate('/weigh-ins') }}
+        >
           <WeighInCard
             weighIn={weighIn}
             displayUnit={displayUnit}
@@ -86,9 +138,9 @@ export default function TodayScreen() {
               runOrAlert("Couldn't save the weigh-in", () => tracker.setWeighIn(weight))
             }
           />
-        </View>
+        </Section>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
@@ -99,75 +151,37 @@ type NextUpProps = {
 
 // The active Rotation's next-up Template, to start with one tap.
 function NextUp({ template, onStart }: NextUpProps) {
-  const { colors } = useTheme();
-
   return (
-    <View style={styles.section}>
-      <Text style={[styles.heading, { color: colors.text }]}>Next up</Text>
-      <View style={[styles.template, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.heading, { color: colors.text }]}>{template.name}</Text>
-        <Text style={[styles.details, { color: colors.text }]}>{exerciseList(template)}</Text>
-        <View style={styles.startNextUp}>
-          <PrimaryButton label={`Start ${template.name}`} onPress={onStart} />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-type TemplateButtonProps = {
-  template: Template;
-  onPress: () => Promise<void>;
-};
-
-function TemplateButton({ template, onPress }: TemplateButtonProps) {
-  const { colors } = useTheme();
-  // A double tap starts one Workout, not an error about the first.
-  const { press, busy } = useGuardedPress(onPress);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Start ${template.name}`}
-      accessibilityState={{ disabled: busy }}
-      disabled={busy}
-      onPress={press}
-      style={[
-        styles.template,
-        { backgroundColor: colors.card, borderColor: colors.border, opacity: busy ? 0.4 : 1 },
-      ]}
-    >
-      <Text style={[styles.heading, { color: colors.text }]}>{template.name}</Text>
-      <Text style={[styles.details, { color: colors.text }]}>{exerciseList(template)}</Text>
-    </Pressable>
+    <Card style={styles.nextUp}>
+      <AppText accessibilityRole="header" variant="overline" tone="primary">
+        Next up
+      </AppText>
+      <AppText variant="title">{template.name}</AppText>
+      <AppText tone="muted" numberOfLines={2}>
+        {exerciseList(template)}
+      </AppText>
+      <Button
+        size="large"
+        icon="play"
+        label={`Start ${template.name}`}
+        onPress={onStart}
+        style={styles.cardAction}
+      />
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    padding: 24,
-    gap: 24,
-    justifyContent: 'center',
+  date: {
+    marginTop: -space.sm,
+    marginBottom: -space.sm,
+    paddingHorizontal: space.xs,
   },
-  section: {
-    gap: 12,
+  nextUp: {
+    gap: space.xs,
+    padding: space.xl,
   },
-  heading: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  template: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 4,
-  },
-  details: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  startNextUp: {
-    marginTop: 8,
+  cardAction: {
+    marginTop: space.md,
   },
 });

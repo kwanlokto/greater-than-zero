@@ -1,14 +1,19 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
 import { IconButton } from '@/components/icon-button';
 import { NameField } from '@/components/name-field';
-import { PrimaryButton } from '@/components/primary-button';
-import { TextButton } from '@/components/text-button';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
 import type { Template, TemplateExercise } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 import { describeTarget } from '@/template-labels';
+import { space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // One Template: its name, and its Exercises in order with their Targets. Every
@@ -16,13 +21,16 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function TemplateScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's no such Template, e.g. after it's deleted.
   const template = useTrackerQuery(async () => (await tracker.getTemplate(id)) ?? null, [id]);
 
   if (template === undefined) return null;
   if (template === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>This template was deleted.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="trash-outline" title="This template was deleted." />
+      </Screen>
+    );
   }
 
   const confirmDelete = () => {
@@ -47,7 +55,7 @@ export default function TemplateScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: template.name }} />
       <NameField
         name={template.name}
@@ -55,26 +63,37 @@ export default function TemplateScreen() {
         failureTitle="Couldn't rename the template"
         rename={name => tracker.renameTemplate(id, name)}
       />
-      {template.exercises.length === 0 ? (
-        <Text style={[styles.message, { color: colors.text }]}>No exercises yet.</Text>
-      ) : (
-        template.exercises.map((templateExercise, index) => (
-          <TemplateExerciseRow
-            key={templateExercise.id}
-            template={template}
-            templateExercise={templateExercise}
-            index={index}
-          />
-        ))
-      )}
-      <PrimaryButton
-        label="Add exercise"
-        onPress={() =>
-          router.push({ pathname: '/templates/choose-exercise', params: { templateId: id } })
-        }
-      />
-      <TextButton label="Delete template" destructive onPress={confirmDelete} />
-    </ScrollView>
+      <Section title="Exercises">
+        {template.exercises.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon="barbell-outline"
+              title="No exercises yet"
+              message="Add the exercises this workout does, each with its target."
+            />
+          </Card>
+        ) : (
+          template.exercises.map((templateExercise, index) => (
+            <TemplateExerciseRow
+              key={templateExercise.id}
+              template={template}
+              templateExercise={templateExercise}
+              index={index}
+            />
+          ))
+        )}
+        <Button
+          variant={template.exercises.length === 0 ? 'primary' : 'secondary'}
+          size="large"
+          icon="add"
+          label="Add exercise"
+          onPress={() =>
+            router.push({ pathname: '/templates/choose-exercise', params: { templateId: id } })
+          }
+        />
+      </Section>
+      <Button variant="ghost" destructive label="Delete template" onPress={confirmDelete} />
+    </Screen>
   );
 }
 
@@ -84,10 +103,10 @@ type RowProps = {
   index: number;
 };
 
-// An Exercise and its Target; tapping it changes the Target.
+// An Exercise and its Target; tapping it changes the Target. Arrows move it.
 function TemplateExerciseRow({ template, templateExercise, index }: RowProps) {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
   const { id, exercise, target } = templateExercise;
   const isLast = index === template.exercises.length - 1;
 
@@ -107,7 +126,7 @@ function TemplateExerciseRow({ template, templateExercise, index }: RowProps) {
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <Card style={styles.card}>
       <Pressable
         accessibilityRole="button"
         accessibilityHint="Opens its target for changing"
@@ -117,61 +136,79 @@ function TemplateExerciseRow({ template, templateExercise, index }: RowProps) {
             params: { templateId: template.id, templateExerciseId: id },
           })
         }
-        style={styles.cardText}
+        style={({ pressed }) => [styles.cardText, pressed && styles.pressed]}
       >
-        <Text style={[styles.exerciseName, { color: colors.text }]}>{exercise.name}</Text>
-        <Text style={[styles.target, { color: colors.text }]}>
-          {describeTarget(exercise.trackingType, target)}
-        </Text>
+        <View style={[styles.number, { backgroundColor: colors.primarySoft }]}>
+          <AppText variant="label" style={{ color: colors.onPrimarySoft }}>
+            {index + 1}
+          </AppText>
+        </View>
+        <View style={styles.text}>
+          <AppText variant="bodyStrong">{exercise.name}</AppText>
+          <AppText variant="caption" tone="primary">
+            {describeTarget(exercise.trackingType, target)}
+          </AppText>
+        </View>
       </Pressable>
-      <IconButton
-        icon="arrow-up"
-        label={`Move ${exercise.name} up`}
-        disabled={index === 0}
-        onPress={() => moveTo(index - 1)}
-      />
-      <IconButton
-        icon="arrow-down"
-        label={`Move ${exercise.name} down`}
-        disabled={isLast}
-        onPress={() => moveTo(index + 1)}
-      />
-      <IconButton icon="trash-outline" label={`Remove ${exercise.name}`} onPress={confirmRemove} />
-    </View>
+      <View style={styles.tools}>
+        <IconButton
+          icon="arrow-up"
+          label={`Move ${exercise.name} up`}
+          tone="muted"
+          size={22}
+          disabled={index === 0}
+          onPress={() => moveTo(index - 1)}
+        />
+        <IconButton
+          icon="arrow-down"
+          label={`Move ${exercise.name} down`}
+          tone="muted"
+          size={22}
+          disabled={isLast}
+          onPress={() => moveTo(index + 1)}
+        />
+        <IconButton
+          icon="trash-outline"
+          label={`Remove ${exercise.name}`}
+          tone="danger"
+          size={22}
+          onPress={confirmRemove}
+        />
+      </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
-  },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingLeft: 16,
-    paddingRight: 8,
-    gap: 4,
+    gap: 0,
+    paddingVertical: space.sm,
+    paddingRight: space.xs,
   },
   cardText: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    minHeight: 56,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  number: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  text: {
+    flex: 1,
     gap: 2,
   },
-  exerciseName: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  target: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
+  tools: {
+    flexDirection: 'row',
   },
 });

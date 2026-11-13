@@ -1,6 +1,8 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { StyleSheet, type KeyboardTypeOptions } from 'react-native';
+
+import { AppText } from '@/components/app-text';
+import { Input } from '@/components/input';
 
 import {
   problemWithSet,
@@ -20,6 +22,8 @@ type SetPresentation = {
   weightField: (unit: WeightUnit) => {
     keyboardType: KeyboardTypeOptions;
     placeholder: string;
+    // In a Set's own box, where there's only room for a word.
+    shortPlaceholder: string;
     unitLabel: string;
     accessibilityLabel: string;
   };
@@ -34,6 +38,7 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
     weightField: unit => ({
       keyboardType: 'decimal-pad',
       placeholder: '0',
+      shortPlaceholder: '0',
       unitLabel: unit,
       accessibilityLabel: `Weight in ${unit}`,
     }),
@@ -45,6 +50,7 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
       // The numeric keyboard has a minus key, for assisted Sets.
       keyboardType: 'numeric',
       placeholder: 'none',
+      shortPlaceholder: '+0',
       unitLabel: `${unit} added`,
       accessibilityLabel: `Added weight in ${unit}: blank for bodyweight, negative if assisted`,
     }),
@@ -115,41 +121,47 @@ type Props = {
   onChangeReps: (text: string) => void;
 };
 
-// Weight and reps inputs for a Set, laid out for the Exercise's tracking type.
-export function SetFields({ trackingType, unit, weight, reps, onChangeWeight, onChangeReps }: Props) {
-  const { colors } = useTheme();
+// Weight and reps boxes for a Set, read as "60 kg × 8". They share whatever
+// room the row has, so they fit beside a Set's number and its Log button on a
+// narrow phone.
+export function SetFields({
+  trackingType,
+  unit,
+  weight,
+  reps,
+  onChangeWeight,
+  onChangeReps,
+}: Props) {
   const weightField = setPresentationFor[trackingType].weightField(unit);
-  const inputStyle = [
-    styles.input,
-    { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
-  ];
 
   return (
     <>
-      <View style={styles.field}>
-        <TextInput
-          value={weight}
-          onChangeText={onChangeWeight}
-          keyboardType={weightField.keyboardType}
-          placeholder={weightField.placeholder}
-          placeholderTextColor="#8e8e93"
-          accessibilityLabel={weightField.accessibilityLabel}
-          style={inputStyle}
-        />
-        <Text style={[styles.unit, { color: colors.text }]}>{weightField.unitLabel}</Text>
-      </View>
-      <View style={styles.field}>
-        <TextInput
-          value={reps}
-          onChangeText={onChangeReps}
-          keyboardType="number-pad"
-          placeholder="0"
-          placeholderTextColor="#8e8e93"
-          accessibilityLabel="Reps"
-          style={inputStyle}
-        />
-        <Text style={[styles.unit, { color: colors.text }]}>reps</Text>
-      </View>
+      <Input
+        value={weight}
+        onChangeText={onChangeWeight}
+        keyboardType={weightField.keyboardType}
+        placeholder={weightField.shortPlaceholder}
+        accessibilityLabel={weightField.accessibilityLabel}
+        suffix={unit}
+        align="right"
+        strong
+        selectTextOnFocus
+        style={styles.weight}
+      />
+      <AppText tone="muted" style={styles.times}>
+        ×
+      </AppText>
+      <Input
+        value={reps}
+        onChangeText={onChangeReps}
+        keyboardType="number-pad"
+        placeholder="reps"
+        accessibilityLabel="Reps"
+        align="center"
+        strong
+        selectTextOnFocus
+        style={styles.reps}
+      />
     </>
   );
 }
@@ -168,22 +180,17 @@ function typedSet(
 }
 
 const styles = StyleSheet.create({
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  input: {
-    width: 72,
-    borderWidth: 1,
-    borderRadius: 10,
+  weight: {
+    flex: 1.35,
+    minHeight: 48,
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 16,
-    textAlign: 'right',
   },
-  unit: {
-    fontSize: 14,
-    opacity: 0.7,
+  times: {
+    fontSize: 18,
+  },
+  reps: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: 10,
   },
 });

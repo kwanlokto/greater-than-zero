@@ -1,13 +1,17 @@
-import { Stack, useLocalSearchParams, useTheme } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { describeChart } from '@/chart-labels';
+import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
 import { LineChart } from '@/components/line-chart';
+import { ListGroup, ListRow } from '@/components/list-row';
 import { OptionPicker } from '@/components/option-picker';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
 import { progressMeasuresFor, type ProgressMeasure } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
-import { describeChart } from '@/chart-labels';
 import { formatProgressValue, measureNames } from '@/progress-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -15,7 +19,6 @@ import { useTrackerQuery } from '@/use-tracker-query';
 // switchable between its two measures, and the same values listed below it.
 export default function ExerciseProgressScreen() {
   const { exerciseId } = useLocalSearchParams<{ exerciseId: string }>();
-  const { colors } = useTheme();
   const exercise = useTrackerQuery(
     async () => (await tracker.getExercise(exerciseId)) ?? null,
     [exerciseId],
@@ -29,7 +32,11 @@ export default function ExerciseProgressScreen() {
 
   if (exercise === undefined || series === undefined) return null;
   if (exercise === null || measure === undefined || series === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>No such exercise.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="help-circle-outline" title="No such exercise." />
+      </Screen>
+    );
   }
 
   const { trackingType } = exercise;
@@ -41,7 +48,7 @@ export default function ExerciseProgressScreen() {
   const latestFirst = [...chartPoints].reverse();
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen>
       <Stack.Screen options={{ title: exercise.name }} />
       <OptionPicker
         options={progressMeasuresFor[trackingType]}
@@ -50,70 +57,34 @@ export default function ExerciseProgressScreen() {
         onChange={setChosen}
       />
       {points.length === 0 ? (
-        <Text style={[styles.message, { color: colors.text }]}>
-          No finished workouts with it yet.
-        </Text>
+        <EmptyState icon="stats-chart-outline" title="No finished workouts with it yet." />
       ) : (
         <>
-          <LineChart
-            points={chartPoints}
-            wholeNumbers={unit === 'reps'}
-            description={describeChart(
-              measureNames[trackingType][measure],
-              { one: 'workout', many: 'workouts' },
-              chartPoints,
-            )}
-          />
-          <View style={styles.section}>
-            <Text style={[styles.heading, { color: colors.text }]}>Each workout</Text>
-            {latestFirst.map(point => (
-              <View
-                key={point.workoutId}
-                style={[styles.row, { borderBottomColor: colors.border }]}
-              >
-                <Text style={[styles.rowDate, { color: colors.text }]}>
-                  {formatLocalDateWithWeekday(point.localDate)}
-                </Text>
-                <Text style={[styles.rowValue, { color: colors.text }]}>{point.label}</Text>
-              </View>
-            ))}
-          </View>
+          <Card>
+            <LineChart
+              points={chartPoints}
+              wholeNumbers={unit === 'reps'}
+              description={describeChart(
+                measureNames[trackingType][measure],
+                { one: 'workout', many: 'workouts' },
+                chartPoints,
+              )}
+            />
+          </Card>
+          <Section title="Each workout">
+            <ListGroup>
+              {latestFirst.map(point => (
+                <ListRow
+                  key={point.workoutId}
+                  title={formatLocalDateWithWeekday(point.localDate)}
+                  value={point.label}
+                  valueTone="primary"
+                />
+              ))}
+            </ListGroup>
+          </Section>
         </>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 20,
-  },
-  section: {
-    gap: 4,
-  },
-  heading: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  rowDate: {
-    fontSize: 15,
-  },
-  rowValue: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

@@ -1,25 +1,36 @@
-import { useTheme } from 'expo-router';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+
+import { AppText } from '@/components/app-text';
+import { space } from '@/theme';
+
+type Props = {
+  label: string;
+  // A line of help under it.
+  hint?: string;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+};
 
 // A labelled part of a form, e.g. "Name" over its text box.
-export function Field({ label, children }: { label: string; children: ReactNode }) {
-  const { colors } = useTheme();
-
+export function Field({ label, hint, children, style }: Props) {
   return (
-    <View style={styles.field}>
-      <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
+    <View style={[styles.field, style]}>
+      <AppText variant="label" tone="muted">
+        {label}
+      </AppText>
       {children}
+      {hint !== undefined && (
+        <AppText variant="caption" tone="muted">
+          {hint}
+        </AppText>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
+    gap: space.sm,
   },
 });

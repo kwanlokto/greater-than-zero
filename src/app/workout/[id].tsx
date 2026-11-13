@@ -1,12 +1,15 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert, StyleSheet } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { EmptyState } from '@/components/empty-state';
 import { ExerciseEntryCard } from '@/components/exercise-entry-card';
-import { PrimaryButton } from '@/components/primary-button';
-import { TextButton } from '@/components/text-button';
+import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
+import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { workoutTimes } from '@/workout-labels';
 
@@ -15,14 +18,17 @@ import { workoutTimes } from '@/workout-labels';
 export default function PastWorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's no such Workout, e.g. after it's deleted.
   const workout = useTrackerQuery(async () => (await tracker.getWorkout(id)) ?? null, [id]);
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
   if (workout === undefined || displayUnit === undefined) return null;
   if (workout === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>This workout was deleted.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="trash-outline" title="This workout was deleted." />
+      </Screen>
+    );
   }
 
   const confirmDelete = () => {
@@ -32,7 +38,9 @@ export default function PastWorkoutScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          if (await runOrAlert("Couldn't delete the workout", () => tracker.deleteWorkout(workout.id))) {
+          if (
+            await runOrAlert("Couldn't delete the workout", () => tracker.deleteWorkout(workout.id))
+          ) {
             router.back();
           }
         },
@@ -41,42 +49,42 @@ export default function PastWorkoutScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen contentStyle={styles.content}>
       <Stack.Screen options={{ title: formatLocalDateWithWeekday(workout.localDate) }} />
-      <Text style={[styles.times, { color: colors.text }]}>{workoutTimes(workout)}</Text>
+      <AppText tone="muted" style={styles.times}>
+        {workoutTimes(workout)}
+      </AppText>
       {workout.entries.map(entry => (
         <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
       ))}
-      <PrimaryButton
+      <Button
+        variant="secondary"
+        size="large"
+        icon="add"
         label="Add exercise"
         onPress={() =>
           router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
         }
       />
-      <TextButton
+      <Button
+        variant="secondary"
+        icon="bookmark-outline"
         label="Save as template"
         onPress={() =>
           router.push({ pathname: '/templates/new', params: { fromWorkoutId: workout.id } })
         }
       />
-      <TextButton label="Delete workout" destructive onPress={confirmDelete} />
-    </ScrollView>
+      <Button variant="ghost" destructive label="Delete workout" onPress={confirmDelete} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
+  content: {
+    gap: space.lg,
   },
   times: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
+    paddingHorizontal: space.xs,
+    marginBottom: -space.sm,
   },
 });

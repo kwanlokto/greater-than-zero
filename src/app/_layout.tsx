@@ -1,20 +1,22 @@
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
 import { RestNotificationSync } from '@/components/rest-notification-sync';
 import { database } from '@/database';
 import { FinishOnboardingContext, loadOnboardingDone, saveOnboardingDone } from '@/onboarding';
+import { navigationThemeFor, space, useAppTheme } from '@/theme';
 import { useResumeWorkoutOnLaunch } from '@/use-resume-workout-on-launch';
 import migrations from '../../drizzle/migrations';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const theme = useColorScheme() === 'dark' ? DarkTheme : DefaultTheme;
+  const { colors, dark } = useAppTheme();
   const migration = useMigrations(database, migrations);
   const [onboarded, setOnboarded] = useState<boolean>();
 
@@ -40,13 +42,22 @@ export default function RootLayout() {
   }
 
   // Nothing reads the database until its migrations have been applied.
-  if (migration.error) return <MigrationFailed error={migration.error} theme={theme} />;
+  if (migration.error) return <MigrationFailed error={migration.error} />;
   if (!ready) return null;
 
   return (
-    <ThemeProvider value={theme}>
+    <ThemeProvider value={navigationThemeFor(dark)}>
       <FinishOnboardingContext value={finishOnboarding}>
-        <Stack>
+        <Stack
+          screenOptions={{
+            // Headers sit flat on the screen's own background.
+            headerStyle: { backgroundColor: colors.background },
+            headerShadowVisible: false,
+            headerTintColor: colors.text,
+            headerTitleStyle: { fontWeight: '700' },
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
           <Stack.Protected guard={onboarded}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ title: 'Settings' }} />
@@ -106,13 +117,13 @@ export default function RootLayout() {
   );
 }
 
-function MigrationFailed({ error, theme }: { error: Error; theme: Theme }) {
-  const { colors } = theme;
+function MigrationFailed({ error }: { error: Error }) {
+  const { colors } = useAppTheme();
 
   return (
     <View style={[styles.error, { backgroundColor: colors.background }]}>
-      <Text style={[styles.errorTitle, { color: colors.text }]}>Couldn't open your data</Text>
-      <Text style={{ color: colors.text }}>{error.message}</Text>
+      <AppText variant="heading">Couldn't open your data</AppText>
+      <AppText tone="muted">{error.message}</AppText>
       <StatusBar style="auto" />
     </View>
   );
@@ -122,11 +133,7 @@ const styles = StyleSheet.create({
   error: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
-    gap: 8,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    padding: space.xl,
+    gap: space.sm,
   },
 });

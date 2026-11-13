@@ -1,103 +1,160 @@
-import { useTheme } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { StyleSheet, View } from 'react-native';
 
-import type { DailyTotals } from '@/core/tracker';
-import { describeEaten, describeLeft, isOver, macroNames, macros } from '@/food-labels';
+import { AppText } from '@/components/app-text';
+import { Card } from '@/components/card';
+import type { DailyTotals, Macro, MacroProgress } from '@/core/tracker';
+import { describeEaten, describeLeft, isOver, macroNames } from '@/food-labels';
+import { space, useAppTheme } from '@/theme';
 
 type Props = {
   totals: DailyTotals;
-  // What pressing it does, in words.
-  hint: string;
-  onPress: () => void;
+  // What pressing it does, in words; without onPress it's not a button.
+  hint?: string;
+  onPress?: () => void;
 };
+
+const gramMacros: Macro[] = ['protein', 'carbs', 'fat'];
 
 // A day's calories and macros, each against its target when one is set: how
 // much was eaten, a bar filling towards the target, and what's left or over.
+// Calories lead; protein, carbs and fat sit side by side under them.
 export function DailyTotalsCard({ totals, hint, onPress }: Props) {
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint={hint}
-      onPress={onPress}
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      {macros.map(macro => {
-        const progress = totals[macro];
-        const left = describeLeft(macro, progress);
-        const over = isOver(macro, progress);
-        // Only a target above 0 to fill towards; one imported below that isn't.
-        const filled =
-          progress.target !== null && progress.target > 0
-            ? Math.min(1, progress.eaten / progress.target)
-            : undefined;
-        return (
-          <View key={macro} style={styles.macro}>
-            <View style={styles.row}>
-              <Text style={[styles.name, { color: colors.text }]}>{macroNames[macro]}</Text>
-              <Text style={[styles.eaten, { color: colors.text }]}>
-                {describeEaten(macro, progress)}
-              </Text>
-            </View>
-            {filled !== undefined && (
-              <View style={[styles.track, { backgroundColor: colors.border }]}>
-                <View
-                  style={[
-                    styles.fill,
-                    {
-                      backgroundColor: over ? colors.notification : colors.primary,
-                      width: `${filled * 100}%`,
-                    },
-                  ]}
-                />
-              </View>
-            )}
-            {left && (
-              <Text style={[styles.left, { color: over ? colors.notification : colors.text }]}>
-                {left}
-              </Text>
-            )}
+    <Card onPress={onPress} accessibilityHint={hint} style={styles.card}>
+      <View style={styles.calories}>
+        <View style={styles.row}>
+          <AppText variant="subheading">{macroNames.calories}</AppText>
+          <AppText variant="bodyStrong">{describeEaten('calories', totals.calories)}</AppText>
+        </View>
+        <Meter progress={totals.calories} over={isOver('calories', totals.calories)} thick />
+        <Left macro="calories" progress={totals.calories} />
+      </View>
+      <View style={[styles.rule, { backgroundColor: colors.border }]} />
+      <View style={styles.columns}>
+        {gramMacros.map(macro => (
+          <View key={macro} style={styles.column}>
+            <AppText variant="label">{macroNames[macro]}</AppText>
+            <Meter progress={totals[macro]} over={isOver(macro, totals[macro])} />
+            <AppText
+              variant="caption"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+            >
+              {describeEaten(macro, totals[macro])}
+            </AppText>
+            <Left macro={macro} progress={totals[macro]} />
           </View>
-        );
-      })}
-    </Pressable>
+        ))}
+      </View>
+    </Card>
+  );
+}
+
+// A bar filling towards the target; nothing with no target to fill towards.
+// Past the target it turns to the warning colour, track and all.
+function Meter({
+  progress,
+  over,
+  thick = false,
+}: {
+  progress: MacroProgress;
+  over: boolean;
+  thick?: boolean;
+}) {
+  const { colors } = useAppTheme();
+  // Only a target above 0 to fill towards; one imported below that isn't.
+  if (progress.target === null || progress.target <= 0) return null;
+  const filled = Math.min(1, progress.eaten / progress.target);
+
+  return (
+    <View
+      style={[
+        styles.track,
+        thick && styles.thick,
+        { backgroundColor: over ? colors.markOverTrack : colors.markTrack },
+      ]}
+    >
+      <View
+        style={[
+          styles.fill,
+          { backgroundColor: over ? colors.markOver : colors.mark, width: `${filled * 100}%` },
+        ]}
+      />
+    </View>
+  );
+}
+
+// "1699 kcal left", or "9 g over" with a warning mark once past the target.
+function Left({ macro, progress }: { macro: Macro; progress: MacroProgress }) {
+  const { colors } = useAppTheme();
+  const left = describeLeft(macro, progress);
+  if (!left) return null;
+  const over = isOver(macro, progress);
+
+  return (
+    <View style={styles.left}>
+      {over && <Ionicons name="alert-circle" size={14} color={colors.danger} />}
+      <AppText
+        variant="caption"
+        tone={over ? 'danger' : 'muted'}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+        style={styles.leftText}
+      >
+        {left}
+      </AppText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 14,
+    gap: space.md,
   },
-  macro: {
-    gap: 6,
+  calories: {
+    gap: space.sm,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
+    gap: space.sm,
   },
-  name: {
-    fontSize: 16,
-    fontWeight: '600',
+  rule: {
+    height: StyleSheet.hairlineWidth,
   },
-  eaten: {
-    fontSize: 16,
+  columns: {
+    flexDirection: 'row',
+    gap: space.lg,
+  },
+  column: {
+    flex: 1,
+    gap: space.xs,
   },
   track: {
     height: 6,
     borderRadius: 3,
     overflow: 'hidden',
   },
+  thick: {
+    height: 10,
+    borderRadius: 5,
+  },
   fill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 5,
   },
   left: {
-    fontSize: 13,
-    opacity: 0.7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  leftText: {
+    flexShrink: 1,
   },
 });

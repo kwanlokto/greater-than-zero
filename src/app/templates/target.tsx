@@ -1,6 +1,7 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
+import { EmptyState } from '@/components/empty-state';
+import { Screen } from '@/components/screen';
 import { TargetForm } from '@/components/target-form';
 import type { TargetValues } from '@/core/tracker';
 import { tracker } from '@/database';
@@ -15,7 +16,6 @@ type Params = { templateId: string; exerciseId?: string; templateExerciseId?: st
 export default function TargetScreen() {
   const { templateId, exerciseId, templateExerciseId } = useLocalSearchParams<Params>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's nothing to set a Target for, e.g. after the Template or
   // this Exercise in it is removed.
   const loaded = useTrackerQuery(async () => {
@@ -33,9 +33,12 @@ export default function TargetScreen() {
   if (loaded === undefined) return null;
   if (loaded === null) {
     return (
-      <Text style={[styles.message, { color: colors.text }]}>
-        This exercise is no longer in the template.
-      </Text>
+      <Screen>
+        <EmptyState
+          icon="help-circle-outline"
+          title="This exercise is no longer in the template."
+        />
+      </Screen>
     );
   }
 
@@ -50,7 +53,7 @@ export default function TargetScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: exercise.name }} />
       <TargetForm
         trackingType={exercise.trackingType}
@@ -58,18 +61,6 @@ export default function TargetScreen() {
         submitLabel={templateExerciseId ? 'Save' : 'Add to template'}
         onSubmit={save}
       />
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

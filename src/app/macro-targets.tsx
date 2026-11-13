@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
 
+import { AppText } from '@/components/app-text';
 import { MacroTargetsForm } from '@/components/macro-targets-form';
+import { Screen } from '@/components/screen';
 import type { MacroTargets } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
@@ -21,14 +22,9 @@ export default function MacroTargetsScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
+      <AppText tone="muted">Today and the Food tab measure each day's food against these.</AppText>
       <MacroTargetsForm initial={targets} submitLabel="Save targets" onSubmit={save} />
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-});

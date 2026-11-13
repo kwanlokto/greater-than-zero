@@ -1,12 +1,14 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
 import { Field } from '@/components/field';
-import { PrimaryButton } from '@/components/primary-button';
+import { Input } from '@/components/input';
 import { caloriesFromMacros, type FoodValues } from '@/core/tracker';
 import { formatCalories } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
+import { space } from '@/theme';
 
 type Props = {
   // The food being changed; a new one starts blank, in grams.
@@ -20,6 +22,12 @@ type Props = {
   onSubmit: (values: FoodValues) => Promise<void>;
 };
 
+const macroFields = [
+  { key: 'protein', label: 'Protein' },
+  { key: 'carbs', label: 'Carbs' },
+  { key: 'fat', label: 'Fat' },
+] as const;
+
 // A food's name, amount and macros, for a Food item (FoodItemForm) or a Saved
 // food (SavedFoodForm). Calories left blank are worked out from the macros,
 // and a blank macro counts as none.
@@ -31,27 +39,24 @@ export function FoodForm({
   submitLabel,
   onSubmit,
 }: Props) {
-  const { colors } = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
   const [unit, setUnit] = useState(initial?.unit ?? 'g');
   const [calories, setCalories] = useState(
     initial?.calories == null ? '' : String(initial.calories),
   );
-  const [protein, setProtein] = useState(initial ? String(initial.protein) : '');
-  const [carbs, setCarbs] = useState(initial ? String(initial.carbs) : '');
-  const [fat, setFat] = useState(initial ? String(initial.fat) : '');
+  const [macros, setMacros] = useState({
+    protein: initial ? String(initial.protein) : '',
+    carbs: initial ? String(initial.carbs) : '',
+    fat: initial ? String(initial.fat) : '',
+  });
 
-  const typed = typedFood({ name, amount, unit, calories, protein, carbs, fat });
+  const typed = typedFood({ name, amount, unit, calories, ...macros });
   // The core's own rule decides, so the form can't drift from it. Only said
   // once the name, amount and unit are filled in, so it doesn't nag while typing.
   const filledIn = name.trim() !== '' && amount.trim() !== '' && unit.trim() !== '';
   const problem = typed && problemOf(typed);
   const workedOut = typed && typed.calories === null ? caloriesFromMacros(typed) : undefined;
-  const inputStyle = [
-    styles.input,
-    { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-  ];
 
   async function submit() {
     if (typed && !problem) await onSubmit(typed);
@@ -60,88 +65,74 @@ export function FoodForm({
   return (
     <View style={styles.form}>
       <Field label="Name">
-        <TextInput
+        <Input
           value={name}
           onChangeText={setName}
           placeholder="e.g. Greek yogurt"
-          placeholderTextColor="#8e8e93"
           autoCapitalize="sentences"
           autoFocus={!initial}
-          style={[inputStyle, styles.wide]}
+          strong
         />
       </Field>
-      <Field label={amountLabel}>
+      <View>
         <View style={styles.row}>
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="decimal-pad"
-            accessibilityLabel={amountLabel}
-            style={inputStyle}
-          />
-          <TextInput
-            value={unit}
-            onChangeText={setUnit}
-            autoCapitalize="none"
-            accessibilityLabel="Unit"
-            placeholder="g, ml, scoop…"
-            placeholderTextColor="#8e8e93"
-            style={[inputStyle, styles.wide]}
-          />
+          <Field label={amountLabel} style={styles.amount}>
+            <Input
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              accessibilityLabel={amountLabel}
+              align="right"
+              strong
+            />
+          </Field>
+          <Field label="Unit" style={styles.unit}>
+            <Input
+              value={unit}
+              onChangeText={setUnit}
+              autoCapitalize="none"
+              accessibilityLabel="Unit"
+              placeholder="g, ml, scoop…"
+            />
+          </Field>
         </View>
-        {amountHint && <Text style={[styles.hint, { color: colors.text }]}>{amountHint}</Text>}
-      </Field>
-      <Field label="Calories">
-        <View style={styles.row}>
-          <TextInput
-            value={calories}
-            onChangeText={setCalories}
-            keyboardType="decimal-pad"
-            accessibilityLabel="Calories"
-            placeholder={workedOut === undefined ? '' : formatCalories(workedOut)}
-            placeholderTextColor="#8e8e93"
-            style={inputStyle}
-          />
-          <Text style={[styles.between, { color: colors.text }]}>kcal</Text>
-        </View>
-        <Text style={[styles.hint, { color: colors.text }]}>
-          Leave blank to work them out from the macros.
-        </Text>
+        {amountHint && (
+          <AppText variant="caption" tone="muted" style={styles.hint}>
+            {amountHint}
+          </AppText>
+        )}
+      </View>
+      <Field label="Calories" hint="Leave blank to work them out from the macros.">
+        <Input
+          value={calories}
+          onChangeText={setCalories}
+          keyboardType="decimal-pad"
+          accessibilityLabel="Calories"
+          placeholder={workedOut === undefined ? '' : formatCalories(workedOut)}
+          suffix="kcal"
+          align="right"
+          strong
+        />
       </Field>
       <View style={styles.row}>
-        <MacroField label="Protein" value={protein} onChange={setProtein} inputStyle={inputStyle} />
-        <MacroField label="Carbs" value={carbs} onChange={setCarbs} inputStyle={inputStyle} />
-        <MacroField label="Fat" value={fat} onChange={setFat} inputStyle={inputStyle} />
+        {macroFields.map(({ key, label }) => (
+          <Field key={key} label={label} style={styles.macro}>
+            <Input
+              value={macros[key]}
+              onChangeText={text => setMacros(current => ({ ...current, [key]: text }))}
+              keyboardType="decimal-pad"
+              accessibilityLabel={`${label} in grams`}
+              placeholder="0"
+              suffix="g"
+              align="right"
+              strong
+            />
+          </Field>
+        ))}
       </View>
-      {filledIn && problem && (
-        <Text style={[styles.problem, { color: colors.notification }]}>{problem}</Text>
-      )}
-      <PrimaryButton label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      {filledIn && problem && <AppText tone="danger">{problem}</AppText>}
+      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
     </View>
-  );
-}
-
-type MacroFieldProps = {
-  label: string;
-  value: string;
-  onChange: (text: string) => void;
-  inputStyle: StyleProp<TextStyle>;
-};
-
-// Grams of one macro; blank is none.
-function MacroField({ label, value, onChange, inputStyle }: MacroFieldProps) {
-  return (
-    <Field label={`${label} (g)`}>
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        keyboardType="decimal-pad"
-        accessibilityLabel={`${label} in grams`}
-        placeholder="0"
-        placeholderTextColor="#8e8e93"
-        style={inputStyle}
-      />
-    </Field>
   );
 }
 
@@ -168,37 +159,22 @@ function typedFood(text: Record<keyof FoodValues, string>): FoodValues | undefin
 
 const styles = StyleSheet.create({
   form: {
-    gap: 24,
+    gap: space.xl,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    gap: space.sm,
   },
-  input: {
-    width: 88,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'right',
-  },
-  wide: {
+  amount: {
     flex: 1,
-    width: undefined,
-    textAlign: 'left',
   },
-  between: {
-    fontSize: 16,
-    opacity: 0.7,
-    paddingBottom: 10,
+  unit: {
+    flex: 1.2,
+  },
+  macro: {
+    flex: 1,
   },
   hint: {
-    fontSize: 13,
-    opacity: 0.7,
-  },
-  problem: {
-    fontSize: 14,
+    marginTop: space.sm,
   },
 });

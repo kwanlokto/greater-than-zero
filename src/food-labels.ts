@@ -19,6 +19,10 @@ export function formatCalories(calories: number): string {
 }
 
 // Grams to at most one decimal place, e.g. "12.5".
+export function formatGrams(value: number): string {
+  return grams(value);
+}
+
 function grams(value: number): string {
   return String(roundedIn('g', value));
 }

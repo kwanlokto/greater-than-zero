@@ -1,12 +1,16 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
+import { ListGroup, ListRow } from '@/components/list-row';
+import { MacroSummary } from '@/components/macro-summary';
 import { NameField } from '@/components/name-field';
-import { PrimaryButton } from '@/components/primary-button';
-import { TextButton } from '@/components/text-button';
-import type { FoodItem, Meal } from '@/core/tracker';
+import { Screen } from '@/components/screen';
+import { Section } from '@/components/section';
+import type { Meal } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatTimeOfDay } from '@/dates';
 import { describeFoodItem, describeMacros } from '@/food-labels';
@@ -18,13 +22,16 @@ import { useTrackerQuery } from '@/use-tracker-query';
 export default function MealScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's no such Meal, e.g. after it's deleted.
   const meal = useTrackerQuery(async () => (await tracker.getMeal(id)) ?? null, [id]);
 
   if (meal === undefined) return null;
   if (meal === null) {
-    return <Text style={[styles.message, { color: colors.text }]}>This meal was deleted.</Text>;
+    return (
+      <Screen>
+        <EmptyState icon="trash-outline" title="This meal was deleted." />
+      </Screen>
+    );
   }
 
   // A new Meal today, eaten now, with this one's food, opened in its place.
@@ -52,7 +59,7 @@ export default function MealScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: meal.name }} />
       <NameField
         name={meal.name}
@@ -60,27 +67,52 @@ export default function MealScreen() {
         failureTitle="Couldn't rename the meal"
         rename={name => tracker.renameMeal(id, name)}
       />
-      <MealTime meal={meal} />
-      <Text style={[styles.totals, { color: colors.text }]}>{describeMacros(meal.totals)}</Text>
-      {meal.items.length === 0 ? (
-        <Text style={[styles.message, { color: colors.text }]}>No food yet.</Text>
-      ) : (
-        meal.items.map(item => <FoodItemRow key={item.id} meal={meal} item={item} />)
-      )}
-      <PrimaryButton
-        label="Add food"
-        onPress={() => router.push({ pathname: '/meals/choose-food', params: { mealId: id } })}
-      />
-      <TextButton label="Copy to today" onPress={copyToToday} />
-      <TextButton label="Delete meal" destructive onPress={confirmDelete} />
-    </ScrollView>
+      <ListGroup>
+        <MealTimeRow meal={meal} />
+      </ListGroup>
+      <Section title="Totals">
+        <Card>
+          <MacroSummary macros={meal.totals} large />
+        </Card>
+      </Section>
+      <Section title="Food">
+        {meal.items.length === 0 ? (
+          <Card>
+            <EmptyState icon="restaurant-outline" title="No food yet" />
+          </Card>
+        ) : (
+          <ListGroup>
+            {meal.items.map(item => (
+              <ListRow
+                key={item.id}
+                title={describeFoodItem(item)}
+                subtitle={describeMacros(item)}
+                accessibilityHint="Opens this food for editing"
+                onPress={() =>
+                  router.navigate({
+                    pathname: '/meals/food-item',
+                    params: { mealId: meal.id, foodItemId: item.id },
+                  })
+                }
+              />
+            ))}
+          </ListGroup>
+        )}
+        <Button
+          size="large"
+          icon="add"
+          label="Add food"
+          onPress={() => router.push({ pathname: '/meals/choose-food', params: { mealId: id } })}
+        />
+      </Section>
+      <Button variant="secondary" icon="copy-outline" label="Copy to today" onPress={copyToToday} />
+      <Button variant="ghost" destructive label="Delete meal" onPress={confirmDelete} />
+    </Screen>
   );
 }
 
 // When the Meal was eaten; tapping it picks another time that day.
-function MealTime({ meal }: { meal: Meal }) {
-  const { colors } = useTheme();
-
+function MealTimeRow({ meal }: { meal: Meal }) {
   const pickTime = () => {
     DateTimePickerAndroid.open({
       value: meal.eatenAt,
@@ -94,78 +126,14 @@ function MealTime({ meal }: { meal: Meal }) {
   };
 
   return (
-    <Pressable
-      accessibilityRole="button"
+    <ListRow
+      icon="time-outline"
+      title={`Eaten at ${formatTimeOfDay(meal.eatenAt)}`}
+      value="Change"
+      valueTone="primary"
+      trailingIcon="chevron-forward"
       accessibilityHint="Picks another time"
       onPress={pickTime}
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      <Text style={[styles.cardText, styles.itemName, { color: colors.text }]}>
-        Eaten at {formatTimeOfDay(meal.eatenAt)}
-      </Text>
-      <Ionicons name="time-outline" size={20} color={colors.text} />
-    </Pressable>
+    />
   );
 }
-
-// A Food item with its amount and macros; tapping it opens it for editing.
-function FoodItemRow({ meal, item }: { meal: Meal; item: FoodItem }) {
-  const router = useRouter();
-  const { colors } = useTheme();
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint="Opens this food for editing"
-      onPress={() =>
-        router.navigate({
-          pathname: '/meals/food-item',
-          params: { mealId: meal.id, foodItemId: item.id },
-        })
-      }
-      style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
-    >
-      <View style={styles.cardText}>
-        <Text style={[styles.itemName, { color: colors.text }]}>{describeFoodItem(item)}</Text>
-        <Text style={[styles.details, { color: colors.text }]}>{describeMacros(item)}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.text} />
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
-  },
-  totals: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  cardText: {
-    flex: 1,
-    gap: 2,
-  },
-  itemName: {
-    fontSize: 16,
-  },
-  details: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

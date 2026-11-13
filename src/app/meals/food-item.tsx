@@ -1,8 +1,10 @@
-import { Stack, useLocalSearchParams, useRouter, useTheme } from 'expo-router';
-import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
+import { Button } from '@/components/button';
+import { EmptyState } from '@/components/empty-state';
 import { FoodItemForm } from '@/components/food-item-form';
-import { TextButton } from '@/components/text-button';
+import { Screen } from '@/components/screen';
 import type { FoodItem, FoodItemValues } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
@@ -15,7 +17,6 @@ type Params = { mealId: string; foodItemId?: string };
 export default function FoodItemScreen() {
   const { mealId, foodItemId } = useLocalSearchParams<Params>();
   const router = useRouter();
-  const { colors } = useTheme();
   // Null once there's nothing to edit, e.g. after the Meal or this Food item
   // in it is deleted.
   const loaded = useTrackerQuery(async () => {
@@ -29,9 +30,9 @@ export default function FoodItemScreen() {
   if (loaded === undefined) return null;
   if (loaded === null) {
     return (
-      <Text style={[styles.message, { color: colors.text }]}>
-        This food is no longer in the meal.
-      </Text>
+      <Screen>
+        <EmptyState icon="help-circle-outline" title="This food is no longer in the meal." />
+      </Screen>
     );
   }
 
@@ -60,23 +61,17 @@ export default function FoodItemScreen() {
 
   const { item } = loaded;
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <Stack.Screen options={{ title: item ? 'Edit food' : 'Add food' }} />
       <FoodItemForm initial={item} submitLabel={item ? 'Save' : 'Add food'} onSubmit={save} />
-      {item && <TextButton label="Remove food" destructive onPress={() => confirmRemove(item)} />}
-    </ScrollView>
+      {item && (
+        <Button
+          variant="ghost"
+          destructive
+          label="Remove food"
+          onPress={() => confirmRemove(item)}
+        />
+      )}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
-  },
-  message: {
-    padding: 24,
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});

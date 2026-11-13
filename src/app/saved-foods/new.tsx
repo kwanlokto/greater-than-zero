@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet } from 'react-native';
 
 import { SavedFoodForm } from '@/components/saved-food-form';
+import { Screen } from '@/components/screen';
 import type { SavedFoodValues } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
@@ -23,14 +23,8 @@ export default function NewSavedFoodScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+    <Screen>
       <SavedFoodForm initial={undefined} submitLabel="Save food" onSubmit={create} />
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-});

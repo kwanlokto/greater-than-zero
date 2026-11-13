@@ -1,21 +1,28 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme } from 'expo-router';
-import { useState, type ComponentProps, type ReactElement } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState, type ReactElement } from 'react';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 
+import type { IconName } from '@/components/button';
 import { Chip } from '@/components/chip';
+import { EmptyState } from '@/components/empty-state';
+import { Input } from '@/components/input';
+import { Divider, ListRow } from '@/components/list-row';
+import { useBottomInset } from '@/components/screen';
 import { muscleGroups, type Exercise, type MuscleGroup } from '@/core/tracker';
 import { tracker } from '@/database';
 import { exerciseDetails, muscleGroupLabels } from '@/exercise-labels';
+import { space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 type Props = {
   renderExercise: (exercise: Exercise) => ReactElement;
+  // Room to leave under the last row, e.g. for a floating button.
+  bottomSpace?: number;
 };
 
 // The Exercise library with search by name and a muscle-group filter.
-export function ExerciseBrowser({ renderExercise }: Props) {
-  const { colors } = useTheme();
+export function ExerciseBrowser({ renderExercise, bottomSpace = 0 }: Props) {
+  const { colors } = useAppTheme();
+  const bottomInset = useBottomInset();
   const [query, setQuery] = useState('');
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>();
   const exercises = useTrackerQuery(
@@ -24,17 +31,16 @@ export function ExerciseBrowser({ renderExercise }: Props) {
   );
 
   return (
-    <View style={styles.container}>
-      <TextInput
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Input
         value={query}
         onChangeText={setQuery}
+        onClear={() => setQuery('')}
+        icon="search"
         placeholder="Search exercises"
-        placeholderTextColor="#8e8e93"
         autoCorrect={false}
-        style={[
-          styles.search,
-          { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-        ]}
+        returnKeyType="search"
+        style={styles.search}
       />
       <ScrollView
         horizontal
@@ -58,16 +64,15 @@ export function ExerciseBrowser({ renderExercise }: Props) {
         ))}
       </ScrollView>
       <FlatList
+        style={styles.list}
         data={exercises ?? []}
         keyExtractor={exercise => exercise.id}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         renderItem={({ item }) => renderExercise(item)}
-        ListEmptyComponent={
-          exercises && (
-            <Text style={[styles.empty, { color: colors.text }]}>No exercises match.</Text>
-          )
-        }
+        ItemSeparatorComponent={Divider}
+        contentContainerStyle={{ paddingBottom: bottomInset + bottomSpace }}
+        ListEmptyComponent={exercises && <EmptyState icon="search" title="No exercises match." />}
       />
     </View>
   );
@@ -76,26 +81,22 @@ export function ExerciseBrowser({ renderExercise }: Props) {
 type RowProps = {
   exercise: Exercise;
   onPress?: () => void;
-  icon?: ComponentProps<typeof Ionicons>['name'];
+  icon?: IconName;
 };
 
 export function ExerciseRow({ exercise, onPress, icon }: RowProps) {
-  const { colors } = useTheme();
-  const details = exercise.isCustom ? `${exerciseDetails(exercise)} · Custom` : exerciseDetails(exercise);
+  const details = exercise.isCustom
+    ? `${exerciseDetails(exercise)} · Custom`
+    : exerciseDetails(exercise);
 
   return (
-    <Pressable
-      accessibilityRole={onPress ? 'button' : undefined}
-      disabled={!onPress}
+    <ListRow
+      title={exercise.name}
+      subtitle={details}
+      trailingIcon={icon}
+      trailingIconTone={icon === 'chevron-forward' ? 'muted' : 'primary'}
       onPress={onPress}
-      style={[styles.row, { borderBottomColor: colors.border }]}
-    >
-      <View style={styles.rowText}>
-        <Text style={[styles.name, { color: colors.text }]}>{exercise.name}</Text>
-        <Text style={[styles.details, { color: colors.text }]}>{details}</Text>
-      </View>
-      {icon && <Ionicons name={icon} size={20} color={colors.text} />}
-    </Pressable>
+    />
   );
 }
 
@@ -104,43 +105,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   search: {
-    margin: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    marginHorizontal: space.lg,
+    marginTop: space.md,
   },
+  // Keeps its height: a ScrollView would otherwise give it up to the list.
   filterBar: {
     flexGrow: 0,
+    flexShrink: 0,
   },
-  filters: {
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  rowText: {
+  list: {
     flex: 1,
   },
-  name: {
-    fontSize: 16,
-  },
-  details: {
-    fontSize: 13,
-    opacity: 0.7,
-    marginTop: 2,
-  },
-  empty: {
-    padding: 24,
-    textAlign: 'center',
-    opacity: 0.7,
+  filters: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
   },
 });

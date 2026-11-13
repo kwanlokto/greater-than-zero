@@ -1,26 +1,39 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Card } from '@/components/card';
+import { Chip } from '@/components/chip';
 import { Field } from '@/components/field';
-import { PrimaryButton } from '@/components/primary-button';
+import { Input } from '@/components/input';
+import { MacroSummary } from '@/components/macro-summary';
 import { portionOf, problemWithPortion, type SavedFood } from '@/core/tracker';
-import { describeMacros, describeServing } from '@/food-labels';
+import { describeServing } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
+import { space } from '@/theme';
 
 type Props = {
   savedFood: SavedFood;
   onSubmit: (quantity: number) => Promise<void>;
 };
 
+// Common portions, as Servings, to pick without typing.
+const servingMultiples = [0.5, 1, 1.5, 2];
+
+// Rounded to two decimal places, as amounts of food are shown.
+function amountOf(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 // How much of a Saved food to add to a Meal, in its Serving unit, starting at
 // one Serving and showing the macros that comes to.
 export function PortionForm({ savedFood, onSubmit }: Props) {
-  const { colors } = useTheme();
   const [quantity, setQuantity] = useState(String(savedFood.servingAmount));
   const typed = parseDecimal(quantity) ?? undefined;
   // The core's own rule decides, so the form can't drift from it.
   const problem = typed === undefined ? undefined : problemWithPortion(savedFood, typed);
+  const { servingAmount, servingUnit } = savedFood;
 
   async function submit() {
     if (typed !== undefined && !problem) await onSubmit(typed);
@@ -28,33 +41,49 @@ export function PortionForm({ savedFood, onSubmit }: Props) {
 
   return (
     <View style={styles.form}>
-      <Text style={[styles.details, { color: colors.text }]}>
-        Per {describeServing(savedFood)}: {describeMacros(savedFood)}
-      </Text>
+      <Card>
+        <AppText variant="label" tone="muted">
+          Per {describeServing(savedFood)}
+        </AppText>
+        <MacroSummary macros={savedFood} />
+      </Card>
       <Field label="Amount">
-        <View style={styles.row}>
-          <TextInput
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="decimal-pad"
-            accessibilityLabel={`Amount in ${savedFood.servingUnit}`}
-            autoFocus
-            selectTextOnFocus
-            style={[
-              styles.input,
-              { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-            ]}
-          />
-          <Text style={[styles.unit, { color: colors.text }]}>{savedFood.servingUnit}</Text>
+        <Input
+          value={quantity}
+          onChangeText={setQuantity}
+          keyboardType="decimal-pad"
+          accessibilityLabel={`Amount in ${servingUnit}`}
+          autoFocus
+          selectTextOnFocus
+          suffix={servingUnit}
+          align="right"
+          strong
+        />
+        <View style={styles.chips}>
+          {servingMultiples.map(multiple => {
+            const amount = amountOf(servingAmount * multiple);
+            return (
+              <Chip
+                key={multiple}
+                label={`${amount} ${servingUnit}`}
+                selected={typed === amount}
+                onPress={() => setQuantity(String(amount))}
+              />
+            );
+          })}
         </View>
       </Field>
       {typed !== undefined && !problem && (
-        <Text style={[styles.portion, { color: colors.text }]}>
-          {describeMacros(portionOf(savedFood, typed))}
-        </Text>
+        <Card>
+          <AppText variant="label" tone="muted">
+            This portion
+          </AppText>
+          <MacroSummary macros={portionOf(savedFood, typed)} large />
+        </Card>
       )}
-      {problem && <Text style={[styles.problem, { color: colors.notification }]}>{problem}</Text>}
-      <PrimaryButton
+      {problem && <AppText tone="danger">{problem}</AppText>}
+      <Button
+        size="large"
         label="Add to meal"
         disabled={typed === undefined || !!problem}
         onPress={submit}
@@ -65,35 +94,11 @@ export function PortionForm({ savedFood, onSubmit }: Props) {
 
 const styles = StyleSheet.create({
   form: {
-    gap: 24,
+    gap: space.xl,
   },
-  details: {
-    fontSize: 14,
-    opacity: 0.7,
-  },
-  row: {
+  chips: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  input: {
-    width: 100,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'right',
-  },
-  unit: {
-    fontSize: 16,
-    opacity: 0.7,
-  },
-  portion: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  problem: {
-    fontSize: 14,
+    flexWrap: 'wrap',
+    gap: space.sm,
   },
 });

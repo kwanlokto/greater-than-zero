@@ -1,7 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useTheme } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Card } from '@/components/card';
+import { IconButton } from '@/components/icon-button';
 import {
   calendarWeeks,
   dayOfMonth,
@@ -10,6 +11,7 @@ import {
   shiftMonth,
   weekdayInitials,
 } from '@/dates';
+import { space, useAppTheme } from '@/theme';
 
 type Props = {
   // YYYY-MM.
@@ -24,37 +26,36 @@ type Props = {
 // A month of days, Sunday first, with the days trained marked, and buttons to
 // move a month either way.
 export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPressDay }: Props) {
-  const { colors } = useTheme();
   const trained = new Set(trainingDays);
+  const count = trainingDays.length;
 
   return (
-    <View>
+    <Card style={styles.card}>
       <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Previous month"
-          hitSlop={12}
+        <IconButton
+          icon="chevron-back"
+          label="Previous month"
           onPress={() => onChangeMonth(shiftMonth(month, -1))}
-        >
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
-        <Text accessibilityRole="header" style={[styles.monthName, { color: colors.text }]}>
-          {formatMonth(month)}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Next month"
-          hitSlop={12}
+        />
+        <View style={styles.title}>
+          <AppText accessibilityRole="header" variant="heading">
+            {formatMonth(month)}
+          </AppText>
+          <AppText variant="caption" tone="muted">
+            {count === 1 ? '1 day trained' : `${count} days trained`}
+          </AppText>
+        </View>
+        <IconButton
+          icon="chevron-forward"
+          label="Next month"
           onPress={() => onChangeMonth(shiftMonth(month, 1))}
-        >
-          <Ionicons name="chevron-forward" size={24} color={colors.text} />
-        </Pressable>
+        />
       </View>
       <View style={styles.week} importantForAccessibility="no-hide-descendants">
         {weekdayInitials.map((initial, place) => (
-          <Text key={place} style={[styles.weekday, { color: colors.text }]}>
+          <AppText key={place} variant="label" tone="muted" style={styles.weekday}>
             {initial}
-          </Text>
+          </AppText>
         ))}
       </View>
       {calendarWeeks(month).map((week, row) => (
@@ -66,6 +67,8 @@ export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPre
                 localDate={localDate}
                 trained={trained.has(localDate)}
                 isToday={localDate === today}
+                // Dates compare in order as text.
+                isAhead={localDate > today}
                 onPress={() => onPressDay(localDate)}
               />
             ) : (
@@ -74,7 +77,21 @@ export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPre
           )}
         </View>
       ))}
-    </View>
+      <View style={styles.legend}>
+        <View style={styles.key}>
+          <DayMark trained isToday={false} small />
+          <AppText variant="caption" tone="muted">
+            Trained
+          </AppText>
+        </View>
+        <View style={styles.key}>
+          <DayMark trained={false} isToday small />
+          <AppText variant="caption" tone="muted">
+            Today
+          </AppText>
+        </View>
+      </View>
+    </Card>
   );
 }
 
@@ -82,12 +99,13 @@ type CalendarDayProps = {
   localDate: string;
   trained: boolean;
   isToday: boolean;
+  isAhead: boolean;
   onPress: () => void;
 };
 
-// A trained day is filled in; today is ringed.
-function CalendarDay({ localDate, trained, isToday, onPress }: CalendarDayProps) {
-  const { colors } = useTheme();
+// A trained day is filled in; today is ringed; days still to come are muted.
+function CalendarDay({ localDate, trained, isToday, isAhead, onPress }: CalendarDayProps) {
+  const { colors } = useAppTheme();
   const label = [formatLocalDateWithWeekday(localDate), isToday && 'today', trained && 'trained']
     .filter(Boolean)
     .join(', ');
@@ -97,71 +115,113 @@ function CalendarDay({ localDate, trained, isToday, onPress }: CalendarDayProps)
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={styles.place}
+      style={({ pressed }) => [styles.place, pressed && styles.pressed]}
+    >
+      <DayMark trained={trained} isToday={isToday}>
+        <AppText
+          variant={isToday || trained ? 'bodyStrong' : 'body'}
+          style={{
+            color: trained ? colors.onPrimary : isAhead ? colors.textMuted : colors.text,
+          }}
+        >
+          {dayOfMonth(localDate)}
+        </AppText>
+      </DayMark>
+    </Pressable>
+  );
+}
+
+type DayMarkProps = {
+  trained: boolean;
+  isToday: boolean;
+  // For the legend.
+  small?: boolean;
+  children?: React.ReactNode;
+};
+
+// The ring around today, and inside it the fill of a trained day, so a day
+// that's both shows both.
+function DayMark({ trained, isToday, small = false, children }: DayMarkProps) {
+  const { colors } = useAppTheme();
+  const size = small ? 18 : 42;
+  const ring = small ? 2 : 2.5;
+  const inner = isToday ? size - ring * 4 : size;
+
+  return (
+    <View
+      style={[
+        styles.mark,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: ring,
+          borderColor: isToday ? colors.primary : 'transparent',
+        },
+      ]}
     >
       <View
         style={[
           styles.mark,
           {
+            width: inner,
+            height: inner,
+            borderRadius: inner / 2,
             backgroundColor: trained ? colors.primary : 'transparent',
-            borderColor: isToday ? colors.primary : 'transparent',
           },
         ]}
       >
-        <Text
-          style={[
-            styles.dayNumber,
-            { color: trained ? '#ffffff' : colors.text },
-            isToday && styles.today,
-          ]}
-        >
-          {dayOfMonth(localDate)}
-        </Text>
+        {children}
       </View>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  card: {
+    gap: 0,
+    paddingHorizontal: space.sm,
+    paddingTop: space.sm,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingBottom: 12,
+    paddingBottom: space.md,
   },
-  monthName: {
-    fontSize: 18,
-    fontWeight: '600',
+  title: {
+    flex: 1,
+    alignItems: 'center',
   },
   week: {
     flexDirection: 'row',
   },
   place: {
     flex: 1,
-    height: 48,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.5,
   },
   weekday: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.6,
+    paddingBottom: space.xs,
   },
   mark: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayNumber: {
-    fontSize: 16,
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: space.xl,
+    paddingTop: space.md,
   },
-  today: {
-    fontWeight: '700',
+  key: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
   },
 });

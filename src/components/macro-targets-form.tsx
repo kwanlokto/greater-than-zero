@@ -1,12 +1,14 @@
-import { useTheme } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
 import { Field } from '@/components/field';
-import { PrimaryButton } from '@/components/primary-button';
+import { Input } from '@/components/input';
 import { problemWithMacroTargets, type Macro, type MacroTargets } from '@/core/tracker';
-import { macroNames, macros, macroUnits } from '@/food-labels';
+import { macroNames, macroUnits } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
+import { space } from '@/theme';
 
 type Props = {
   initial: MacroTargets;
@@ -14,44 +16,49 @@ type Props = {
   onSubmit: (targets: MacroTargets) => Promise<void>;
 };
 
+const gramMacros: Macro[] = ['protein', 'carbs', 'fat'];
+
 // How much to eat in a day, in calories and grams of each macro. A field left
 // blank sets no target for it.
 export function MacroTargetsForm({ initial, submitLabel, onSubmit }: Props) {
-  const { colors } = useTheme();
   const [text, setText] = useState(() => textOf(initial));
 
   const typed = typedTargets(text);
   // The core's own rule decides, so the form can't drift from it.
   const problem = typed ? problemWithMacroTargets(typed) : undefined;
-  const inputStyle = [
-    styles.input,
-    { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
-  ];
 
   async function submit() {
     if (typed && !problem) await onSubmit(typed);
   }
 
+  const box = (macro: Macro) => (
+    <Input
+      value={text[macro]}
+      onChangeText={value => setText(current => ({ ...current, [macro]: value }))}
+      keyboardType="decimal-pad"
+      accessibilityLabel={`${macroNames[macro]} target in ${macroUnits[macro] === 'g' ? 'grams' : 'calories'}`}
+      placeholder="None"
+      suffix={macroUnits[macro]}
+      align="right"
+      strong
+    />
+  );
+
   return (
     <View style={styles.form}>
-      {macros.map(macro => (
-        <Field key={macro} label={macroNames[macro]}>
-          <View style={styles.row}>
-            <TextInput
-              value={text[macro]}
-              onChangeText={value => setText(current => ({ ...current, [macro]: value }))}
-              keyboardType="decimal-pad"
-              accessibilityLabel={`${macroNames[macro]} target`}
-              placeholder="None"
-              placeholderTextColor="#8e8e93"
-              style={inputStyle}
-            />
-            <Text style={[styles.unit, { color: colors.text }]}>{macroUnits[macro]} a day</Text>
-          </View>
-        </Field>
-      ))}
-      {problem && <Text style={[styles.problem, { color: colors.notification }]}>{problem}</Text>}
-      <PrimaryButton label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      <Field label="Calories a day">{box('calories')}</Field>
+      <View style={styles.row}>
+        {gramMacros.map(macro => (
+          <Field key={macro} label={macroNames[macro]} style={styles.column}>
+            {box(macro)}
+          </Field>
+        ))}
+      </View>
+      <AppText variant="caption" tone="muted">
+        Leave any blank for no target.
+      </AppText>
+      {problem && <AppText tone="danger">{problem}</AppText>}
+      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
     </View>
   );
 }
@@ -80,27 +87,13 @@ function typedTargets(text: Record<Macro, string>): MacroTargets | undefined {
 
 const styles = StyleSheet.create({
   form: {
-    gap: 20,
+    gap: space.lg,
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    gap: space.sm,
   },
-  input: {
-    width: 100,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    textAlign: 'right',
-  },
-  unit: {
-    fontSize: 16,
-    opacity: 0.7,
-  },
-  problem: {
-    fontSize: 14,
+  column: {
+    flex: 1,
   },
 });

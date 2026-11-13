@@ -1,12 +1,15 @@
-import { useRouter, useTheme } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Fragment, useRef } from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
 
+import { AppText } from '@/components/app-text';
+import { EmptyState } from '@/components/empty-state';
 import { MealCard } from '@/components/meal-card';
+import { Screen } from '@/components/screen';
 import type { Meal } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
+import { space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -18,7 +21,6 @@ const pastMealsShown = 30;
 // today's Meals.
 export default function ChoosePastMealScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
   const today = useToday();
   const meals = useTrackerQuery(() => tracker.getMealsBefore(today, pastMealsShown), [today]);
   // One tap copies one Meal, even if the lifter taps again while leaving.
@@ -32,42 +34,33 @@ export default function ChoosePastMealScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen contentStyle={{ gap: space.md }}>
       {meals?.length === 0 && (
-        <Text style={[styles.note, { color: colors.text }]}>No meals before today yet.</Text>
+        <EmptyState icon="restaurant-outline" title="No meals before today yet." />
+      )}
+      {meals && meals.length > 0 && (
+        <AppText tone="muted">Tap a meal to copy it into today, eaten now.</AppText>
       )}
       {meals?.map((meal, index) => (
         <Fragment key={meal.id}>
           {meal.localDate !== meals[index - 1]?.localDate && (
-            <Text style={[styles.day, { color: colors.text }]}>
+            <AppText
+              accessibilityRole="header"
+              variant="overline"
+              tone="muted"
+              style={{ marginTop: space.md, paddingHorizontal: space.xs }}
+            >
               {formatLocalDateWithWeekday(meal.localDate)}
-            </Text>
+            </AppText>
           )}
           <MealCard
             meal={meal}
-            icon="copy-outline"
+            action={{ label: 'Copy', icon: 'copy-outline' }}
             hint="Copies this meal into today"
             onPress={() => copy(meal)}
           />
         </Fragment>
       ))}
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 12,
-  },
-  day: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  note: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.7,
-  },
-});
