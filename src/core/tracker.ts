@@ -53,6 +53,7 @@ import {
   type ProgressPoint,
   type ProgressSeries,
 } from './progress';
+import { moveInList, notDeleted, positionAfterLast, softDelete, stillThere } from './records';
 import * as schema from './schema';
 import {
   convertWeight,
@@ -474,18 +475,22 @@ export function restSecondsLeft(restEndsAt: Date | null, now: Date): number {
 // A Workout that's neither finished nor discarded. Starting, finishing and
 // discarding all go by this, so a discarded Workout can never be finished.
 function inProgress() {
-  return and(isNull(workouts.finishedAt), isNull(workouts.deletedAt));
+  return and(isNull(workouts.finishedAt), notDeleted(workouts));
 }
 
 // A Workout that's been finished and not deleted since: one that's recorded.
 function finished() {
-  return and(isNotNull(workouts.finishedAt), isNull(workouts.deletedAt));
+  return and(isNotNull(workouts.finishedAt), notDeleted(workouts));
 }
 
 // Workouts go in order by date. Within a date the backfilled ones come first,
 // in the order they were added, since when they happened isn't known; then
 // the rest by start time. latestWorkoutFirst and cameBefore follow it too.
-const workoutOrder = [asc(workouts.localDate), desc(workouts.isBackfilled), asc(workouts.startedAt)];
+const workoutOrder = [
+  asc(workouts.localDate),
+  desc(workouts.isBackfilled),
+  asc(workouts.startedAt),
+];
 const latestWorkoutFirst = [
   desc(workouts.localDate),
   asc(workouts.isBackfilled),
@@ -532,13 +537,13 @@ function cameBefore(workout: WorkoutPlace) {
 // A planned Set not yet confirmed or dropped, whose Exercise is still in the
 // Workout. For queries joining planned Sets to their Exercise entries.
 function plannedSetStillThere() {
-  return and(isNull(plannedSets.deletedAt), isNull(exerciseEntries.deletedAt));
+  return and(notDeleted(plannedSets), notDeleted(exerciseEntries));
 }
 
 // A Set that hasn't been deleted, on its own or with its Exercise. For queries
 // joining Sets to their Exercise entries.
 function setStillLogged() {
-  return and(isNull(sets.deletedAt), isNull(exerciseEntries.deletedAt));
+  return and(notDeleted(sets), notDeleted(exerciseEntries));
 }
 
 // The same, for a working Set rather than a warm-up.
@@ -546,44 +551,9 @@ function workingSetStillLogged() {
   return and(setStillLogged(), eq(sets.isWarmUp, false));
 }
 
-// A Template that hasn't been deleted.
-function templateStillThere(templateId: string) {
-  return and(eq(templates.id, templateId), isNull(templates.deletedAt));
-}
-
 // The Rotation next up comes from.
 function activeRotation() {
-  return and(eq(rotations.isActive, true), isNull(rotations.deletedAt));
-}
-
-// A Rotation that hasn't been deleted.
-function rotationStillThere(rotationId: string) {
-  return and(eq(rotations.id, rotationId), isNull(rotations.deletedAt));
-}
-
-// A Template still in its Rotation: not removed, alone or with the Rotation.
-function rotationEntryStillIn(rotationEntryId: string) {
-  return and(eq(rotationEntries.id, rotationEntryId), isNull(rotationEntries.deletedAt));
-}
-
-// A Meal that hasn't been deleted.
-function mealStillThere(mealId: string) {
-  return and(eq(meals.id, mealId), isNull(meals.deletedAt));
-}
-
-// A Food item that hasn't been deleted, on its own or with its Meal.
-function foodItemStillThere(foodItemId: string) {
-  return and(eq(foodItems.id, foodItemId), isNull(foodItems.deletedAt));
-}
-
-// A Saved food that hasn't been deleted.
-function savedFoodStillThere(savedFoodId: string) {
-  return and(eq(savedFoods.id, savedFoodId), isNull(savedFoods.deletedAt));
-}
-
-// An Exercise still in its Template: not removed, alone or with the Template.
-function templateExerciseStillIn(templateExerciseId: string) {
-  return and(eq(templateExercises.id, templateExerciseId), isNull(templateExercises.deletedAt));
+  return and(eq(rotations.isActive, true), notDeleted(rotations));
 }
 
 function requireValidSet(trackingType: TrackingType, set: SetValues) {
@@ -673,15 +643,6 @@ function targetFromSets(loggedSets: WorkoutSet[]): TargetValues | undefined {
   };
 }
 
-// The IDs in `order` with `id` moved to `toIndex`, counting from 0, and the
-// ones in between shifted along by one. Undefined when there's no such place.
-function movedTo(order: string[], id: string, toIndex: number): string[] | undefined {
-  const others = order.filter(other => other !== id);
-  if (!Number.isInteger(toIndex) || toIndex < 0 || toIndex > others.length) return undefined;
-  others.splice(toIndex, 0, id);
-  return others;
-}
-
 function requireValidTarget(trackingType: TrackingType, target: TargetValues) {
   const problem = problemWithTarget(trackingType, target);
   if (problem) throw new Error(problem);
@@ -705,7 +666,10 @@ function requireRotationName(typed: string): string {
   return name;
 }
 
-export function createTracker(db: TrackerDatabase, { now = () => new Date() }: TrackerOptions = {}) {
+export function createTracker(
+  db: TrackerDatabase,
+  { now = () => new Date() }: TrackerOptions = {},
+) {
   // Built-in Exercises are shared across installs and Backup files, and hidden
   // ones keep the name history shows, so only custom Exercises still in the
   // library may change.
@@ -713,35 +677,17 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const changed = await db
       .update(exercises)
       .set(values)
-      .where(
-        and(eq(exercises.id, id), eq(exercises.isCustom, true), isNull(exercises.deletedAt)),
-      )
+      .where(and(eq(exercises.id, id), eq(exercises.isCustom, true), notDeleted(exercises)))
       .returning({ id: exercises.id });
     if (changed.length === 0) {
       throw new Error('Only custom Exercises in the library can be changed');
     }
   }
 
-  // The position after the last one in use, so a new row goes at the end.
-  // Synchronous, so it can run inside a transaction.
-  function nextPosition(
-    table: SQLiteTable,
-    position: SQLiteColumn,
-    where: SQL,
-    tx: TrackerDatabase = db,
-  ): number {
-    const [{ next }] = tx
-      .select({ next: sql<number>`coalesce(max(${position}), -1) + 1` })
-      .from(table)
-      .where(where)
-      .all();
-    return next;
-  }
-
   // Positions aren't renumbered when a Set is deleted, so new Sets always go
   // after every earlier one.
   function nextSetPosition(exerciseEntryId: string, tx: TrackerDatabase = db) {
-    return nextPosition(sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId), tx);
+    return positionAfterLast(tx, sets, sets.position, eq(sets.exerciseEntryId, exerciseEntryId));
   }
 
   async function getFallbackRestSeconds(): Promise<number> {
@@ -770,11 +716,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
   // Synchronous, so startWorkout can check and insert without yielding.
   function idOfWorkoutInProgress(tx: TrackerDatabase = db): string | undefined {
-    return tx
-      .select({ id: workouts.id })
-      .from(workouts)
-      .where(inProgress())
-      .get()?.id;
+    return tx.select({ id: workouts.id }).from(workouts).where(inProgress()).get()?.id;
   }
 
   // The active Rotation, when the Template is in it: the one a Workout started
@@ -789,7 +731,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         and(
           activeRotation(),
           eq(rotationEntries.templateId, templateId),
-          isNull(rotationEntries.deletedAt),
+          notDeleted(rotationEntries),
         ),
       )
       .get()?.id;
@@ -847,23 +789,6 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .where(and(eq(workouts.id, entry.workoutId), inProgress()));
   }
 
-  // Soft-deletes the Sets matching `where`, as part of a larger transaction.
-  function softDeleteSets(tx: TrackerDatabase, where: SQL, deletedAt: Date) {
-    tx.update(sets)
-      .set({ deletedAt })
-      .where(and(where, isNull(sets.deletedAt)))
-      .run();
-  }
-
-  // Soft-deletes the planned Sets matching `where`, on their own or as part of
-  // a larger transaction.
-  function softDeletePlannedSets(tx: TrackerDatabase, where: SQL, deletedAt: Date) {
-    tx.update(plannedSets)
-      .set({ deletedAt })
-      .where(and(where, isNull(plannedSets.deletedAt)))
-      .run();
-  }
-
   // The IDs of a Workout's Exercise entries, for use in a subquery.
   function entryIdsOf(tx: TrackerDatabase, workoutId: string) {
     return tx
@@ -902,21 +827,11 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   function softDeleteWorkout(id: string, where: SQL | undefined): boolean {
     const deletedAt = now();
     return db.transaction(tx => {
-      const deleted = tx
-        .update(workouts)
-        .set({ deletedAt, restEndsAt: null })
-        .where(and(eq(workouts.id, id), where))
-        .returning({ id: workouts.id })
-        .all();
-      if (deleted.length === 0) return false;
-      const entryIds = entryIdsOf(tx, id);
-      softDeleteSets(tx, inArray(sets.exerciseEntryId, entryIds), deletedAt);
-      softDeletePlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIds), deletedAt);
-      tx.update(exerciseEntries)
-        .set({ deletedAt })
-        .where(and(eq(exerciseEntries.workoutId, id), isNull(exerciseEntries.deletedAt)))
-        .run();
-      return true;
+      // Its rest ends with it.
+      const deleted = softDelete(tx, workouts, and(eq(workouts.id, id), where), deletedAt, {
+        restEndsAt: null,
+      });
+      return deleted.length > 0;
     });
   }
 
@@ -928,7 +843,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const changed = await db
       .update(exerciseEntries)
       .set(values)
-      .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
+      .where(and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries)))
       .returning({ id: exerciseEntries.id });
     if (changed.length === 0) throw new Error('No such Exercise in a Workout');
   }
@@ -938,7 +853,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const changed = await db
       .update(sets)
       .set(values)
-      .where(and(eq(sets.id, setId), isNull(sets.deletedAt)))
+      .where(and(eq(sets.id, setId), notDeleted(sets)))
       .returning({ id: sets.id });
     if (changed.length === 0) throw new Error('No such Set');
   }
@@ -948,7 +863,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .select({ trackingType: exercises.trackingType })
       .from(exerciseEntries)
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
-      .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)));
+      .where(and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries)));
     if (!exercise) throw new Error('No such Exercise in a Workout');
     return exercise.trackingType;
   }
@@ -959,7 +874,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       .from(sets)
       .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
       .innerJoin(exercises, eq(exerciseEntries.exerciseId, exercises.id))
-      .where(and(eq(sets.id, setId), isNull(sets.deletedAt)));
+      .where(and(eq(sets.id, setId), notDeleted(sets)));
     if (!exercise) throw new Error('No such Set');
     return exercise.trackingType;
   }
@@ -969,7 +884,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // deleted Sets are left out.
   async function findWorkouts(where: SQL | undefined): Promise<Workout[]> {
     const found = await db.query.workouts.findMany({
-      where: and(where, isNull(workouts.deletedAt)),
+      where: and(where, notDeleted(workouts)),
       orderBy: workoutOrder,
       columns: {
         id: true,
@@ -983,13 +898,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       },
       with: {
         entries: {
-          where: isNull(exerciseEntries.deletedAt),
+          where: notDeleted(exerciseEntries),
           orderBy: asc(exerciseEntries.position),
           columns: { id: true, notes: true },
           with: {
             exercise: { columns: exerciseQueryColumns },
             sets: {
-              where: isNull(sets.deletedAt),
+              where: notDeleted(sets),
               orderBy: asc(sets.position),
               columns: {
                 id: true,
@@ -1001,7 +916,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
               },
             },
             plannedSets: {
-              where: isNull(plannedSets.deletedAt),
+              where: notDeleted(plannedSets),
               orderBy: asc(plannedSets.position),
               columns: { id: true, weight: true, weightUnit: true, reps: true },
             },
@@ -1225,12 +1140,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // Templates and removed Exercises are left out.
   async function findTemplates(where: SQL | undefined): Promise<Template[]> {
     const found = await db.query.templates.findMany({
-      where: and(where, isNull(templates.deletedAt)),
+      where: and(where, notDeleted(templates)),
       orderBy: sql`${templates.name} COLLATE NOCASE`,
       columns: { id: true, name: true },
       with: {
         exercises: {
-          where: isNull(templateExercises.deletedAt),
+          where: notDeleted(templateExercises),
           orderBy: asc(templateExercises.position),
           with: { exercise: { columns: exerciseQueryColumns } },
         },
@@ -1258,12 +1173,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
   // Deleted Rotations and removed Templates are left out.
   async function findRotations(where: SQL | undefined): Promise<Rotation[]> {
     return db.query.rotations.findMany({
-      where: and(where, isNull(rotations.deletedAt)),
+      where: and(where, notDeleted(rotations)),
       orderBy: sql`${rotations.name} COLLATE NOCASE`,
       columns: { id: true, name: true, isActive: true },
       with: {
         entries: {
-          where: isNull(rotationEntries.deletedAt),
+          where: notDeleted(rotationEntries),
           orderBy: asc(rotationEntries.position),
           columns: { id: true },
           with: { template: { columns: { id: true, name: true } } },
@@ -1310,13 +1225,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     { latestFirst = false, limit }: { latestFirst?: boolean; limit?: number } = {},
   ): Promise<Meal[]> {
     const found = await db.query.meals.findMany({
-      where: and(where, isNull(meals.deletedAt)),
+      where: and(where, notDeleted(meals)),
       orderBy: latestFirst ? latestMealFirst : mealOrder,
       limit,
       columns: { id: true, localDate: true, eatenAt: true, name: true },
       with: {
         items: {
-          where: isNull(foodItems.deletedAt),
+          where: notDeleted(foodItems),
           orderBy: asc(foodItems.position),
           columns: {
             id: true,
@@ -1346,9 +1261,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     values: FoodItemValues,
     savedFoodId: string | null = null,
   ): { id: string } {
-    const meal = tx.select({ id: meals.id }).from(meals).where(mealStillThere(mealId)).get();
+    const meal = tx.select({ id: meals.id }).from(meals).where(stillThere(meals, mealId)).get();
     if (!meal) throw new Error('No such Meal');
-    const position = nextPosition(foodItems, foodItems.position, eq(foodItems.mealId, mealId), tx);
+    const position = positionAfterLast(
+      tx,
+      foodItems,
+      foodItems.position,
+      eq(foodItems.mealId, mealId),
+    );
     return tx
       .insert(foodItems)
       .values({ mealId, position, ...values, savedFoodId })
@@ -1361,7 +1281,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     const found = await db
       .select(savedFoodColumns)
       .from(savedFoods)
-      .where(and(where, isNull(savedFoods.deletedAt)))
+      .where(and(where, notDeleted(savedFoods)))
       .orderBy(sql`${savedFoods.name} COLLATE NOCASE`);
     return found.map(withCaloriesWorkedOut);
   }
@@ -1381,7 +1301,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         weighedAt: weighIns.weighedAt,
       })
       .from(weighIns)
-      .where(and(where, isNull(weighIns.deletedAt)))
+      .where(and(where, notDeleted(weighIns)))
       .orderBy(asc(weighIns.localDate));
     const displayUnit = await getDisplayUnit();
     return found.map(row => ({
@@ -1432,7 +1352,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .from(exercises)
         .where(
           and(
-            isNull(exercises.deletedAt),
+            notDeleted(exercises),
             ...words.map(word => sql`instr(${searchableName}, ${word}) > 0`),
             muscleGroup && eq(exercises.muscleGroup, muscleGroup),
           ),
@@ -1469,13 +1389,16 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const changed = await db
         .update(exercises)
         .set({ defaultRestSeconds: seconds })
-        .where(and(eq(exercises.id, exerciseId), isNull(exercises.deletedAt)))
+        .where(and(eq(exercises.id, exerciseId), notDeleted(exercises)))
         .returning({ id: exercises.id });
       if (changed.length === 0) throw new Error('No such Exercise in the library');
     },
 
     async getExercise(id: string): Promise<Exercise | undefined> {
-      const [exercise] = await db.select(exerciseColumns).from(exercises).where(eq(exercises.id, id));
+      const [exercise] = await db
+        .select(exerciseColumns)
+        .from(exercises)
+        .where(eq(exercises.id, id));
       return exercise;
     },
 
@@ -1532,35 +1455,32 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const logged = tx
           .select({ id: sets.id })
           .from(sets)
-          .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+          .where(and(eq(sets.exerciseEntryId, exerciseEntryId), notDeleted(sets)))
           .get();
         if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
         const swapped = tx
           .update(exerciseEntries)
           // It's no longer the Template's Exercise.
           .set({ exerciseId, templateExerciseId: null })
-          .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
+          .where(and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries)))
           .returning({ id: exerciseEntries.id })
           .all();
         if (swapped.length === 0) throw new Error('No such Exercise in a Workout');
         // They were planned from the Target of the Exercise swapped out.
-        softDeletePlannedSets(tx, eq(plannedSets.exerciseEntryId, exerciseEntryId), now());
+        softDelete(tx, plannedSets, eq(plannedSets.exerciseEntryId, exerciseEntryId), now());
       });
     },
 
     // Soft-deletes the entry and its Sets together.
     async removeExerciseFromWorkout(exerciseEntryId: string): Promise<void> {
-      const deletedAt = now();
       db.transaction(tx => {
-        const removed = tx
-          .update(exerciseEntries)
-          .set({ deletedAt })
-          .where(and(eq(exerciseEntries.id, exerciseEntryId), isNull(exerciseEntries.deletedAt)))
-          .returning({ id: exerciseEntries.id })
-          .all();
+        const removed = softDelete(
+          tx,
+          exerciseEntries,
+          eq(exerciseEntries.id, exerciseEntryId),
+          now(),
+        );
         if (removed.length === 0) throw new Error('No such Exercise in a Workout');
-        softDeleteSets(tx, eq(sets.exerciseEntryId, exerciseEntryId), deletedAt);
-        softDeletePlannedSets(tx, eq(plannedSets.exerciseEntryId, exerciseEntryId), deletedAt);
         requireFinishedWorkoutKeepsASet(tx, exerciseEntryId);
       });
     },
@@ -1570,9 +1490,10 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const [workout] = await db
         .select({ id: workouts.id })
         .from(workouts)
-        .where(and(eq(workouts.id, workoutId), isNull(workouts.deletedAt)));
+        .where(and(eq(workouts.id, workoutId), notDeleted(workouts)));
       if (!workout) throw new Error('No such Workout');
-      const position = nextPosition(
+      const position = positionAfterLast(
+        db,
         exerciseEntries,
         exerciseEntries.position,
         eq(exerciseEntries.workoutId, workoutId),
@@ -1608,7 +1529,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           isWarmUp: sets.isWarmUp,
         })
         .from(sets)
-        .where(and(eq(sets.exerciseEntryId, exerciseEntryId), isNull(sets.deletedAt)))
+        .where(and(eq(sets.exerciseEntryId, exerciseEntryId), notDeleted(sets)))
         .orderBy(desc(sets.position))
         .limit(1);
       if (!last) throw new Error('No Set to copy yet');
@@ -1634,12 +1555,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const loggedAt = now();
       // Taken off the plan and logged together, so a double tap logs it once.
       db.transaction(tx => {
-        const taken = tx
-          .update(plannedSets)
-          .set({ deletedAt: loggedAt })
-          .where(and(eq(plannedSets.id, plannedSetId), isNull(plannedSets.deletedAt)))
-          .returning({ id: plannedSets.id })
-          .all();
+        const taken = softDelete(tx, plannedSets, eq(plannedSets.id, plannedSetId), loggedAt);
         if (taken.length === 0) throw new Error('No such planned Set');
         insertSetRow(tx, planned.exerciseEntryId, set, planned.weightUnit, loggedAt);
       });
@@ -1652,7 +1568,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const [deleted] = tx
           .update(sets)
           .set({ deletedAt: now() })
-          .where(and(eq(sets.id, setId), isNull(sets.deletedAt)))
+          .where(and(eq(sets.id, setId), notDeleted(sets)))
           .returning({ exerciseEntryId: sets.exerciseEntryId })
           .all();
         if (!deleted) throw new Error('No such Set');
@@ -1699,10 +1615,15 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
           .where(and(eq(workouts.id, id), inProgress()))
           .get();
         if (!workout) throw new Error('That Workout is not in progress');
-        if (!hasLoggedSet(tx, id)) throw new Error('A Workout needs at least one Set to be finished');
+        if (!hasLoggedSet(tx, id))
+          throw new Error('A Workout needs at least one Set to be finished');
         // Only what was done is recorded.
-        const entryIds = entryIdsOf(tx, id);
-        softDeletePlannedSets(tx, inArray(plannedSets.exerciseEntryId, entryIds), finishedAt);
+        softDelete(
+          tx,
+          plannedSets,
+          inArray(plannedSets.exerciseEntryId, entryIdsOf(tx, id)),
+          finishedAt,
+        );
         // Recorded, so later sessions under the Template find which Template
         // exercise each entry was done for.
         pairing?.pairs.forEach((templateExercise, entryId) => {
@@ -1745,11 +1666,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .from(exerciseEntries)
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
         .where(
-          and(
-            eq(exerciseEntries.id, exerciseEntryId),
-            isNull(exerciseEntries.deletedAt),
-            inProgress(),
-          ),
+          and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries), inProgress()),
         );
       const workout = entry && (await getWorkout(entry.workoutId));
       const pairing = workout && (await templatePairingOf(workout));
@@ -1827,7 +1744,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const renamed = await db
         .update(templates)
         .set({ name: requireTemplateName(name) })
-        .where(templateStillThere(id))
+        .where(stillThere(templates, id))
         .returning({ id: templates.id });
       if (renamed.length === 0) throw new Error('No such Template');
     },
@@ -1835,23 +1752,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // Soft-deletes the Template with its Exercises, together, and takes it out
     // of every Rotation.
     async deleteTemplate(id: string): Promise<void> {
-      const deletedAt = now();
       db.transaction(tx => {
-        const deleted = tx
-          .update(templates)
-          .set({ deletedAt })
-          .where(templateStillThere(id))
-          .returning({ id: templates.id })
-          .all();
+        const deleted = softDelete(tx, templates, eq(templates.id, id), now());
         if (deleted.length === 0) throw new Error('No such Template');
-        tx.update(templateExercises)
-          .set({ deletedAt })
-          .where(and(eq(templateExercises.templateId, id), isNull(templateExercises.deletedAt)))
-          .run();
-        tx.update(rotationEntries)
-          .set({ deletedAt })
-          .where(and(eq(rotationEntries.templateId, id), isNull(rotationEntries.deletedAt)))
-          .run();
       });
     },
 
@@ -1864,16 +1767,17 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const [template] = await db
         .select({ id: templates.id })
         .from(templates)
-        .where(templateStillThere(templateId));
+        .where(stillThere(templates, templateId));
       if (!template) throw new Error('No such Template');
       // Hidden Exercises already in a Template stay; new ones come from the library.
       const [exercise] = await db
         .select({ trackingType: exercises.trackingType })
         .from(exercises)
-        .where(and(eq(exercises.id, exerciseId), isNull(exercises.deletedAt)));
+        .where(and(eq(exercises.id, exerciseId), notDeleted(exercises)));
       if (!exercise) throw new Error('No such Exercise in the library');
       requireValidTarget(exercise.trackingType, target);
-      const position = nextPosition(
+      const position = positionAfterLast(
+        db,
         templateExercises,
         templateExercises.position,
         eq(templateExercises.templateId, templateId),
@@ -1887,13 +1791,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .select({ trackingType: exercises.trackingType })
         .from(templateExercises)
         .innerJoin(exercises, eq(templateExercises.exerciseId, exercises.id))
-        .where(templateExerciseStillIn(templateExerciseId));
+        .where(stillThere(templateExercises, templateExerciseId));
       if (!row) throw new Error('No such Exercise in a Template');
       requireValidTarget(row.trackingType, target);
       const changed = await db
         .update(templateExercises)
         .set(targetColumns(target))
-        .where(templateExerciseStillIn(templateExerciseId))
+        .where(stillThere(templateExercises, templateExerciseId))
         .returning({ id: templateExercises.id });
       // Removed while its Exercise was being looked up.
       if (changed.length === 0) throw new Error('No such Exercise in a Template');
@@ -1901,11 +1805,12 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Soft delete: the others keep their positions, so their order holds.
     async removeExerciseFromTemplate(templateExerciseId: string): Promise<void> {
-      const removed = await db
-        .update(templateExercises)
-        .set({ deletedAt: now() })
-        .where(templateExerciseStillIn(templateExerciseId))
-        .returning({ id: templateExercises.id });
+      const removed = softDelete(
+        db,
+        templateExercises,
+        eq(templateExercises.id, templateExerciseId),
+        now(),
+      );
       if (removed.length === 0) throw new Error('No such Exercise in a Template');
     },
 
@@ -1913,29 +1818,15 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // from 0, and shifts the ones in between along by one.
     async moveTemplateExercise(templateExerciseId: string, toIndex: number): Promise<void> {
       db.transaction(tx => {
-        const moving = tx
-          .select({ templateId: templateExercises.templateId })
-          .from(templateExercises)
-          .where(templateExerciseStillIn(templateExerciseId))
-          .get();
-        if (!moving) throw new Error('No such Exercise in a Template');
-        const order = tx
-          .select({ id: templateExercises.id })
-          .from(templateExercises)
-          .where(
-            and(
-              eq(templateExercises.templateId, moving.templateId),
-              isNull(templateExercises.deletedAt),
-            ),
-          )
-          .orderBy(asc(templateExercises.position))
-          .all()
-          .map(row => row.id);
-        const moved = movedTo(order, templateExerciseId, toIndex);
-        if (!moved) throw new Error('No such place in the Template');
-        moved.forEach((id, position) => {
-          tx.update(templateExercises).set({ position }).where(eq(templateExercises.id, id)).run();
-        });
+        const result = moveInList(
+          tx,
+          templateExercises,
+          templateExercises.templateId,
+          templateExerciseId,
+          toIndex,
+        );
+        if (result === 'no such row') throw new Error('No such Exercise in a Template');
+        if (result === 'no such place') throw new Error('No such place in the Template');
       });
     },
 
@@ -1960,28 +1851,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const template = tx
           .select({ id: templates.id })
           .from(templates)
-          .where(templateStillThere(templateId))
+          .where(stillThere(templates, templateId))
           .get();
         if (!template) throw new Error('That Workout has no Template to update');
         const kept = update.exercises.flatMap(exercise =>
           'templateExerciseId' in exercise ? [exercise.templateExerciseId] : [],
         );
-        tx.update(templateExercises)
-          .set({ deletedAt })
-          .where(
-            and(
-              eq(templateExercises.templateId, templateId),
-              isNull(templateExercises.deletedAt),
-              notInArray(templateExercises.id, kept),
-            ),
-          )
-          .run();
+        softDelete(
+          tx,
+          templateExercises,
+          and(eq(templateExercises.templateId, templateId), notInArray(templateExercises.id, kept)),
+          deletedAt,
+        );
         update.exercises.forEach((exercise, position) => {
           if ('templateExerciseId' in exercise) {
             tx.update(templateExercises)
               .set({ position })
               // Not one removed from the Template since.
-              .where(templateExerciseStillIn(exercise.templateExerciseId))
+              .where(stillThere(templateExercises, exercise.templateExerciseId))
               .run();
           } else {
             const { entryId, ...newExercise } = exercise;
@@ -2010,7 +1897,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const raised = await db
         .update(templateExercises)
         .set({ targetWeight: offer.weight, targetWeightUnit: offer.weightUnit })
-        .where(templateExerciseStillIn(templateExerciseId))
+        .where(stillThere(templateExercises, templateExerciseId))
         .returning({ id: templateExercises.id });
       if (raised.length === 0) throw new Error('No such Exercise in a Template');
     },
@@ -2056,13 +1943,13 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const rotation = tx
           .select({ id: rotations.id })
           .from(rotations)
-          .where(rotationStillThere(rotationId))
+          .where(stillThere(rotations, rotationId))
           .get();
         if (!rotation) throw new Error('No such Rotation');
         const template = tx
           .select({ name: templates.name })
           .from(templates)
-          .where(templateStillThere(templateId))
+          .where(stillThere(templates, templateId))
           .get();
         if (!template) throw new Error('No such Template');
         const already = tx
@@ -2072,16 +1959,16 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
             and(
               eq(rotationEntries.rotationId, rotationId),
               eq(rotationEntries.templateId, templateId),
-              isNull(rotationEntries.deletedAt),
+              notDeleted(rotationEntries),
             ),
           )
           .get();
         if (already) throw new Error(`${template.name} is already in that Rotation`);
-        const position = nextPosition(
+        const position = positionAfterLast(
+          tx,
           rotationEntries,
           rotationEntries.position,
           eq(rotationEntries.rotationId, rotationId),
-          tx,
         );
         return tx
           .insert(rotationEntries)
@@ -2095,18 +1982,19 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const renamed = await db
         .update(rotations)
         .set({ name: requireRotationName(name) })
-        .where(rotationStillThere(id))
+        .where(stillThere(rotations, id))
         .returning({ id: rotations.id });
       if (renamed.length === 0) throw new Error('No such Rotation');
     },
 
     // Soft delete: the others keep their positions, so their order holds.
     async removeTemplateFromRotation(rotationEntryId: string): Promise<void> {
-      const removed = await db
-        .update(rotationEntries)
-        .set({ deletedAt: now() })
-        .where(rotationEntryStillIn(rotationEntryId))
-        .returning({ id: rotationEntries.id });
+      const removed = softDelete(
+        db,
+        rotationEntries,
+        eq(rotationEntries.id, rotationEntryId),
+        now(),
+      );
       if (removed.length === 0) throw new Error('No such Template in a Rotation');
     },
 
@@ -2114,48 +2002,24 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     // from 0, and shifts the ones in between along by one.
     async moveTemplateInRotation(rotationEntryId: string, toIndex: number): Promise<void> {
       db.transaction(tx => {
-        const moving = tx
-          .select({ rotationId: rotationEntries.rotationId })
-          .from(rotationEntries)
-          .where(rotationEntryStillIn(rotationEntryId))
-          .get();
-        if (!moving) throw new Error('No such Template in a Rotation');
-        const order = tx
-          .select({ id: rotationEntries.id })
-          .from(rotationEntries)
-          .where(
-            and(
-              eq(rotationEntries.rotationId, moving.rotationId),
-              isNull(rotationEntries.deletedAt),
-            ),
-          )
-          .orderBy(asc(rotationEntries.position))
-          .all()
-          .map(row => row.id);
-        const moved = movedTo(order, rotationEntryId, toIndex);
-        if (!moved) throw new Error('No such place in the Rotation');
-        moved.forEach((id, position) => {
-          tx.update(rotationEntries).set({ position }).where(eq(rotationEntries.id, id)).run();
-        });
+        const result = moveInList(
+          tx,
+          rotationEntries,
+          rotationEntries.rotationId,
+          rotationEntryId,
+          toIndex,
+        );
+        if (result === 'no such row') throw new Error('No such Template in a Rotation');
+        if (result === 'no such place') throw new Error('No such place in the Rotation');
       });
     },
 
     // Soft-deletes the Rotation with its entries, together. Workouts that
     // counted toward it keep saying so.
     async deleteRotation(id: string): Promise<void> {
-      const deletedAt = now();
       db.transaction(tx => {
-        const deleted = tx
-          .update(rotations)
-          .set({ deletedAt, isActive: false })
-          .where(rotationStillThere(id))
-          .returning({ id: rotations.id })
-          .all();
+        const deleted = softDelete(tx, rotations, eq(rotations.id, id), now(), { isActive: false });
         if (deleted.length === 0) throw new Error('No such Rotation');
-        tx.update(rotationEntries)
-          .set({ deletedAt })
-          .where(and(eq(rotationEntries.rotationId, id), isNull(rotationEntries.deletedAt)))
-          .run();
       });
     },
 
@@ -2169,7 +2033,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const activated = tx
           .update(rotations)
           .set({ isActive: true })
-          .where(rotationStillThere(id))
+          .where(stillThere(rotations, id))
           .returning({ id: rotations.id })
           .all();
         if (activated.length === 0) throw new Error('No such Rotation');
@@ -2258,7 +2122,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const renamed = await db
         .update(meals)
         .set({ name: requireMealName(name) })
-        .where(mealStillThere(id))
+        .where(stillThere(meals, id))
         .returning({ id: meals.id });
       if (renamed.length === 0) throw new Error('No such Meal');
     },
@@ -2270,7 +2134,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         const meal = tx
           .select({ localDate: meals.localDate })
           .from(meals)
-          .where(mealStillThere(id))
+          .where(stillThere(meals, id))
           .get();
         if (!meal) throw new Error('No such Meal');
         tx.update(meals)
@@ -2287,7 +2151,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
     async copyMeal(id: string): Promise<{ id: string }> {
       const eatenAt = now();
       return db.transaction(tx => {
-        const meal = tx.select({ name: meals.name }).from(meals).where(mealStillThere(id)).get();
+        const meal = tx.select({ name: meals.name }).from(meals).where(stillThere(meals, id)).get();
         if (!meal) throw new Error('No such Meal');
         const items = tx
           .select({
@@ -2301,7 +2165,7 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
             savedFoodId: foodItems.savedFoodId,
           })
           .from(foodItems)
-          .where(and(eq(foodItems.mealId, id), isNull(foodItems.deletedAt)))
+          .where(and(eq(foodItems.mealId, id), notDeleted(foodItems)))
           .orderBy(asc(foodItems.position))
           .all();
         const copy = tx
@@ -2318,19 +2182,9 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
 
     // Soft-deletes the Meal with its Food items, together.
     async deleteMeal(id: string): Promise<void> {
-      const deletedAt = now();
       db.transaction(tx => {
-        const deleted = tx
-          .update(meals)
-          .set({ deletedAt })
-          .where(mealStillThere(id))
-          .returning({ id: meals.id })
-          .all();
+        const deleted = softDelete(tx, meals, eq(meals.id, id), now());
         if (deleted.length === 0) throw new Error('No such Meal');
-        tx.update(foodItems)
-          .set({ deletedAt })
-          .where(and(eq(foodItems.mealId, id), isNull(foodItems.deletedAt)))
-          .run();
       });
     },
 
@@ -2364,18 +2218,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const changed = await db
         .update(foodItems)
         .set(requireValidFoodItem(values))
-        .where(foodItemStillThere(foodItemId))
+        .where(stillThere(foodItems, foodItemId))
         .returning({ id: foodItems.id });
       if (changed.length === 0) throw new Error('No such Food item');
     },
 
     // Soft delete: the others keep their positions, so their order holds.
     async deleteFoodItem(foodItemId: string): Promise<void> {
-      const deleted = await db
-        .update(foodItems)
-        .set({ deletedAt: now() })
-        .where(foodItemStillThere(foodItemId))
-        .returning({ id: foodItems.id });
+      const deleted = softDelete(db, foodItems, eq(foodItems.id, foodItemId), now());
       if (deleted.length === 0) throw new Error('No such Food item');
     },
 
@@ -2415,18 +2265,14 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
       const changed = await db
         .update(savedFoods)
         .set(requireValidSavedFood(values))
-        .where(savedFoodStillThere(id))
+        .where(stillThere(savedFoods, id))
         .returning({ id: savedFoods.id });
       if (changed.length === 0) throw new Error('No such Saved food');
     },
 
     // Soft delete. Food items added from it keep their copies.
     async deleteSavedFood(id: string): Promise<void> {
-      const deleted = await db
-        .update(savedFoods)
-        .set({ deletedAt: now() })
-        .where(savedFoodStillThere(id))
-        .returning({ id: savedFoods.id });
+      const deleted = softDelete(db, savedFoods, eq(savedFoods.id, id), now());
       if (deleted.length === 0) throw new Error('No such Saved food');
     },
 
@@ -2448,11 +2294,8 @@ export function createTracker(db: TrackerDatabase, { now = () => new Date() }: T
         .select(savedFoodColumns)
         .from(savedFoods)
         // Deleting a Meal deletes its Food items too.
-        .leftJoin(
-          foodItems,
-          and(eq(foodItems.savedFoodId, savedFoods.id), isNull(foodItems.deletedAt)),
-        )
-        .where(isNull(savedFoods.deletedAt))
+        .leftJoin(foodItems, and(eq(foodItems.savedFoodId, savedFoods.id), notDeleted(foodItems)))
+        .where(notDeleted(savedFoods))
         .groupBy(savedFoods.id)
         .orderBy(desc(lastUse), sql`${savedFoods.name} COLLATE NOCASE`);
       return found.map(withCaloriesWorkedOut);
