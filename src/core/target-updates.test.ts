@@ -2,6 +2,7 @@ import { createTestDatabase } from './test-database';
 import {
   createTemplateWith,
   entriesOf,
+  entryToLog,
   findExerciseByName,
   startWorkoutWith,
   targetsOf,
@@ -327,7 +328,7 @@ describe('The "ready to go heavier" hint', () => {
   async function hintOnStarting(tracker: Tracker, templateId: string) {
     const workout = await tracker.startWorkout({ templateId });
     const [entry] = await entriesOf(tracker, workout.id);
-    return tracker.isReadyToGoHeavier(entry.id);
+    return entry.readyToGoHeavier;
   }
 
   it('shows when last session hit the top of the rep range on every Set at the Target weight', async () => {
@@ -444,7 +445,7 @@ describe('The "ready to go heavier" hint', () => {
     const next = await tracker.startWorkout({ templateId: template.id });
     const [, dipAgain] = await entriesOf(tracker, next.id);
 
-    expect(await tracker.isReadyToGoHeavier(dipAgain.id)).toBe(true);
+    expect(dipAgain.readyToGoHeavier).toBe(true);
   });
 
   it('shows for an Exercise removed and added again in the Workout in progress', async () => {
@@ -457,7 +458,7 @@ describe('The "ready to go heavier" hint', () => {
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     const again = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
 
-    expect(await tracker.isReadyToGoHeavier(again.id)).toBe(true);
+    expect((await entryToLog(tracker, workout.id, again.id)).readyToGoHeavier).toBe(true);
   });
 
   it('goes by the Exercise, even after it was taken out of the Template and put back', async () => {
@@ -520,16 +521,16 @@ describe('The "ready to go heavier" hint', () => {
     // A second Bench Press, beyond the one in the Template.
     const extra = await tracker.addExerciseToWorkout(second.id, benchPress.id);
 
-    expect(await tracker.isReadyToGoHeavier(finishedEntry.id)).toBe(false);
-    expect(await tracker.isReadyToGoHeavier(extra.id)).toBe(false);
+    expect(finishedEntry.readyToGoHeavier).toBe(false);
+    expect((await entryToLog(tracker, second.id, extra.id)).readyToGoHeavier).toBe(false);
   });
 
   it("doesn't show in a Workout started empty", async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    expect(await tracker.isReadyToGoHeavier(entry.id)).toBe(false);
+    expect((await entryToLog(tracker, workout.id, entry.id)).readyToGoHeavier).toBe(false);
   });
 });

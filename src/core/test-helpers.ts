@@ -37,6 +37,14 @@ export async function entriesOf(tracker: Tracker, workoutId: string) {
   return (await tracker.getWorkout(workoutId))?.entries ?? [];
 }
 
+// An Exercise in a Workout as its reads hand it back, with Last time and the
+// "ready to go heavier" hint.
+export async function entryToLog(tracker: Tracker, workoutId: string, entryId: string) {
+  const entry = (await entriesOf(tracker, workoutId)).find(({ id }) => id === entryId);
+  if (!entry) throw new Error('No such Exercise in the Workout');
+  return entry;
+}
+
 // The Sets of a Workout's first Exercise.
 export async function setsOf(tracker: Tracker, workoutId: string) {
   const [entry] = await entriesOf(tracker, workoutId);

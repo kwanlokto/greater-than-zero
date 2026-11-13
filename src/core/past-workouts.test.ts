@@ -2,6 +2,7 @@ import { createTestDatabase } from './test-database';
 import {
   clockAt,
   doWorkout,
+  entryToLog,
   findExerciseByName,
   names,
   setsOf,
@@ -117,9 +118,10 @@ describe('Deleting a finished Workout', () => {
 
     await tracker.deleteWorkout(mistake.id);
     clock.setTime('2026-09-14T18:00:00-04:00');
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    expect(weightsAndReps((await tracker.getLastTime(entry.id))?.sets ?? [])).toEqual([[60, 8]]);
+    const { lastTime } = await entryToLog(tracker, workout.id, entry.id);
+    expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[60, 8]]);
   });
 
   it('takes its Exercises and Sets with it', async () => {
@@ -197,8 +199,8 @@ describe('A Workout added to a past date', () => {
     await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
 
     clock.setTime('2026-09-14T20:00:00-04:00');
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
-    const lastTime = await tracker.getLastTime(entry.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
+    const { lastTime } = await entryToLog(tracker, workout.id, entry.id);
 
     expect(lastTime?.localDate).toBe('2026-09-08');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[60, 8]]);
@@ -214,8 +216,8 @@ describe('A Workout added to a past date', () => {
     await tracker.finishWorkout(added.workout.id);
 
     clock.setTime('2026-09-15T18:00:00-04:00');
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
-    const lastTime = await tracker.getLastTime(entry.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
+    const { lastTime } = await entryToLog(tracker, workout.id, entry.id);
 
     expect(lastTime?.localDate).toBe('2026-09-12');
     expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[65, 5]]);
@@ -229,9 +231,10 @@ describe('A Workout added to a past date', () => {
     await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
 
     clock.setTime('2026-09-14T20:00:00-04:00');
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
 
-    expect((await tracker.getLastTime(entry.id))?.localDate).toBe('2026-09-08');
+    const { lastTime } = await entryToLog(tracker, workout.id, entry.id);
+    expect(lastTime?.localDate).toBe('2026-09-08');
   });
 
   it("comes before its date's live sessions, however recently it was added", async () => {
@@ -244,9 +247,10 @@ describe('A Workout added to a past date', () => {
     await tracker.finishWorkout(added.workout.id);
 
     clock.setTime('2026-09-15T18:00:00-04:00');
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    expect(weightsAndReps((await tracker.getLastTime(entry.id))?.sets ?? [])).toEqual([[65, 5]]);
+    const { lastTime } = await entryToLog(tracker, workout.id, entry.id);
+    expect(weightsAndReps(lastTime?.sets ?? [])).toEqual([[65, 5]]);
     expect((await tracker.getDay('2026-09-10')).workouts.map(workout => workout.id)).toEqual([
       added.workout.id,
       live.id,

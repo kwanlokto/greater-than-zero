@@ -21,7 +21,7 @@ import { Toggle } from '@/components/toggle';
 import {
   canSwapExercise,
   describeSet,
-  type ExerciseEntry,
+  type EntryToLog,
   type PlannedSet,
   type TrackingType,
   type WeightUnit,
@@ -31,10 +31,9 @@ import { tracker } from '@/database';
 import { formatLocalDate } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
 import { minTouch, radius, space, useAppTheme } from '@/theme';
-import { useTrackerQuery } from '@/use-tracker-query';
 
 type Props = {
-  entry: ExerciseEntry;
+  entry: EntryToLog;
   displayUnit: WeightUnit;
 };
 
@@ -346,10 +345,9 @@ function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
 
 // The Exercise's working Sets from the finished Workout before this one, to
 // beat. Nothing when it wasn't done before.
-function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
+function LastTimeLine({ entry }: { entry: EntryToLog }) {
   const { colors } = useAppTheme();
-  const { id, exercise } = entry;
-  const lastTime = useTrackerQuery(() => tracker.getLastTime(id), [id]);
+  const { lastTime, exercise } = entry;
   if (!lastTime) return null;
 
   const describe = (set: WorkoutSet) => describeSet(exercise.trackingType, set);
@@ -370,11 +368,9 @@ function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
 
 // Shown when the Exercise hit the top of its Target's rep range on every Set
 // last session under this Workout's Template.
-function ReadyToGoHeavierLine({ entry }: { entry: ExerciseEntry }) {
+function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
   const { colors } = useAppTheme();
-  const { id } = entry;
-  const ready = useTrackerQuery(() => tracker.isReadyToGoHeavier(id), [id]);
-  if (!ready) return null;
+  if (!entry.readyToGoHeavier) return null;
 
   return (
     <View style={[styles.ready, { backgroundColor: colors.primarySoft }]}>
@@ -388,7 +384,7 @@ function ReadyToGoHeavierLine({ entry }: { entry: ExerciseEntry }) {
 
 // Saved shortly after the lifter stops typing, and when the card goes away, so
 // a note isn't lost if they finish the Workout straight after writing it.
-function EntryNotes({ entry }: { entry: ExerciseEntry }) {
+function EntryNotes({ entry }: { entry: EntryToLog }) {
   const [notes, setNotes] = useState(entry.notes);
   const latest = useRef(entry.notes);
   const saved = useRef(entry.notes);

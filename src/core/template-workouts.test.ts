@@ -349,6 +349,6 @@ describe('Finishing a Workout started from a Template', () => {
 
     const [next] = await entriesOf(tracker, second.id);
     expect(next.plannedSets.map(set => set.reps)).toEqual([12, 8, 8]);
-    expect((await tracker.getLastTime(next.id))?.sets.map(set => set.reps)).toEqual([12]);
+    expect(next.lastTime?.sets.map(set => set.reps)).toEqual([12]);
   });
 });

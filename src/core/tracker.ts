@@ -251,6 +251,24 @@ export type NewWorkout = {
   templateId?: string;
 };
 
+// An Exercise entry with what the lifter sees beside it while logging.
+export type EntryToLog = ExerciseEntry & {
+  // The Exercise's working Sets from the most recent finished Workout before
+  // this one with one in it, to beat; null when there's none. So a past or
+  // backfilled Workout sees the session before it, and one where the Exercise
+  // was only warmed up doesn't hide the one before that.
+  lastTime: LastTime | null;
+  // "Ready to go heavier": in a Workout in progress started from a Template,
+  // the Exercise's most recent session under that Template had at least the
+  // Target's number of working Sets, all at the Target weight or heavier and
+  // all with reps at or above the rep-range maximum. Compared with the Target
+  // as it is now; worked out when asked, never stored. False otherwise.
+  readyToGoHeavier: boolean;
+};
+
+// A Workout with each entry as it's logged: what the Workout screens show.
+export type WorkoutToLog = Omit<Workout, 'entries'> & { entries: EntryToLog[] };
+
 // What was recorded on one of the phone's local calendar dates.
 export type Day = {
   // As YYYY-MM-DD.
@@ -1163,9 +1181,47 @@ export function createTracker(
     return weighIn ?? null;
   }
 
-  async function getWorkout(id: string): Promise<Workout | undefined> {
+  async function findWorkout(id: string): Promise<Workout | undefined> {
     const [workout] = await findWorkouts(eq(workouts.id, id));
     return workout;
+  }
+
+  // Each entry with its Last time and hint, worked out together: the Template
+  // pairing once for the Workout, not once per entry.
+  async function toLog(workout: Workout): Promise<WorkoutToLog> {
+    // The hint is only for a Workout in progress.
+    const pairing = workout.finishedAt === null ? await history.pairing(workout) : null;
+    const entries: EntryToLog[] = [];
+    for (const entry of workout.entries) {
+      const templateExercise = pairing?.pairs.get(entry.id);
+      entries.push({
+        ...entry,
+        lastTime: await history.lastTime(entry.exercise.id, workout),
+        readyToGoHeavier:
+          pairing !== null && templateExercise !== undefined
+            ? await readyToGoHeavier(pairing.template, templateExercise, workout)
+            : false,
+      });
+    }
+    return { ...workout, entries };
+  }
+
+  // See EntryToLog.readyToGoHeavier.
+  async function readyToGoHeavier(
+    template: Template,
+    templateExercise: TemplateExercise,
+    workout: Workout,
+  ): Promise<boolean> {
+    const workingSets = await history.latestSessionFor(template, templateExercise, workout);
+    const { target } = templateExercise;
+    return (
+      workingSets !== undefined &&
+      setsMeetTarget(
+        workingSets,
+        target,
+        set => isAtLeast(set, target) && set.reps >= target.maxReps,
+      )
+    );
   }
 
   return {
@@ -1449,7 +1505,7 @@ export function createTracker(
     async finishWorkout(id: string): Promise<FinishSummary> {
       // Worked out first, so if it fails the Workout is left unfinished, rather
       // than finished with the lifter told it wasn't.
-      const workout = await getWorkout(id);
+      const workout = await findWorkout(id);
       const pairing = workout && (await history.pairing(workout));
       const update = pairing && (await templateUpdateFor(workout, pairing));
       const targetUpdateOffers = pairing ? await targetUpdateOffersFor(workout, pairing) : [];
@@ -1500,61 +1556,10 @@ export function createTracker(
       };
     },
 
-    getWorkout,
-
-    // "Ready to go heavier", for an Exercise in a Workout in progress started
-    // from a Template: its most recent session under that Template had at
-    // least the Target's number of working Sets, all at the Target weight or
-    // heavier, and all with reps at or above the rep-range maximum. Compared
-    // with the Target as it is now. Worked out when asked, never stored.
-    async isReadyToGoHeavier(exerciseEntryId: string): Promise<boolean> {
-      const [entry] = await db
-        .select({ workoutId: exerciseEntries.workoutId })
-        .from(exerciseEntries)
-        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(
-          and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries), inProgress()),
-        );
-      const workout = entry && (await getWorkout(entry.workoutId));
-      const pairing = workout && (await history.pairing(workout));
-      const templateExercise = pairing?.pairs.get(exerciseEntryId);
-      if (!workout || !pairing || !templateExercise) return false;
-      const workingSets = await history.latestSessionFor(
-        pairing.template,
-        templateExercise,
-        workout,
-      );
-      const { target } = templateExercise;
-      return (
-        workingSets !== undefined &&
-        setsMeetTarget(
-          workingSets,
-          target,
-          set => isAtLeast(set, target) && set.reps >= target.maxReps,
-        )
-      );
-    },
-
-    // "Last time" for an Exercise in a Workout: from the most recent finished
-    // Workout before that one, so a past or backfilled Workout sees the session
-    // before it. From one with a working Set of the Exercise, so a session
-    // where it was only warmed up doesn't hide the one before.
-    async getLastTime(exerciseEntryId: string): Promise<LastTime | null> {
-      const [entry] = await db
-        .select({
-          exerciseId: exerciseEntries.exerciseId,
-          workout: {
-            id: workouts.id,
-            localDate: workouts.localDate,
-            startedAt: workouts.startedAt,
-            isBackfilled: workouts.isBackfilled,
-          },
-        })
-        .from(exerciseEntries)
-        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(eq(exerciseEntries.id, exerciseEntryId));
-      if (!entry) return null;
-      return history.lastTime(entry.exerciseId, entry.workout);
+    // A Workout with each entry as it's logged (see WorkoutToLog).
+    async getWorkout(id: string): Promise<WorkoutToLog | undefined> {
+      const workout = await findWorkout(id);
+      return workout && toLog(workout);
     },
 
     async createTemplate(name: string): Promise<{ id: string }> {
@@ -2216,10 +2221,12 @@ export function createTracker(
     },
 
     // Null when no Workout is in progress.
-    async getWorkoutInProgress(): Promise<Workout | null> {
+    // The Workout in progress with each entry as it's logged; null when
+    // there's none.
+    async getWorkoutInProgress(): Promise<WorkoutToLog | null> {
       const id = idOfWorkoutInProgress();
-      if (id === undefined) return null;
-      return (await getWorkout(id)) ?? null;
+      const workout = id === undefined ? undefined : await findWorkout(id);
+      return workout ? toLog(workout) : null;
     },
   };
 }
