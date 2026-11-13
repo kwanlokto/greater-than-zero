@@ -5,17 +5,14 @@ import {
   eq,
   inArray,
   isNotNull,
-  isNull,
   like,
   lt,
-  lte,
-  ne,
   notInArray,
   or,
   sql,
   type SQL,
 } from 'drizzle-orm';
-import type { BaseSQLiteDatabase, SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import {
   backupFormatVersion,
@@ -56,6 +53,16 @@ import {
 import { moveInList, notDeleted, positionAfterLast, softDelete, stillThere } from './records';
 import * as schema from './schema';
 import {
+  createSessionHistory,
+  finished,
+  inProgress,
+  setStillLogged,
+  workingSetsOf,
+  workoutOrder,
+  type TemplatePairing,
+  type WorkoutPlace,
+} from './session-history';
+import {
   convertWeight,
   displayedWeight,
   displayWeightOf,
@@ -63,6 +70,7 @@ import {
   isHeavier,
   lightestOf,
   roundedForDisplay,
+  withDisplayWeight,
   type Weight,
 } from './weights';
 import {
@@ -222,13 +230,6 @@ export type Workout = {
   entries: ExerciseEntry[];
 };
 
-// The Template a Workout started from, and which of its Exercises each entry
-// was done for, by entry ID (see pairWithTemplate).
-type TemplatePairing = {
-  template: Template;
-  pairs: Map<string, TemplateExercise>;
-};
-
 // An Exercise for a Template, with a Target taken from what was done.
 type NewTemplateExercise = { exerciseId: string; target: TargetValues };
 
@@ -374,13 +375,6 @@ const exerciseQueryColumns = {
   defaultRestSeconds: true,
 } as const;
 
-function withDisplayWeight(
-  set: Omit<WorkoutSet, 'displayWeight'>,
-  displayUnit: WeightUnit,
-): WorkoutSet {
-  return { ...set, displayWeight: displayWeightOf(set.weight, set.weightUnit, displayUnit) };
-}
-
 // YYYY-MM-DD in the phone's time zone, so a late-night session counts toward
 // the day it happened. Screens use it for today's date.
 export function localDateOf(time: Date): string {
@@ -472,31 +466,6 @@ export function restSecondsLeft(restEndsAt: Date | null, now: Date): number {
   return Math.max(0, (restEndsAt.getTime() - now.getTime()) / 1000);
 }
 
-// A Workout that's neither finished nor discarded. Starting, finishing and
-// discarding all go by this, so a discarded Workout can never be finished.
-function inProgress() {
-  return and(isNull(workouts.finishedAt), notDeleted(workouts));
-}
-
-// A Workout that's been finished and not deleted since: one that's recorded.
-function finished() {
-  return and(isNotNull(workouts.finishedAt), notDeleted(workouts));
-}
-
-// Workouts go in order by date. Within a date the backfilled ones come first,
-// in the order they were added, since when they happened isn't known; then
-// the rest by start time. latestWorkoutFirst and cameBefore follow it too.
-const workoutOrder = [
-  asc(workouts.localDate),
-  desc(workouts.isBackfilled),
-  asc(workouts.startedAt),
-];
-const latestWorkoutFirst = [
-  desc(workouts.localDate),
-  asc(workouts.isBackfilled),
-  desc(workouts.startedAt),
-];
-
 // Meals go in order by date, then by when they were eaten; latestMealFirst is
 // the other way round. Meals added at the same moment go in the order added.
 const mealOrder = [asc(meals.localDate), asc(meals.eatenAt), asc(meals.createdAt)];
@@ -514,41 +483,10 @@ const savedFoodColumns = {
   fat: savedFoods.fat,
 };
 
-// A Workout's place in that order. One about to start has no ID yet.
-type WorkoutPlace = Pick<Workout, 'localDate' | 'startedAt' | 'isBackfilled'> & { id?: string };
-
-// The other Workouts that come before this one in that order. Those started at
-// the same moment count too, so it doesn't hang on a millisecond.
-function cameBefore(workout: WorkoutPlace) {
-  const startedNoLater = lte(workouts.startedAt, workout.startedAt);
-  const earlierThatDay = workout.isBackfilled
-    ? and(eq(workouts.isBackfilled, true), startedNoLater)
-    : or(eq(workouts.isBackfilled, true), startedNoLater);
-  return or(
-    lt(workouts.localDate, workout.localDate),
-    and(
-      eq(workouts.localDate, workout.localDate),
-      earlierThatDay,
-      workout.id === undefined ? undefined : ne(workouts.id, workout.id),
-    ),
-  );
-}
-
 // A planned Set not yet confirmed or dropped, whose Exercise is still in the
 // Workout. For queries joining planned Sets to their Exercise entries.
 function plannedSetStillThere() {
   return and(notDeleted(plannedSets), notDeleted(exerciseEntries));
-}
-
-// A Set that hasn't been deleted, on its own or with its Exercise. For queries
-// joining Sets to their Exercise entries.
-function setStillLogged() {
-  return and(notDeleted(sets), notDeleted(exerciseEntries));
-}
-
-// The same, for a working Set rather than a warm-up.
-function workingSetStillLogged() {
-  return and(setStillLogged(), eq(sets.isWarmUp, false));
 }
 
 // The Rotation next up comes from.
@@ -593,10 +531,6 @@ function targetOf(row: typeof templateExercises.$inferSelect): TargetValues {
     weight: row.targetWeight,
     weightUnit: row.targetWeightUnit,
   };
-}
-
-function workingSetsOf(loggedSets: WorkoutSet[]): WorkoutSet[] {
-  return loggedSets.filter(set => !set.isWarmUp);
 }
 
 // Whether a session's working Sets were at least the Target's number of sets,
@@ -670,6 +604,11 @@ export function createTracker(
   db: TrackerDatabase,
   { now = () => new Date() }: TrackerOptions = {},
 ) {
+  const history = createSessionHistory(db, {
+    getDisplayUnit,
+    findTemplate: async id => (await findTemplates(eq(templates.id, id)))[0],
+  });
+
   // Built-in Exercises are shared across installs and Backup files, and hidden
   // ones keep the name history shows, so only custom Exercises still in the
   // library may change.
@@ -934,45 +873,6 @@ export function createTracker(
     }));
   }
 
-  // The Exercise's working Sets from the most recent finished Workout, with a
-  // working Set of it, that comes before this one. See getLastTime.
-  async function lastTimeBefore(
-    exerciseId: string,
-    workout: WorkoutPlace,
-  ): Promise<LastTime | null> {
-    const workingSetOfExercise = () =>
-      and(eq(exerciseEntries.exerciseId, exerciseId), workingSetStillLogged());
-
-    const [latest] = await db
-      .select({ workoutId: workouts.id, localDate: workouts.localDate })
-      .from(sets)
-      .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-      .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-      .where(and(workingSetOfExercise(), finished(), cameBefore(workout)))
-      .orderBy(...latestWorkoutFirst)
-      .limit(1);
-    if (!latest) return null;
-
-    const lastSets = await db
-      .select({
-        id: sets.id,
-        weight: sets.weight,
-        weightUnit: sets.weightUnit,
-        reps: sets.reps,
-        isWarmUp: sets.isWarmUp,
-        loggedAt: sets.loggedAt,
-      })
-      .from(sets)
-      .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-      .where(and(workingSetOfExercise(), eq(exerciseEntries.workoutId, latest.workoutId)))
-      .orderBy(asc(exerciseEntries.position), asc(sets.position));
-    const displayUnit = await getDisplayUnit();
-    return {
-      localDate: latest.localDate,
-      sets: lastSets.map(set => withDisplayWeight(set, displayUnit)),
-    };
-  }
-
   // What starting a Template adds, for a Workout about to start: its Exercises
   // in order, each with the target number of Sets at the Target weight. Reps
   // come from the Set in the same position among last session's working Sets,
@@ -987,7 +887,7 @@ export function createTracker(
     const plan = [];
     for (const { id, exercise, target } of template.exercises) {
       if (!lastSets.has(exercise.id)) {
-        const lastTime = await lastTimeBefore(exercise.id, workout);
+        const lastTime = await history.lastTime(exercise.id, workout);
         lastSets.set(exercise.id, lastTime?.sets ?? []);
       }
       const last = lastSets.get(exercise.id) ?? [];
@@ -1022,46 +922,6 @@ export function createTracker(
       .values({ templateId, exerciseId, position, ...targetColumns(target) })
       .returning({ id: templateExercises.id })
       .get();
-  }
-
-  // Pairs each of a Workout's entries with the Exercise in its Template it was
-  // done for. An entry takes the Template exercise it was copied from, if it's
-  // still in the Template. One that lost that link, by being swapped away and
-  // back or removed and added again, then takes the first one left of the same
-  // Exercise, so it keeps its Target. Entries added or swapped in have none.
-  async function pairWithTemplate(
-    workout: Workout,
-    template: Template,
-  ): Promise<Map<string, TemplateExercise>> {
-    const links = await db
-      .select({ id: exerciseEntries.id, templateExerciseId: exerciseEntries.templateExerciseId })
-      .from(exerciseEntries)
-      .where(eq(exerciseEntries.workoutId, workout.id));
-    const linkOf = new Map(links.map(link => [link.id, link.templateExerciseId]));
-    const unpaired = new Map(template.exercises.map(exercise => [exercise.id, exercise]));
-    const pairs = new Map<string, TemplateExercise>();
-    const pair = (entryId: string, templateExercise: TemplateExercise) => {
-      pairs.set(entryId, templateExercise);
-      unpaired.delete(templateExercise.id);
-    };
-    for (const entry of workout.entries) {
-      const linked = unpaired.get(linkOf.get(entry.id) ?? '');
-      if (linked) pair(entry.id, linked);
-    }
-    for (const entry of workout.entries) {
-      if (pairs.has(entry.id)) continue;
-      const same = [...unpaired.values()].find(({ exercise }) => exercise.id === entry.exercise.id);
-      if (same) pair(entry.id, same);
-    }
-    return pairs;
-  }
-
-  // Null for a Workout started empty, or from a Template since deleted.
-  async function templatePairingOf(workout: Workout): Promise<TemplatePairing | null> {
-    if (!workout.templateId) return null;
-    const [template] = await findTemplates(eq(templates.id, workout.templateId));
-    if (!template) return null;
-    return { template, pairs: await pairWithTemplate(workout, template) };
   }
 
   // What the Template's Exercise list would become to match the Workout: its
@@ -1196,22 +1056,9 @@ export function createTracker(
   async function findNextUp(finishingWorkoutId?: string): Promise<Template | null> {
     const [active] = await findRotations(activeRotation());
     if (!active || active.entries.length === 0) return null;
-    const [last] = await db
-      .select({ templateId: workouts.templateId })
-      .from(workouts)
-      .where(
-        and(
-          eq(workouts.rotationId, active.id),
-          or(
-            finished(),
-            finishingWorkoutId === undefined ? undefined : eq(workouts.id, finishingWorkoutId),
-          ),
-        ),
-      )
-      .orderBy(...latestWorkoutFirst)
-      .limit(1);
+    const lastTemplateId = await history.lastTemplateInRotation(active.id, finishingWorkoutId);
     // -1 when it's not there, so the first one.
-    const lastIndex = active.entries.findIndex(({ template }) => template.id === last?.templateId);
+    const lastIndex = active.entries.findIndex(({ template }) => template.id === lastTemplateId);
     const next = active.entries[(lastIndex + 1) % active.entries.length];
     const [template] = await findTemplates(eq(templates.id, next.template.id));
     return template ?? null;
@@ -1603,7 +1450,7 @@ export function createTracker(
       // Worked out first, so if it fails the Workout is left unfinished, rather
       // than finished with the lifter told it wasn't.
       const workout = await getWorkout(id);
-      const pairing = workout && (await templatePairingOf(workout));
+      const pairing = workout && (await history.pairing(workout));
       const update = pairing && (await templateUpdateFor(workout, pairing));
       const targetUpdateOffers = pairing ? await targetUpdateOffersFor(workout, pairing) : [];
       const nextUp = await findNextUp(id);
@@ -1669,44 +1516,22 @@ export function createTracker(
           and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries), inProgress()),
         );
       const workout = entry && (await getWorkout(entry.workoutId));
-      const pairing = workout && (await templatePairingOf(workout));
+      const pairing = workout && (await history.pairing(workout));
       const templateExercise = pairing?.pairs.get(exerciseEntryId);
       if (!workout || !pairing || !templateExercise) return false;
-      const { template } = pairing;
-      const { exercise, target } = templateExercise;
-
-      // Its sessions: the Workouts from the Template with the Exercise in them,
-      // or, when the Template holds it more than once, with this copy of it.
-      const copies = template.exercises.filter(held => held.exercise.id === exercise.id);
-      const doneForIt =
-        copies.length > 1
-          ? eq(exerciseEntries.templateExerciseId, templateExercise.id)
-          : and(eq(workouts.templateId, template.id), eq(exerciseEntries.exerciseId, exercise.id));
-      const setsForIt = () =>
-        db
-          .select({
-            workoutId: workouts.id,
-            weight: sets.weight,
-            weightUnit: sets.weightUnit,
-            reps: sets.reps,
-          })
-          .from(sets)
-          .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-          .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id));
-      // The most recent one with a Set of it logged, warm-ups included: one
-      // where it was only warmed up isn't a session to go heavier from.
-      const [latest] = await setsForIt()
-        .where(and(doneForIt, setStillLogged(), finished(), cameBefore(workout)))
-        .orderBy(...latestWorkoutFirst)
-        .limit(1);
-      if (!latest) return false;
-      const workingSets = await setsForIt().where(
-        and(doneForIt, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
+      const workingSets = await history.latestSessionFor(
+        pairing.template,
+        templateExercise,
+        workout,
       );
-      return setsMeetTarget(
-        workingSets,
-        target,
-        set => isAtLeast(set, target) && set.reps >= target.maxReps,
+      const { target } = templateExercise;
+      return (
+        workingSets !== undefined &&
+        setsMeetTarget(
+          workingSets,
+          target,
+          set => isAtLeast(set, target) && set.reps >= target.maxReps,
+        )
       );
     },
 
@@ -1729,7 +1554,7 @@ export function createTracker(
         .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
         .where(eq(exerciseEntries.id, exerciseEntryId));
       if (!entry) return null;
-      return lastTimeBefore(entry.exerciseId, entry.workout);
+      return history.lastTime(entry.exerciseId, entry.workout);
     },
 
     async createTemplate(name: string): Promise<{ id: string }> {
@@ -1841,7 +1666,7 @@ export function createTracker(
     async updateTemplateFromWorkout(workoutId: string): Promise<void> {
       const [workout] = await findWorkouts(and(eq(workouts.id, workoutId), finished()));
       if (!workout) throw new Error('No such finished Workout');
-      const pairing = await templatePairingOf(workout);
+      const pairing = await history.pairing(workout);
       if (!pairing) throw new Error('That Workout has no Template to update');
       const update = await templateUpdateFor(workout, pairing);
       const { templateId } = update;
@@ -1890,7 +1715,7 @@ export function createTracker(
     async acceptTargetUpdate(workoutId: string, templateExerciseId: string): Promise<void> {
       const [workout] = await findWorkouts(and(eq(workouts.id, workoutId), finished()));
       if (!workout) throw new Error('No such finished Workout');
-      const pairing = await templatePairingOf(workout);
+      const pairing = await history.pairing(workout);
       const offers = pairing ? await targetUpdateOffersFor(workout, pairing) : [];
       const offer = offers.find(candidate => candidate.templateExerciseId === templateExerciseId);
       if (!offer) throw new Error("That session didn't beat the Target");
@@ -2311,22 +2136,13 @@ export function createTracker(
     // the order Workouts go in first. Hidden ones keep their history, so
     // they're here too.
     async getProgressExercises(): Promise<Exercise[]> {
-      // Each Exercise once per Workout it was done in, the latest Workouts
-      // first, so its first row is its latest.
-      const done = await db
+      const ids = await history.exercisesDoneLatestFirst();
+      const found = await db
         .select(exerciseColumns)
         .from(exercises)
-        .innerJoin(exerciseEntries, eq(exerciseEntries.exerciseId, exercises.id))
-        .innerJoin(sets, eq(sets.exerciseEntryId, exerciseEntries.id))
-        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(and(workingSetStillLogged(), finished()))
-        .groupBy(exercises.id, workouts.id)
-        .orderBy(...latestWorkoutFirst, sql`${exercises.name} COLLATE NOCASE`);
-      const latestFirst = new Map<string, Exercise>();
-      for (const exercise of done) {
-        if (!latestFirst.has(exercise.id)) latestFirst.set(exercise.id, exercise);
-      }
-      return [...latestFirst.values()];
+        .where(inArray(exercises.id, ids));
+      const byId = new Map(found.map(exercise => [exercise.id, exercise]));
+      return ids.flatMap(id => byId.get(id) ?? []);
     },
 
     // A progress chart for an Exercise: a point for each finished Workout with
@@ -2343,19 +2159,7 @@ export function createTracker(
       if (!progressMeasuresFor[exercise.trackingType].includes(measure)) {
         throw new Error(`A ${exercise.trackingType} Exercise isn't charted that way`);
       }
-      const workingSets = await db
-        .select({
-          workoutId: workouts.id,
-          localDate: workouts.localDate,
-          weight: sets.weight,
-          weightUnit: sets.weightUnit,
-          reps: sets.reps,
-        })
-        .from(sets)
-        .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
-        .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id))
-        .where(and(eq(exerciseEntries.exerciseId, exerciseId), workingSetStillLogged(), finished()))
-        .orderBy(...workoutOrder);
+      const workingSets = await history.workingSetsDone(exerciseId);
       const displayUnit = await getDisplayUnit();
       const unit = unitOf(measure, displayUnit);
       // Each Workout's Sets, Workouts in the order their first Set came.

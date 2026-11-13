@@ -52,6 +52,17 @@ export function displayWeightOf(
   return weight === null ? null : displayedWeight(weight, unit, displayUnit);
 }
 
+// A Set, Target or the like, with what to show for its weight.
+export function withDisplayWeight<W extends EnteredWeight>(
+  entered: W,
+  displayUnit: WeightUnit,
+): W & { displayWeight: Weight | null } {
+  return {
+    ...entered,
+    displayWeight: displayWeightOf(entered.weight, entered.weightUnit, displayUnit),
+  };
+}
+
 // For comparing weights entered in either unit. Plain bodyweight is no added
 // weight.
 export function kilogramsOf({ weight, weightUnit }: EnteredWeight): number {
