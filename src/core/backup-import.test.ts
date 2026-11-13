@@ -23,7 +23,7 @@ async function phoneWithData() {
   const tracker = createTracker(createTestDatabase(), clock);
   await tracker.setDisplayUnit('lb');
   await tracker.setMacroTargets({ calories: 2400, protein: 180, carbs: null, fat: null });
-  await tracker.setWeighIn(182.4);
+  await tracker.setWeighIn(182.4, 'lb');
   const landmine = await tracker.createExercise({
     name: 'Landmine Press',
     trackingType: 'weighted',
@@ -34,9 +34,9 @@ async function phoneWithData() {
   await tracker.setActiveRotation(rotation.id);
   await doTemplateWorkout(tracker, templates[0].id);
   clock.setTime('2026-09-29T18:00:00-04:00');
-  await doWorkout(tracker, 'Squat', [{ weight: 225, reps: 5 }]);
+  await doWorkout(tracker, 'Squat', [{ weight: 225, reps: 5 }], 'lb');
   const { entry } = await startWorkoutWith(tracker, 'Deadlift');
-  await tracker.logSet(entry.id, { weight: 315, reps: 3 });
+  await tracker.logSet(entry.id, { weight: 315, reps: 3 }, 'lb');
   return tracker;
 }
 

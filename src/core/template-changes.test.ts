@@ -39,7 +39,7 @@ describe('The finish summary', () => {
     const workout = await doTemplateAsPlanned(tracker, template.id);
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    await tracker.logSet(added.id, { weight: null, reps: 10 });
+    await tracker.logSet(added.id, { weight: null, reps: 10 }, 'kg');
 
     const summary = await tracker.finishWorkout(workout.id);
 
@@ -67,7 +67,7 @@ describe('The finish summary', () => {
     const inclineBench = await findExerciseByName(tracker, 'Incline Bench Press');
     await tracker.swapExercise(dip.id, inclineBench.id);
     const [, swapped] = await entriesOf(tracker, workout.id);
-    await tracker.logSet(swapped.id, { weight: 50, reps: 10 });
+    await tracker.logSet(swapped.id, { weight: 50, reps: 10 }, 'kg');
 
     const summary = await tracker.finishWorkout(workout.id);
 
@@ -83,7 +83,7 @@ describe('The finish summary', () => {
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     await tracker.swapExercise(bench.id, inclineBench.id);
     await tracker.swapExercise(bench.id, benchPress.id);
-    await tracker.logSet(bench.id, { weight: 20, reps: 5 });
+    await tracker.logSet(bench.id, { weight: 20, reps: 5 }, 'kg');
 
     const summary = await tracker.finishWorkout(workout.id);
 
@@ -108,7 +108,7 @@ describe('The finish summary', () => {
     const workout = await doTemplateAsPlanned(tracker, template.id);
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    await tracker.logSet(added.id, { weight: null, reps: 5, isWarmUp: true });
+    await tracker.logSet(added.id, { weight: null, reps: 5, isWarmUp: true }, 'kg');
 
     const summary = await tracker.finishWorkout(workout.id);
 
@@ -118,7 +118,7 @@ describe('The finish summary', () => {
   it('says nothing differs for a Workout started empty', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
 
     const summary = await tracker.finishWorkout(workout.id);
 
@@ -131,7 +131,7 @@ describe('The finish summary', () => {
     const workout = await doTemplateAsPlanned(tracker, template.id);
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    await tracker.logSet(added.id, { weight: null, reps: 10 });
+    await tracker.logSet(added.id, { weight: null, reps: 10 }, 'kg');
     await tracker.deleteTemplate(template.id);
 
     const summary = await tracker.finishWorkout(workout.id);
@@ -181,10 +181,10 @@ describe('Updating a Template from a Workout', () => {
     const workout = await doTemplateAsPlanned(tracker, template.id);
     const flies = await findExerciseByName(tracker, 'Cable Fly');
     const added = await tracker.addExerciseToWorkout(workout.id, flies.id);
-    await tracker.logSet(added.id, { weight: 5, reps: 20, isWarmUp: true });
-    await tracker.logSet(added.id, { weight: 15, reps: 12 });
-    await tracker.logSet(added.id, { weight: 17.5, reps: 10 });
-    await tracker.logSet(added.id, { weight: 15, reps: 14 });
+    await tracker.logSet(added.id, { weight: 5, reps: 20, isWarmUp: true }, 'kg');
+    await tracker.logSet(added.id, { weight: 15, reps: 12 }, 'kg');
+    await tracker.logSet(added.id, { weight: 17.5, reps: 10 }, 'kg');
+    await tracker.logSet(added.id, { weight: 15, reps: 14 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     await tracker.updateTemplateFromWorkout(workout.id);
@@ -202,7 +202,7 @@ describe('Updating a Template from a Workout', () => {
     const [bench, dip] = await entriesOf(tracker, workout.id);
     const inclineBench = await findExerciseByName(tracker, 'Incline Bench Press');
     await tracker.swapExercise(bench.id, inclineBench.id);
-    await tracker.logSet(bench.id, { weight: 50, reps: 9 });
+    await tracker.logSet(bench.id, { weight: 50, reps: 9 }, 'kg');
     await tracker.confirmPlannedSet(dip.plannedSets[0].id, dip.plannedSets[0]);
     await tracker.finishWorkout(workout.id);
 
@@ -227,7 +227,7 @@ describe('Updating a Template from a Workout', () => {
     await tracker.confirmPlannedSet(dip.plannedSets[0].id, dip.plannedSets[0]);
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     const again = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
-    await tracker.logSet(again.id, { weight: 40, reps: 5 });
+    await tracker.logSet(again.id, { weight: 40, reps: 5 }, 'kg');
     const summary = await tracker.finishWorkout(workout.id);
 
     await tracker.updateTemplateFromWorkout(workout.id);
@@ -266,7 +266,7 @@ describe('Updating a Template from a Workout', () => {
     const first = await doTemplateAsPlanned(tracker, template.id);
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(first.id, dip.id);
-    await tracker.logSet(added.id, { weight: null, reps: 10 });
+    await tracker.logSet(added.id, { weight: null, reps: 10 }, 'kg');
     await tracker.finishWorkout(first.id);
     await tracker.updateTemplateFromWorkout(first.id);
 
@@ -316,8 +316,7 @@ describe('A Target taken from what was done', () => {
     const exercise = await findExerciseByName(tracker, exerciseName);
     const added = await tracker.addExerciseToWorkout(workout.id, exercise.id);
     for (const { unit = 'kg', ...set } of loggedSets) {
-      await tracker.setDisplayUnit(unit);
-      await tracker.logSet(added.id, set);
+      await tracker.logSet(added.id, set, unit);
     }
     await tracker.finishWorkout(workout.id);
     await tracker.updateTemplateFromWorkout(workout.id);
@@ -363,11 +362,11 @@ describe('Saving a Workout as a Template', () => {
       'Standing Calf Raise',
     ]);
     const [squat, legCurl, calfRaise] = entries;
-    await tracker.logSet(squat.id, { weight: 60, reps: 5, isWarmUp: true });
-    await tracker.logSet(squat.id, { weight: 100, reps: 5 });
-    await tracker.logSet(squat.id, { weight: 100, reps: 4 });
-    await tracker.logSet(legCurl.id, { weight: 20, reps: 12, isWarmUp: true });
-    await tracker.logSet(calfRaise.id, { weight: 80, reps: 15 });
+    await tracker.logSet(squat.id, { weight: 60, reps: 5, isWarmUp: true }, 'kg');
+    await tracker.logSet(squat.id, { weight: 100, reps: 5 }, 'kg');
+    await tracker.logSet(squat.id, { weight: 100, reps: 4 }, 'kg');
+    await tracker.logSet(legCurl.id, { weight: 20, reps: 12, isWarmUp: true }, 'kg');
+    await tracker.logSet(calfRaise.id, { weight: 80, reps: 15 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     const template = await tracker.saveWorkoutAsTemplate(workout.id, ' Legs ');
@@ -388,7 +387,7 @@ describe('Saving a Workout as a Template', () => {
     const workout = await doTemplateAsPlanned(tracker, template.id);
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    await tracker.logSet(added.id, { weight: null, reps: 10 });
+    await tracker.logSet(added.id, { weight: null, reps: 10 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     const saved = await tracker.saveWorkoutAsTemplate(workout.id, 'Push B');
@@ -411,8 +410,8 @@ describe('Saving a Workout as a Template', () => {
       'Bench Press',
       'Arnold Press',
     ]);
-    await tracker.logSet(entries[0].id, { weight: 60, reps: 10 });
-    await tracker.logSet(entries[1].id, { weight: 20, reps: 10 });
+    await tracker.logSet(entries[0].id, { weight: 60, reps: 10 }, 'kg');
+    await tracker.logSet(entries[1].id, { weight: 20, reps: 10 }, 'kg');
     await tracker.finishWorkout(workout.id);
     await tracker.hideExercise(arnoldPress.id);
 
@@ -434,7 +433,7 @@ describe('Saving a Workout as a Template', () => {
   it('is only for a finished Workout', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
 
     await expect(tracker.saveWorkoutAsTemplate(workout.id, 'Push')).rejects.toThrow(
       'No such finished Workout',

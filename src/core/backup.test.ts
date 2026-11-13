@@ -65,8 +65,8 @@ describe('Backup export', () => {
     });
     await tracker.hideExercise(hidden.id);
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 135, reps: 8, isWarmUp: true });
-    await tracker.logSet(entry.id, { weight: 185, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 8, isWarmUp: true }, 'lb');
+    await tracker.logSet(entry.id, { weight: 185, reps: 5 }, 'lb');
     const [warmUp] = (await tracker.getWorkout(workout.id))?.entries[0].sets ?? [];
     await tracker.deleteSet(warmUp.id);
 

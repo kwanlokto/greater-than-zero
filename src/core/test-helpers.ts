@@ -1,4 +1,11 @@
-import type { FoodItemValues, NewWorkout, SetValues, TargetValues, Tracker } from './tracker';
+import type {
+  FoodItemValues,
+  NewWorkout,
+  SetValues,
+  TargetValues,
+  Tracker,
+  WeightUnit,
+} from './tracker';
 
 export function names(items: { name: string }[]) {
   return items.map(item => item.name);
@@ -37,6 +44,14 @@ export async function entriesOf(tracker: Tracker, workoutId: string) {
   return (await tracker.getWorkout(workoutId))?.entries ?? [];
 }
 
+// An Exercise in a Workout as its reads hand it back, with Last time and the
+// "ready to go heavier" hint.
+export async function entryToLog(tracker: Tracker, workoutId: string, entryId: string) {
+  const entry = (await entriesOf(tracker, workoutId)).find(({ id }) => id === entryId);
+  if (!entry) throw new Error('No such Exercise in the Workout');
+  return entry;
+}
+
 // The Sets of a Workout's first Exercise.
 export async function setsOf(tracker: Tracker, workoutId: string) {
   const [entry] = await entriesOf(tracker, workoutId);
@@ -54,10 +69,16 @@ export function clockAt(time: string) {
   };
 }
 
-// Starts, logs and finishes a Workout with one Exercise.
-export async function doWorkout(tracker: Tracker, exerciseName: string, loggedSets: SetValues[]) {
+// Starts, logs and finishes a Workout with one Exercise, its Sets in
+// `weightUnit`.
+export async function doWorkout(
+  tracker: Tracker,
+  exerciseName: string,
+  loggedSets: SetValues[],
+  weightUnit: WeightUnit = 'kg',
+) {
   const { workout, entry } = await startWorkoutWith(tracker, exerciseName);
-  for (const set of loggedSets) await tracker.logSet(entry.id, set);
+  for (const set of loggedSets) await tracker.logSet(entry.id, set, weightUnit);
   await tracker.finishWorkout(workout.id);
   return workout;
 }
@@ -121,7 +142,7 @@ export async function createRotationWith(tracker: Tracker, name: string, templat
 export async function doTemplateWorkout(tracker: Tracker, templateId: string, start?: NewWorkout) {
   const workout = await tracker.startWorkout({ ...start, templateId });
   const [entry] = await entriesOf(tracker, workout.id);
-  await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+  await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
   return { workout, summary: await tracker.finishWorkout(workout.id) };
 }
 

@@ -135,7 +135,9 @@ export default function TodayScreen() {
             weighIn={weighIn}
             displayUnit={displayUnit}
             onSave={weight =>
-              runOrAlert("Couldn't save the weigh-in", () => tracker.setWeighIn(weight))
+              runOrAlert("Couldn't save the weigh-in", () =>
+                tracker.setWeighIn(weight, displayUnit),
+              )
             }
           />
         </Section>

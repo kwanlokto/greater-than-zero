@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
@@ -12,7 +12,7 @@ import { Section } from '@/components/section';
 import { Toggle } from '@/components/toggle';
 import type { Rotation, RotationEntry } from '@/core/tracker';
 import { tracker } from '@/database';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -40,19 +40,19 @@ export default function RotationScreen() {
     );
   };
 
-  const confirmDelete = () => {
-    Alert.alert(`Delete ${rotation.name}?`, 'Its templates stay, and past workouts are kept.', [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmDelete = async () => {
+    const done = await confirmThenRun(
       {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't delete the rotation", () => tracker.deleteRotation(id))) {
-            router.back();
-          }
-        },
+        title: `Delete ${rotation.name}?`,
+        message: 'Its templates stay, and past workouts are kept.',
+        decline: 'Cancel',
+        accept: 'Delete',
+        destructive: true,
       },
-    ]);
+      "Couldn't delete the rotation",
+      () => tracker.deleteRotation(id),
+    );
+    if (done) router.back();
   };
 
   return (
@@ -123,18 +123,18 @@ function RotationEntryRow({ rotation, entry, index }: RowProps) {
       tracker.moveTemplateInRotation(entry.id, toIndex),
     );
 
-  const confirmRemove = () => {
-    Alert.alert(`Remove ${name} from ${rotation.name}?`, 'The template itself stays.', [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmRemove = async () => {
+    await confirmThenRun(
       {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () =>
-          runOrAlert("Couldn't remove the template", () =>
-            tracker.removeTemplateFromRotation(entry.id),
-          ),
+        title: `Remove ${name} from ${rotation.name}?`,
+        message: 'The template itself stays.',
+        decline: 'Cancel',
+        accept: 'Remove',
+        destructive: true,
       },
-    ]);
+      "Couldn't remove the template",
+      () => tracker.removeTemplateFromRotation(entry.id),
+    );
   };
 
   return (

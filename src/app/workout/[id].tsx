@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
@@ -8,7 +8,7 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { workoutTimes } from '@/workout-labels';
@@ -31,21 +31,19 @@ export default function PastWorkoutScreen() {
     );
   }
 
-  const confirmDelete = () => {
-    Alert.alert('Delete this workout?', 'Its exercises and sets will be removed from History.', [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmDelete = async () => {
+    const done = await confirmThenRun(
       {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          if (
-            await runOrAlert("Couldn't delete the workout", () => tracker.deleteWorkout(workout.id))
-          ) {
-            router.back();
-          }
-        },
+        title: 'Delete this workout?',
+        message: 'Its exercises and sets will be removed from History.',
+        decline: 'Cancel',
+        accept: 'Delete',
+        destructive: true,
       },
-    ]);
+      "Couldn't delete the workout",
+      () => tracker.deleteWorkout(workout.id),
+    );
+    if (done) router.back();
   };
 
   return (

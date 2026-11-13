@@ -9,7 +9,7 @@ import { Section } from '@/components/section';
 import { UnitPicker } from '@/components/unit-picker';
 import { tracker } from '@/database';
 import { formatCalories, formatGrams } from '@/food-labels';
-import { importBackupFromFile } from '@/import-backup';
+import { importBackupFromFile } from '@/import-backup-file';
 import { runOrAlert } from '@/run-or-alert';
 import { shareBackup } from '@/share-backup';
 import { useTrackerQuery } from '@/use-tracker-query';

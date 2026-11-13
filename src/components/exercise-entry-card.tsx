@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ActionSheet, type SheetAction } from '@/components/action-sheet';
 import { AppText } from '@/components/app-text';
@@ -20,7 +20,8 @@ import {
 import { Toggle } from '@/components/toggle';
 import {
   canSwapExercise,
-  type ExerciseEntry,
+  describeSet,
+  type EntryToLog,
   type PlannedSet,
   type TrackingType,
   type WeightUnit,
@@ -28,12 +29,11 @@ import {
 } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDate } from '@/dates';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { minTouch, radius, space, useAppTheme } from '@/theme';
-import { useTrackerQuery } from '@/use-tracker-query';
 
 type Props = {
-  entry: ExerciseEntry;
+  entry: EntryToLog;
   displayUnit: WeightUnit;
 };
 
@@ -58,24 +58,33 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   async function logSet() {
     const { values } = next;
     if (!values) return;
-    if (await runOrAlert("Couldn't log the Set", () => tracker.logSet(entry.id, values))) {
+    // In the unit its box showed.
+    const logged = await runOrAlert("Couldn't log the Set", () =>
+      tracker.logSet(entry.id, values, next.fields.unit),
+    );
+    if (logged) {
       next.clearReps();
     }
   }
 
   function confirmRemove() {
-    const removeNow = () =>
-      runOrAlert("Couldn't remove the exercise", () => tracker.removeExerciseFromWorkout(entry.id));
+    const remove = () => tracker.removeExerciseFromWorkout(entry.id);
     if (entry.sets.length === 0) {
-      removeNow();
+      runOrAlert("Couldn't remove the exercise", remove);
       return;
     }
     // Its Sets go with it, so check first.
     const setCount = entry.sets.length === 1 ? '1 set' : `${entry.sets.length} sets`;
-    Alert.alert(`Remove ${entry.exercise.name} and its ${setCount}?`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: removeNow },
-    ]);
+    confirmThenRun(
+      {
+        title: `Remove ${entry.exercise.name} and its ${setCount}?`,
+        decline: 'Cancel',
+        accept: 'Remove',
+        destructive: true,
+      },
+      "Couldn't remove the exercise",
+      remove,
+    );
   }
 
   const actions: SheetAction[] = [
@@ -256,7 +265,7 @@ function SetRow({ set, label, trackingType, onPress }: SetRowProps) {
     >
       <SetBadge kind="done" label={label} />
       <AppText variant="bodyStrong" style={styles.setText}>
-        {setPresentationFor[trackingType].describe(set)}
+        {describeSet(trackingType, set)}
       </AppText>
       <Ionicons name="create-outline" size={20} color={colors.textFaint} />
     </Pressable>
@@ -345,13 +354,12 @@ function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
 
 // The Exercise's working Sets from the finished Workout before this one, to
 // beat. Nothing when it wasn't done before.
-function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
+function LastTimeLine({ entry }: { entry: EntryToLog }) {
   const { colors } = useAppTheme();
-  const { id, exercise } = entry;
-  const lastTime = useTrackerQuery(() => tracker.getLastTime(id), [id]);
+  const { lastTime, exercise } = entry;
   if (!lastTime) return null;
 
-  const { describe } = setPresentationFor[exercise.trackingType];
+  const describe = (set: WorkoutSet) => describeSet(exercise.trackingType, set);
   return (
     <View style={styles.lastTime}>
       <Ionicons
@@ -369,11 +377,9 @@ function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
 
 // Shown when the Exercise hit the top of its Target's rep range on every Set
 // last session under this Workout's Template.
-function ReadyToGoHeavierLine({ entry }: { entry: ExerciseEntry }) {
+function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
   const { colors } = useAppTheme();
-  const { id } = entry;
-  const ready = useTrackerQuery(() => tracker.isReadyToGoHeavier(id), [id]);
-  if (!ready) return null;
+  if (!entry.readyToGoHeavier) return null;
 
   return (
     <View style={[styles.ready, { backgroundColor: colors.primarySoft }]}>
@@ -387,7 +393,7 @@ function ReadyToGoHeavierLine({ entry }: { entry: ExerciseEntry }) {
 
 // Saved shortly after the lifter stops typing, and when the card goes away, so
 // a note isn't lost if they finish the Workout straight after writing it.
-function EntryNotes({ entry }: { entry: ExerciseEntry }) {
+function EntryNotes({ entry }: { entry: EntryToLog }) {
   const [notes, setNotes] = useState(entry.notes);
   const latest = useRef(entry.notes);
   const saved = useRef(entry.notes);

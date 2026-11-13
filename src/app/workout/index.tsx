@@ -1,5 +1,4 @@
 import { Stack, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
@@ -7,10 +6,10 @@ import { ExerciseEntryCard } from '@/components/exercise-entry-card';
 import { IconButton } from '@/components/icon-button';
 import { RestTimer } from '@/components/rest-timer';
 import { Screen } from '@/components/screen';
-import { canFinishWorkout, type FinishSummary } from '@/core/tracker';
+import { alertPrompter } from '@/alert-prompter';
 import { tracker } from '@/database';
-import { askFinishOffers } from '@/finish-offers';
-import { runOrAlert } from '@/run-or-alert';
+import { finishWorkout } from '@/finish-workout';
+import { confirmThenRun } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -30,46 +29,24 @@ export default function WorkoutScreen() {
     );
   }
 
+  const confirmFinish = async () => {
+    await finishWorkout(tracker, alertPrompter, workout, () => router.back());
+  };
+
   // A discarded Workout is never recorded, so it won't appear in History.
-  const discard = async () => {
-    if (
-      await runOrAlert("Couldn't discard the workout", () => tracker.discardWorkout(workout.id))
-    ) {
-      router.back();
-    }
-  };
-
-  const confirmFinish = () => {
-    // With nothing logged there's nothing to record, so the way out is Discard.
-    if (!canFinishWorkout(workout)) {
-      Alert.alert('No sets logged yet', 'Log a set to finish this workout, or discard it.', [
-        { text: 'Keep going', style: 'cancel' },
-        { text: 'Discard', style: 'destructive', onPress: discard },
-      ]);
-      return;
-    }
-    Alert.alert('Finish workout?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
+  const confirmDiscard = async () => {
+    const discarded = await confirmThenRun(
       {
-        text: 'Finish',
-        onPress: async () => {
-          let summary: FinishSummary | undefined;
-          const finished = await runOrAlert("Couldn't finish the workout", async () => {
-            summary = await tracker.finishWorkout(workout.id);
-          });
-          if (!finished || !summary) return;
-          router.back();
-          askFinishOffers(workout.id, summary);
-        },
+        title: 'Discard this workout?',
+        message: 'Its exercises and sets will not be saved.',
+        decline: 'Keep it',
+        accept: 'Discard',
+        destructive: true,
       },
-    ]);
-  };
-
-  const confirmDiscard = () => {
-    Alert.alert('Discard this workout?', 'Its exercises and sets will not be saved.', [
-      { text: 'Keep it', style: 'cancel' },
-      { text: 'Discard', style: 'destructive', onPress: discard },
-    ]);
+      "Couldn't discard the workout",
+      () => tracker.discardWorkout(workout.id),
+    );
+    if (discarded) router.back();
   };
 
   return (

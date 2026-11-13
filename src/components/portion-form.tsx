@@ -9,7 +9,7 @@ import { Field } from '@/components/field';
 import { Input } from '@/components/input';
 import { MacroSummary } from '@/components/macro-summary';
 import { portionOf, problemWithPortion, type SavedFood } from '@/core/tracker';
-import { describeServing } from '@/food-labels';
+import { describeServing, roundedAmount } from '@/food-labels';
 import { parseDecimal } from '@/numbers';
 import { space } from '@/theme';
 
@@ -20,11 +20,6 @@ type Props = {
 
 // Common portions, as Servings, to pick without typing.
 const servingMultiples = [0.5, 1, 1.5, 2];
-
-// Rounded to two decimal places, as amounts of food are shown.
-function amountOf(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 // How much of a Saved food to add to a Meal, in its Serving unit, starting at
 // one Serving and showing the macros that comes to.
@@ -61,7 +56,7 @@ export function PortionForm({ savedFood, onSubmit }: Props) {
         />
         <View style={styles.chips}>
           {servingMultiples.map(multiple => {
-            const amount = amountOf(servingAmount * multiple);
+            const amount = roundedAmount(servingAmount * multiple);
             return (
               <Chip
                 key={multiple}

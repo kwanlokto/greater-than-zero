@@ -2,6 +2,7 @@ import { createTestDatabase } from './test-database';
 import {
   createTemplateWith,
   entriesOf,
+  entryToLog,
   findExerciseByName,
   startWorkoutWith,
   targetsOf,
@@ -25,8 +26,7 @@ async function doTemplate(tracker: Tracker, templateId: string, setsByExercise: 
   const entries = await entriesOf(tracker, workout.id);
   for (const [index, loggedSets] of setsByExercise.entries()) {
     for (const { unit = 'kg', ...set } of loggedSets) {
-      await tracker.setDisplayUnit(unit);
-      await tracker.logSet(entries[index].id, set);
+      await tracker.logSet(entries[index].id, set, unit);
     }
   }
   const summary = await tracker.finishWorkout(workout.id);
@@ -238,10 +238,10 @@ describe('Target update offers', () => {
     const workout = await tracker.startWorkout({ templateId: template.id });
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    for (const set of threeSetsOf(20, 10)) await tracker.logSet(added.id, set);
+    for (const set of threeSetsOf(20, 10)) await tracker.logSet(added.id, set, 'kg');
     const fromTemplate = await tracker.finishWorkout(workout.id);
     const { workout: empty, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    for (const set of threeSetsOf(100, 10)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(100, 10)) await tracker.logSet(entry.id, set, 'kg');
     const startedEmpty = await tracker.finishWorkout(empty.id);
 
     expect([offersOf(fromTemplate), offersOf(startedEmpty)]).toEqual([[], []]);
@@ -314,7 +314,7 @@ describe('Accepting a Target update offer', () => {
     const { template, exercises } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
     const [entry] = await entriesOf(tracker, workout.id);
-    for (const set of threeSetsOf(65, 8)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(65, 8)) await tracker.logSet(entry.id, set, 'kg');
 
     await expect(tracker.acceptTargetUpdate(workout.id, exercises[0].id)).rejects.toThrow(
       'No such finished Workout',
@@ -327,7 +327,7 @@ describe('The "ready to go heavier" hint', () => {
   async function hintOnStarting(tracker: Tracker, templateId: string) {
     const workout = await tracker.startWorkout({ templateId });
     const [entry] = await entriesOf(tracker, workout.id);
-    return tracker.isReadyToGoHeavier(entry.id);
+    return entry.readyToGoHeavier;
   }
 
   it('shows when last session hit the top of the rep range on every Set at the Target weight', async () => {
@@ -401,7 +401,7 @@ describe('The "ready to go heavier" hint', () => {
     await doTemplate(tracker, template.id, [threeSetsOf(60, 10)]);
     // Top reps outside the Template don't count.
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await hintOnStarting(tracker, template.id)).toBe(false);
@@ -416,7 +416,7 @@ describe('The "ready to go heavier" hint', () => {
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     await tracker.swapExercise(entry.id, inclineBench.id);
     await tracker.swapExercise(entry.id, benchPress.id);
-    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await hintOnStarting(tracker, template.id)).toBe(true);
@@ -437,14 +437,14 @@ describe('The "ready to go heavier" hint', () => {
     const workout = await tracker.startWorkout({ templateId: template.id });
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    for (const set of threeSetsOf(null, 12)) await tracker.logSet(added.id, set);
+    for (const set of threeSetsOf(null, 12)) await tracker.logSet(added.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
     await tracker.updateTemplateFromWorkout(workout.id);
 
     const next = await tracker.startWorkout({ templateId: template.id });
     const [, dipAgain] = await entriesOf(tracker, next.id);
 
-    expect(await tracker.isReadyToGoHeavier(dipAgain.id)).toBe(true);
+    expect(dipAgain.readyToGoHeavier).toBe(true);
   });
 
   it('shows for an Exercise removed and added again in the Workout in progress', async () => {
@@ -457,7 +457,7 @@ describe('The "ready to go heavier" hint', () => {
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     const again = await tracker.addExerciseToWorkout(workout.id, benchPress.id);
 
-    expect(await tracker.isReadyToGoHeavier(again.id)).toBe(true);
+    expect((await entryToLog(tracker, workout.id, again.id)).readyToGoHeavier).toBe(true);
   });
 
   it('goes by the Exercise, even after it was taken out of the Template and put back', async () => {
@@ -520,16 +520,16 @@ describe('The "ready to go heavier" hint', () => {
     // A second Bench Press, beyond the one in the Template.
     const extra = await tracker.addExerciseToWorkout(second.id, benchPress.id);
 
-    expect(await tracker.isReadyToGoHeavier(finishedEntry.id)).toBe(false);
-    expect(await tracker.isReadyToGoHeavier(extra.id)).toBe(false);
+    expect(finishedEntry.readyToGoHeavier).toBe(false);
+    expect((await entryToLog(tracker, second.id, extra.id)).readyToGoHeavier).toBe(false);
   });
 
   it("doesn't show in a Workout started empty", async () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     await doTemplate(tracker, template.id, [threeSetsOf(60, 12)]);
-    const { entry } = await startWorkoutWith(tracker, 'Bench Press');
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    expect(await tracker.isReadyToGoHeavier(entry.id)).toBe(false);
+    expect((await entryToLog(tracker, workout.id, entry.id)).readyToGoHeavier).toBe(false);
   });
 });

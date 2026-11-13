@@ -1,9 +1,9 @@
 import { FlatList, StyleSheet } from 'react-native';
 
-import { formatBodyWeight } from '@/body-weight-labels';
 import { EmptyState } from '@/components/empty-state';
 import { Divider, ListRow } from '@/components/list-row';
 import { useBottomInset } from '@/components/screen';
+import { formatWeight } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday } from '@/dates';
 import { space, useAppTheme } from '@/theme';
@@ -25,7 +25,7 @@ export default function WeighInsScreen() {
       renderItem={({ item }) => (
         <ListRow
           title={formatLocalDateWithWeekday(item.localDate)}
-          value={trend ? formatBodyWeight({ value: item.displayValue, unit: trend.unit }) : ''}
+          value={trend ? formatWeight({ value: item.displayValue, unit: trend.unit }) : ''}
         />
       )}
       ListEmptyComponent={trend && <EmptyState icon="scale-outline" title="No weigh-ins yet." />}

@@ -1,5 +1,4 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
@@ -7,7 +6,7 @@ import { FoodItemForm } from '@/components/food-item-form';
 import { Screen } from '@/components/screen';
 import type { FoodItem, FoodItemValues } from '@/core/tracker';
 import { tracker } from '@/database';
-import { runOrAlert } from '@/run-or-alert';
+import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 // Either a one-off Food item being added to a Meal, or one in it (foodItemId)
@@ -44,19 +43,13 @@ export default function FoodItemScreen() {
     if (saved) router.back();
   }
 
-  const confirmRemove = (item: FoodItem) => {
-    Alert.alert(`Remove ${item.name}?`, undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          if (await runOrAlert("Couldn't remove the food", () => tracker.deleteFoodItem(item.id))) {
-            router.back();
-          }
-        },
-      },
-    ]);
+  const confirmRemove = async (item: FoodItem) => {
+    const removed = await confirmThenRun(
+      { title: `Remove ${item.name}?`, decline: 'Cancel', accept: 'Remove', destructive: true },
+      "Couldn't remove the food",
+      () => tracker.deleteFoodItem(item.id),
+    );
+    if (removed) router.back();
   };
 
   const { item } = loaded;

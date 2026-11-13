@@ -207,3 +207,47 @@ export function writeTables(tx: TrackerDatabase, tables: BackupFile['tables']) {
     throw damaged("some of its records point to ones it doesn't have");
   }
 }
+
+// What the lifter is told about a Backup file, to confirm importing it.
+export type BackupSummary = {
+  exportedAt: Date;
+};
+
+export function createBackup({ db, now }: { db: TrackerDatabase; now: () => Date }) {
+  const commands = {
+    // The Backup file's contents, as JSON: all the lifter's data, recording
+    // the version of the app exporting it.
+    async exportBackup(appVersion: string): Promise<string> {
+      // Read together, so it's the data as it was at one moment.
+      return db.transaction(tx => {
+        const backup: BackupFile = {
+          formatVersion: backupFormatVersion,
+          schemaVersion: schemaVersionOf(tx),
+          appVersion,
+          exportedAt: now().toISOString(),
+          tables: readTables(tx),
+        };
+        return JSON.stringify(backup);
+      });
+    },
+
+    // Checks a Backup file before importing it, throwing to say why it can't
+    // be, and says when it was exported. Only importing finds records that
+    // don't fit together.
+    async checkBackup(contents: string): Promise<BackupSummary> {
+      const { exportedAt } = parseBackup(contents, schemaVersionOf(db));
+      return { exportedAt: new Date(exportedAt) };
+    },
+
+    // Replaces all the lifter's data with a Backup file's, all together, so a
+    // failure leaves what was there untouched.
+    async importBackup(contents: string): Promise<void> {
+      db.transaction(tx => {
+        const backup = parseBackup(contents, schemaVersionOf(tx));
+        writeTables(tx, backup.tables);
+      });
+    },
+  };
+
+  return { commands };
+}

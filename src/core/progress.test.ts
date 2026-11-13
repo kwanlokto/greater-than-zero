@@ -59,7 +59,7 @@ describe('Progress of a weighted Exercise', () => {
     clock.setTime('2026-09-23T18:00:00');
     await doWorkout(tracker, 'Bench Press', [{ weight: 107.5, reps: 2 }]);
     const { entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 140, reps: 1 });
+    await tracker.logSet(entry.id, { weight: 140, reps: 1 }, 'kg');
 
     expect(await chartOf(tracker, 'Bench Press', 'heaviestWeight')).toEqual([
       ['2026-09-20', 105],
@@ -73,9 +73,9 @@ describe('Progress of a weighted Exercise', () => {
     await tracker.setDisplayUnit('lb');
     // 225 lb is 102.058 kg, heavier than 100 kg.
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 225, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 225, reps: 5 }, 'lb');
     await tracker.setDisplayUnit('kg');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     const squat = await findExerciseByName(tracker, 'Squat');
@@ -99,8 +99,8 @@ describe('Progress of a weighted Exercise', () => {
       'Bench Press',
       'Bench Press',
     ]);
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
-    await tracker.logSet(entries[1].id, { weight: 80, reps: 12 });
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 }, 'kg');
+    await tracker.logSet(entries[1].id, { weight: 80, reps: 12 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     // 80 × (1 + 12/30) = 112, below 116.667.
@@ -120,7 +120,7 @@ describe('Progress of a weighted Exercise', () => {
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press', {
       localDate: '2026-09-22',
     });
-    await tracker.logSet(entry.id, { weight: 105, reps: 1 });
+    await tracker.logSet(entry.id, { weight: 105, reps: 1 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await chartOf(tracker, 'Bench Press', 'heaviestWeight')).toEqual([
@@ -200,7 +200,7 @@ describe('Exercises to chart', () => {
     clock.setTime('2026-09-22T18:00:00');
     await doWorkout(tracker, 'Deadlift', [{ weight: 60, reps: 5, isWarmUp: true }]);
     const { entry } = await startWorkoutWith(tracker, 'Pull-up');
-    await tracker.logSet(entry.id, { weight: null, reps: 8 });
+    await tracker.logSet(entry.id, { weight: null, reps: 8 }, 'kg');
 
     const exercises = await tracker.getProgressExercises();
 
@@ -231,7 +231,7 @@ describe('Exercises to chart', () => {
 
   async function backfill(tracker: Tracker, exerciseName: string, localDate: string) {
     const { workout, entry } = await startWorkoutWith(tracker, exerciseName, { localDate });
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(workout.id);
   }
 });

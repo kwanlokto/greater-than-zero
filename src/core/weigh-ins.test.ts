@@ -3,12 +3,12 @@ import { clockAt } from './test-helpers';
 import { createTracker, problemWithWeighIn } from './tracker';
 
 describe('Weigh-ins', () => {
-  it("record today's weight as entered, in the display unit", async () => {
+  it("record today's weight as entered, with the unit it was entered in", async () => {
     const clock = clockAt('2026-09-29T07:30:00');
     const tracker = createTracker(createTestDatabase(), clock);
     await tracker.setDisplayUnit('lb');
 
-    await tracker.setWeighIn(181.4);
+    await tracker.setWeighIn(181.4, 'lb');
 
     expect(await tracker.getWeighIn('2026-09-29')).toEqual({
       localDate: '2026-09-29',
@@ -23,13 +23,13 @@ describe('Weigh-ins', () => {
   it('are one per local date: entering another the same day replaces it, unit and all', async () => {
     const clock = clockAt('2026-09-28T23:30:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.setWeighIn(82.4);
+    await tracker.setWeighIn(82.4, 'kg');
     clock.setTime('2026-09-29T07:30:00');
-    await tracker.setWeighIn(82.1);
+    await tracker.setWeighIn(82.1, 'kg');
     clock.setTime('2026-09-29T08:15:00');
     await tracker.setDisplayUnit('lb');
 
-    await tracker.setWeighIn(180.5);
+    await tracker.setWeighIn(180.5, 'lb');
 
     expect(await tracker.getWeighIn('2026-09-29')).toMatchObject({
       weight: 180.5,
@@ -52,7 +52,7 @@ describe('Weigh-ins', () => {
   it('come back on a date whose Weigh-in a Backup file had deleted', async () => {
     const clock = clockAt('2026-09-29T07:30:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.setWeighIn(82.1);
+    await tracker.setWeighIn(82.1, 'kg');
     const backup = JSON.parse(await tracker.exportBackup('1.2.3'));
     backup.tables.weigh_ins[0].deleted_at = clock.now().getTime();
     await tracker.importBackup(JSON.stringify(backup));
@@ -60,7 +60,7 @@ describe('Weigh-ins', () => {
     expect((await tracker.getBodyWeightTrend()).points).toEqual([]);
 
     clock.setTime('2026-09-29T08:00:00');
-    await tracker.setWeighIn(81.9);
+    await tracker.setWeighIn(81.9, 'kg');
 
     expect(await tracker.getWeighIn('2026-09-29')).toMatchObject({
       weight: 81.9,
@@ -70,19 +70,19 @@ describe('Weigh-ins', () => {
 
   it.each([0, -80, Number.NaN])('need a weight above 0, not %s', async weight => {
     const tracker = createTracker(createTestDatabase(), clockAt('2026-09-29T07:30:00'));
-    await tracker.setWeighIn(82.1);
+    await tracker.setWeighIn(82.1, 'kg');
     const problem = 'A Weigh-in needs a weight above 0';
 
     expect(problemWithWeighIn(82.1)).toBeUndefined();
     expect(problemWithWeighIn(weight)).toBe(problem);
-    await expect(tracker.setWeighIn(weight)).rejects.toThrow(problem);
+    await expect(tracker.setWeighIn(weight, 'kg')).rejects.toThrow(problem);
     expect((await tracker.getWeighIn('2026-09-29'))?.weight).toBe(82.1);
   });
 
   it("show in their day's History", async () => {
     const clock = clockAt('2026-09-28T07:00:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.setWeighIn(82.4);
+    await tracker.setWeighIn(82.4, 'kg');
 
     expect((await tracker.getDay('2026-09-28')).weighIn?.weight).toBe(82.4);
     expect((await tracker.getDay('2026-09-29')).weighIn).toBeNull();
@@ -93,12 +93,12 @@ describe('Body-weight trend', () => {
   it('charts every Weigh-in by date, converted from its unit to the display unit', async () => {
     const clock = clockAt('2026-09-27T07:00:00');
     const tracker = createTracker(createTestDatabase(), clock);
-    await tracker.setWeighIn(82.4);
+    await tracker.setWeighIn(82.4, 'kg');
     await tracker.setDisplayUnit('lb');
     clock.setTime('2026-09-29T07:00:00');
-    await tracker.setWeighIn(180);
+    await tracker.setWeighIn(180, 'lb');
     clock.setTime('2026-09-28T07:00:00');
-    await tracker.setWeighIn(180.5);
+    await tracker.setWeighIn(180.5, 'lb');
 
     // [local date, value to three decimal places, value as shown]
     const trendIn = async (unit: 'kg' | 'lb') => {
