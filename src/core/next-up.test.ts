@@ -186,7 +186,7 @@ describe('Next up', () => {
     await tracker.setActiveRotation(ppl.id);
     const workout = await tracker.startWorkout({ templateId: push.id });
     const [entry] = await entriesOf(tracker, workout.id);
-    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
 
     await tracker.setActiveRotation(upperLower.id);
     await tracker.finishWorkout(workout.id);

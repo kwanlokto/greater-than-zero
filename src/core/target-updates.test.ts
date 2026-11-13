@@ -26,8 +26,7 @@ async function doTemplate(tracker: Tracker, templateId: string, setsByExercise: 
   const entries = await entriesOf(tracker, workout.id);
   for (const [index, loggedSets] of setsByExercise.entries()) {
     for (const { unit = 'kg', ...set } of loggedSets) {
-      await tracker.setDisplayUnit(unit);
-      await tracker.logSet(entries[index].id, set);
+      await tracker.logSet(entries[index].id, set, unit);
     }
   }
   const summary = await tracker.finishWorkout(workout.id);
@@ -239,10 +238,10 @@ describe('Target update offers', () => {
     const workout = await tracker.startWorkout({ templateId: template.id });
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    for (const set of threeSetsOf(20, 10)) await tracker.logSet(added.id, set);
+    for (const set of threeSetsOf(20, 10)) await tracker.logSet(added.id, set, 'kg');
     const fromTemplate = await tracker.finishWorkout(workout.id);
     const { workout: empty, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    for (const set of threeSetsOf(100, 10)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(100, 10)) await tracker.logSet(entry.id, set, 'kg');
     const startedEmpty = await tracker.finishWorkout(empty.id);
 
     expect([offersOf(fromTemplate), offersOf(startedEmpty)]).toEqual([[], []]);
@@ -315,7 +314,7 @@ describe('Accepting a Target update offer', () => {
     const { template, exercises } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const workout = await tracker.startWorkout({ templateId: template.id });
     const [entry] = await entriesOf(tracker, workout.id);
-    for (const set of threeSetsOf(65, 8)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(65, 8)) await tracker.logSet(entry.id, set, 'kg');
 
     await expect(tracker.acceptTargetUpdate(workout.id, exercises[0].id)).rejects.toThrow(
       'No such finished Workout',
@@ -402,7 +401,7 @@ describe('The "ready to go heavier" hint', () => {
     await doTemplate(tracker, template.id, [threeSetsOf(60, 10)]);
     // Top reps outside the Template don't count.
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await hintOnStarting(tracker, template.id)).toBe(false);
@@ -417,7 +416,7 @@ describe('The "ready to go heavier" hint', () => {
     const benchPress = await findExerciseByName(tracker, 'Bench Press');
     await tracker.swapExercise(entry.id, inclineBench.id);
     await tracker.swapExercise(entry.id, benchPress.id);
-    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set);
+    for (const set of threeSetsOf(60, 12)) await tracker.logSet(entry.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await hintOnStarting(tracker, template.id)).toBe(true);
@@ -438,7 +437,7 @@ describe('The "ready to go heavier" hint', () => {
     const workout = await tracker.startWorkout({ templateId: template.id });
     const dip = await findExerciseByName(tracker, 'Dip');
     const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-    for (const set of threeSetsOf(null, 12)) await tracker.logSet(added.id, set);
+    for (const set of threeSetsOf(null, 12)) await tracker.logSet(added.id, set, 'kg');
     await tracker.finishWorkout(workout.id);
     await tracker.updateTemplateFromWorkout(workout.id);
 

@@ -7,9 +7,9 @@ describe('Weights on screen', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
     await tracker.setDisplayUnit('lb');
-    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 }, 'lb');
     await tracker.setDisplayUnit('kg');
-    await tracker.logSet(entry.id, { weight: 60, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 5 }, 'kg');
     const shown = async () => (await setsOf(tracker, workout.id)).map(set => set.displayWeight);
 
     expect(await shown()).toEqual([
@@ -27,7 +27,7 @@ describe('Weights on screen', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
     await tracker.setDisplayUnit('lb');
-    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 }, 'lb');
 
     await tracker.setDisplayUnit('kg');
     await tracker.setDisplayUnit('lb');
@@ -40,7 +40,7 @@ describe('Weights on screen', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
 
-    await tracker.logSet(entry.id, { weight: 102.25, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 102.25, reps: 5 }, 'kg');
 
     expect((await setsOf(tracker, workout.id))[0].displayWeight).toEqual({ value: 102.3, unit: 'kg' });
   });
@@ -48,8 +48,8 @@ describe('Weights on screen', () => {
   it('round halves away from zero, so help from a machine rounds like added weight', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Dip');
-    await tracker.logSet(entry.id, { weight: 20.25, reps: 8 });
-    await tracker.logSet(entry.id, { weight: -20.25, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 20.25, reps: 8 }, 'kg');
+    await tracker.logSet(entry.id, { weight: -20.25, reps: 8 }, 'kg');
 
     expect((await setsOf(tracker, workout.id)).map(set => set.displayWeight?.value)).toEqual([
       20.3, -20.3,
@@ -59,8 +59,8 @@ describe('Weights on screen', () => {
   it('convert added bodyweight too, and leave plain bodyweight blank', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
-    await tracker.logSet(entry.id, { weight: -20, reps: 10 });
-    await tracker.logSet(entry.id, { weight: null, reps: 8 });
+    await tracker.logSet(entry.id, { weight: -20, reps: 10 }, 'kg');
+    await tracker.logSet(entry.id, { weight: null, reps: 8 }, 'kg');
 
     await tracker.setDisplayUnit('lb');
 
@@ -73,7 +73,7 @@ describe('Weights on screen', () => {
   it('are shown in the display unit for "last time" too', async () => {
     const tracker = createTracker(createTestDatabase());
     await tracker.setDisplayUnit('lb');
-    await doWorkout(tracker, 'Deadlift', [{ weight: 315, reps: 3 }]);
+    await doWorkout(tracker, 'Deadlift', [{ weight: 315, reps: 3 }], 'lb');
 
     await tracker.setDisplayUnit('kg');
     const { workout, entry } = await startWorkoutWith(tracker, 'Deadlift');

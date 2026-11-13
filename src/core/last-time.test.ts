@@ -31,7 +31,7 @@ describe('Last time', () => {
     await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
     clock.setTime('2026-09-11T18:00:00-04:00');
     const today = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(today.entry.id, { weight: 105, reps: 5 });
+    await tracker.logSet(today.entry.id, { weight: 105, reps: 5 }, 'kg');
 
     const { lastTime } = await entryToLog(tracker, today.workout.id, today.entry.id);
 
@@ -81,7 +81,7 @@ describe('Last time', () => {
     await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 8 }]);
     clock.setTime('2026-09-11T18:00:00-04:00');
     const past = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(past.entry.id, { weight: 62.5, reps: 6 });
+    await tracker.logSet(past.entry.id, { weight: 62.5, reps: 6 }, 'kg');
     await tracker.finishWorkout(past.workout.id);
     clock.setTime('2026-09-13T18:00:00-04:00');
     await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
@@ -96,9 +96,9 @@ describe('Last time', () => {
     const tracker = createTracker(createTestDatabase());
     await tracker.setDisplayUnit('lb');
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 225, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 225, reps: 5 }, 'lb');
     await tracker.setDisplayUnit('kg');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(workout.id);
     const next = await startWorkoutWith(tracker, 'Squat');
     const shown = async () =>

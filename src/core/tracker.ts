@@ -1409,10 +1409,11 @@ export function createTracker(
     },
 
     // Saved the moment it's logged, after the entry's earlier Sets. The weight is
-    // in the display unit the lifter sees while typing it.
-    async logSet(exerciseEntryId: string, set: SetValues): Promise<void> {
+    // in `weightUnit`, the unit the lifter sees while typing it (the display
+    // unit, for a new Set), and the Set keeps it.
+    async logSet(exerciseEntryId: string, set: SetValues, weightUnit: WeightUnit): Promise<void> {
       requireValidSet(await trackingTypeOfEntry(exerciseEntryId), set);
-      await insertSet(exerciseEntryId, set, await getDisplayUnit());
+      await insertSet(exerciseEntryId, set, weightUnit);
     },
 
     // The weight is in the unit the Set was logged in, which is the unit shown
@@ -2188,14 +2189,14 @@ export function createTracker(
       return { unit, points };
     },
 
-    // Records today's Weigh-in, in the display unit the lifter sees while
+    // Records today's Weigh-in in `weightUnit`, the unit the lifter sees while
     // typing it, replacing one already entered today. Enforces
     // problemWithWeighIn.
-    async setWeighIn(weight: number): Promise<void> {
+    async setWeighIn(weight: number, weightUnit: WeightUnit): Promise<void> {
       const problem = problemWithWeighIn(weight);
       if (problem) throw new Error(problem);
       const weighedAt = now();
-      const entered = { weighedAt, weight, weightUnit: await getDisplayUnit() };
+      const entered = { weighedAt, weight, weightUnit };
       await db
         .insert(weighIns)
         .values({ localDate: localDateOf(weighedAt), ...entered })

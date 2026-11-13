@@ -24,7 +24,7 @@ describe('Training days', () => {
     const clock = clockAt('2026-09-14T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     expect(await tracker.getTrainingDays('2026-09')).toEqual([]);
     await tracker.finishWorkout(workout.id);
@@ -36,7 +36,7 @@ describe('Training days', () => {
       now: clockAt('2026-09-14T18:00:00-04:00').now,
     });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     await tracker.discardWorkout(workout.id);
 
@@ -47,7 +47,7 @@ describe('Training days', () => {
     const clock = clockAt('2026-09-30T23:30:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Deadlift');
-    await tracker.logSet(entry.id, { weight: 140, reps: 3 });
+    await tracker.logSet(entry.id, { weight: 140, reps: 3 }, 'kg');
     clock.setTime('2026-10-01T00:45:00-04:00');
     await tracker.finishWorkout(workout.id);
 
@@ -61,15 +61,15 @@ describe('A day', () => {
     const clock = clockAt('2026-09-12T07:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const morning = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(morning.entry.id, { weight: 60, reps: 10, isWarmUp: true });
-    await tracker.logSet(morning.entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(morning.entry.id, { weight: 60, reps: 10, isWarmUp: true }, 'kg');
+    await tracker.logSet(morning.entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.saveEntryNotes(morning.entry.id, 'Belt on');
     clock.setTime('2026-09-12T08:00:00-04:00');
     await tracker.finishWorkout(morning.workout.id);
     clock.setTime('2026-09-12T18:00:00-04:00');
     const evening = await startWorkoutWithEach(tracker, ['Bench Press', 'Pull-up']);
-    await tracker.logSet(evening.entries[0].id, { weight: 60, reps: 8 });
-    await tracker.logSet(evening.entries[1].id, { weight: null, reps: 8 });
+    await tracker.logSet(evening.entries[0].id, { weight: 60, reps: 8 }, 'kg');
+    await tracker.logSet(evening.entries[1].id, { weight: null, reps: 8 }, 'kg');
     clock.setTime('2026-09-12T19:00:00-04:00');
     await tracker.finishWorkout(evening.workout.id);
 
@@ -110,7 +110,7 @@ describe('A day', () => {
     await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
     clock.setTime('2026-09-12T07:00:00-04:00');
     const { workout: recorded, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(recorded.id);
     clock.setTime('2026-09-12T12:00:00-04:00');
     const discarded = await tracker.startWorkout();

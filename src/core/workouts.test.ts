@@ -60,7 +60,7 @@ describe('Workouts', () => {
     const clock = clockAt('2026-09-12T23:30:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     clock.setTime('2026-09-13T00:45:00-04:00');
     await tracker.finishWorkout(workout.id);
@@ -76,7 +76,7 @@ describe('Workouts', () => {
     const clock = clockAt('2026-09-12T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     clock.setTime('2026-09-12T19:00:00-04:00');
     await tracker.finishWorkout(workout.id);
 
@@ -100,8 +100,8 @@ describe('Workouts', () => {
   it("can't be finished once every Set logged has been deleted or gone with its Exercise", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entries } = await startWorkoutWithEach(tracker, ['Squat', 'Bench Press']);
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
-    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 });
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 }, 'kg');
+    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 }, 'kg');
     const [squatSet] = await setsOf(tracker, workout.id);
     await tracker.deleteSet(squatSet.id);
     await tracker.removeExerciseFromWorkout(entries[1].id);
@@ -114,7 +114,7 @@ describe('Workouts', () => {
   it('can be finished with only warm-ups logged', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 60, reps: 10, isWarmUp: true });
+    await tracker.logSet(entry.id, { weight: 60, reps: 10, isWarmUp: true }, 'kg');
 
     await tracker.finishWorkout(workout.id);
 
@@ -124,7 +124,7 @@ describe('Workouts', () => {
   it('are found as the Workout in progress until finished', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     expect((await tracker.getWorkoutInProgress())?.id).toBe(workout.id);
     await tracker.finishWorkout(workout.id);
@@ -135,8 +135,8 @@ describe('Workouts', () => {
     const database = createTestDatabase();
     const tracker = createTracker(database);
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 }, 'kg');
 
     // A new core on the same database, as after the app is killed and reopened.
     const reopened = createTracker(database);
@@ -178,9 +178,9 @@ describe('Sets', () => {
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     clock.setTime('2026-09-12T18:03:00-04:00');
-    await tracker.logSet(entry.id, { weight: 62.5, reps: 6 });
+    await tracker.logSet(entry.id, { weight: 62.5, reps: 6 }, 'kg');
 
     expect(await setsOf(tracker, workout.id)).toEqual([
       {
@@ -204,14 +204,12 @@ describe('Sets', () => {
     ]);
   });
 
-  it('keep the weight exactly as entered, in the display unit at that moment', async () => {
+  it('keep the weight exactly as entered, in the unit it was entered in', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
 
-    await tracker.setDisplayUnit('lb');
-    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
-    await tracker.setDisplayUnit('kg');
-    await tracker.logSet(entry.id, { weight: 60, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 }, 'lb');
+    await tracker.logSet(entry.id, { weight: 60, reps: 5 }, 'kg');
 
     const logged = await setsOf(tracker, workout.id);
     expect(logged.map(set => [set.weight, set.weightUnit])).toEqual([
@@ -225,7 +223,7 @@ describe('Sets', () => {
     const tracker = createTracker(database);
     const { workout, entry } = await startWorkoutWith(tracker, 'Deadlift');
 
-    await tracker.logSet(entry.id, { weight: 140, reps: 3 });
+    await tracker.logSet(entry.id, { weight: 140, reps: 3 }, 'kg');
 
     // Another core on the same database, as if the app were reopened.
     const reopened = createTracker(database);
@@ -236,7 +234,7 @@ describe('Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { entry } = await startWorkoutWith(tracker, 'Squat');
 
-    await expect(tracker.logSet(entry.id, { weight: 100, reps: 0 })).rejects.toThrow(
+    await expect(tracker.logSet(entry.id, { weight: 100, reps: 0 }, 'kg')).rejects.toThrow(
       'A Set needs a whole number of reps, at least 1',
     );
   });
@@ -245,7 +243,7 @@ describe('Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { entry } = await startWorkoutWith(tracker, 'Squat');
 
-    await expect(tracker.logSet(entry.id, { weight: Number.NaN, reps: 5 })).rejects.toThrow(
+    await expect(tracker.logSet(entry.id, { weight: Number.NaN, reps: 5 }, 'kg')).rejects.toThrow(
       "A Set's weight must be a number",
     );
   });
@@ -253,7 +251,7 @@ describe('Sets', () => {
   it('can only be logged for an Exercise in a Workout', async () => {
     const tracker = createTracker(createTestDatabase());
 
-    await expect(tracker.logSet('no-such-entry', { weight: 60, reps: 5 })).rejects.toThrow(
+    await expect(tracker.logSet('no-such-entry', { weight: 60, reps: 5 }, 'kg')).rejects.toThrow(
       'No such Exercise in a Workout',
     );
   });
@@ -262,7 +260,7 @@ describe('Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await expect(tracker.logSet(entry.id, { weight: null, reps: 5 })).rejects.toThrow(
+    await expect(tracker.logSet(entry.id, { weight: null, reps: 5 }, 'kg')).rejects.toThrow(
       'A weighted Set needs a weight',
     );
   });
@@ -271,7 +269,7 @@ describe('Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await expect(tracker.logSet(entry.id, { weight: -20, reps: 5 })).rejects.toThrow(
+    await expect(tracker.logSet(entry.id, { weight: -20, reps: 5 }, 'kg')).rejects.toThrow(
       'Only bodyweight Sets can have a negative weight',
     );
   });
@@ -282,7 +280,7 @@ describe('Bodyweight Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
 
-    await tracker.logSet(entry.id, { weight: null, reps: 8 });
+    await tracker.logSet(entry.id, { weight: null, reps: 8 }, 'kg');
 
     expect(await setsOf(tracker, workout.id)).toMatchObject([{ weight: null, reps: 8 }]);
   });
@@ -292,7 +290,7 @@ describe('Bodyweight Sets', () => {
     await tracker.setDisplayUnit('lb');
     const { workout, entry } = await startWorkoutWith(tracker, 'Dip');
 
-    await tracker.logSet(entry.id, { weight: 25, reps: 6 });
+    await tracker.logSet(entry.id, { weight: 25, reps: 6 }, 'lb');
 
     expect(await setsOf(tracker, workout.id)).toMatchObject([
       { weight: 25, weightUnit: 'lb', reps: 6 },
@@ -303,7 +301,7 @@ describe('Bodyweight Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
 
-    await tracker.logSet(entry.id, { weight: -20, reps: 10 });
+    await tracker.logSet(entry.id, { weight: -20, reps: 10 }, 'kg');
 
     expect(await setsOf(tracker, workout.id)).toMatchObject([
       { weight: -20, weightUnit: 'kg', reps: 10 },
@@ -315,8 +313,8 @@ describe('Logged Sets', () => {
   it('can be corrected, keeping their place in the order', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
-    await tracker.logSet(entry.id, { weight: 62.5, reps: 6 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 62.5, reps: 6 }, 'kg');
     const [first] = await setsOf(tracker, workout.id);
 
     await tracker.editSet(first.id, { weight: 65, reps: 7 });
@@ -331,7 +329,7 @@ describe('Logged Sets', () => {
     const tracker = createTracker(createTestDatabase());
     await tracker.setDisplayUnit('lb');
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 }, 'lb');
     const [logged] = await setsOf(tracker, workout.id);
 
     await tracker.setDisplayUnit('kg');
@@ -343,7 +341,7 @@ describe('Logged Sets', () => {
   it('follow the same rules when corrected as when logged', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
 
     await expect(tracker.editSet(logged.id, { weight: null, reps: 8 })).rejects.toThrow(
@@ -355,7 +353,7 @@ describe('Logged Sets', () => {
   it('of a bodyweight Exercise can be corrected to plain bodyweight or to assisted', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Pull-up');
-    await tracker.logSet(entry.id, { weight: 10, reps: 6 });
+    await tracker.logSet(entry.id, { weight: 10, reps: 6 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
 
     await tracker.editSet(logged.id, { weight: null, reps: 6 });
@@ -367,13 +365,13 @@ describe('Logged Sets', () => {
   it('can be deleted, leaving the rest in order with new Sets after them', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 12 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 12 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 }, 'kg');
     const [, typo] = await setsOf(tracker, workout.id);
 
     await tracker.deleteSet(typo.id);
-    await tracker.logSet(entry.id, { weight: 60, reps: 6 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 6 }, 'kg');
 
     expect(weightsAndReps(await setsOf(tracker, workout.id))).toEqual([
       [60, 8],
@@ -385,7 +383,7 @@ describe('Logged Sets', () => {
   it("can't be changed once deleted", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
     await tracker.deleteSet(logged.id);
 
@@ -399,7 +397,7 @@ describe('Same as last set', () => {
     const clock = clockAt('2026-09-13T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     clock.setTime('2026-09-13T18:03:00-04:00');
     await tracker.logSameAsLastSet(entry.id);
@@ -415,8 +413,8 @@ describe('Same as last set', () => {
   it('copies the last Set still there, not one that was deleted', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
-    await tracker.logSet(entry.id, { weight: 70, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 70, reps: 5 }, 'kg');
     const [, mistake] = await setsOf(tracker, workout.id);
     await tracker.deleteSet(mistake.id);
 
@@ -432,7 +430,7 @@ describe('Same as last set', () => {
     const tracker = createTracker(createTestDatabase());
     await tracker.setDisplayUnit('lb');
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 135, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 135, reps: 5 }, 'lb');
     await tracker.setDisplayUnit('kg');
 
     await tracker.logSameAsLastSet(entry.id);
@@ -456,8 +454,8 @@ describe('Warm-up Sets', () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
 
-    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true });
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true }, 'kg');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     expect((await setsOf(tracker, workout.id)).map(set => set.isWarmUp)).toEqual([true, false]);
   });
@@ -465,7 +463,7 @@ describe('Warm-up Sets', () => {
   it('can be marked as warm-ups and back when corrected', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 40, reps: 10 });
+    await tracker.logSet(entry.id, { weight: 40, reps: 10 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
     const warmUps = async () => (await setsOf(tracker, workout.id)).map(set => set.isWarmUp);
 
@@ -478,7 +476,7 @@ describe('Warm-up Sets', () => {
   it('are copied as warm-ups by "same as last set"', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true });
+    await tracker.logSet(entry.id, { weight: 40, reps: 10, isWarmUp: true }, 'kg');
 
     await tracker.logSameAsLastSet(entry.id);
 
@@ -504,7 +502,7 @@ describe('Exercises in a Workout', () => {
       'Bench Press',
       'Barbell Row',
     ]);
-    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 });
+    await tracker.logSet(entries[1].id, { weight: 60, reps: 8 }, 'kg');
 
     await tracker.removeExerciseFromWorkout(entries[1].id);
 
@@ -514,13 +512,13 @@ describe('Exercises in a Workout', () => {
   it('take their Sets with them when removed', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
 
     await tracker.removeExerciseFromWorkout(entry.id);
 
     await expect(tracker.editSet(logged.id, { weight: 65, reps: 8 })).rejects.toThrow('No such Set');
-    await expect(tracker.logSet(entry.id, { weight: 60, reps: 8 })).rejects.toThrow(
+    await expect(tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg')).rejects.toThrow(
       'No such Exercise in a Workout',
     );
   });
@@ -559,7 +557,7 @@ describe('Exercises in a Workout', () => {
   it("can't be swapped once a Set is logged for them", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const dumbbellBench = await findExerciseByName(tracker, 'Dumbbell Bench Press');
 
     await expect(tracker.swapExercise(entry.id, dumbbellBench.id)).rejects.toThrow(
@@ -571,7 +569,7 @@ describe('Exercises in a Workout', () => {
   it('can be swapped again once their Sets are all deleted', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const [mistake] = await setsOf(tracker, workout.id);
     await tracker.deleteSet(mistake.id);
     const dumbbellBench = await findExerciseByName(tracker, 'Dumbbell Bench Press');
@@ -586,7 +584,7 @@ describe('Discarded Workouts', () => {
   it('are no longer in progress and are never found again', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     const [logged] = await setsOf(tracker, workout.id);
 
     await tracker.discardWorkout(workout.id);

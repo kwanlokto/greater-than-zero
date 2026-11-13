@@ -58,7 +58,11 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   async function logSet() {
     const { values } = next;
     if (!values) return;
-    if (await runOrAlert("Couldn't log the Set", () => tracker.logSet(entry.id, values))) {
+    // In the unit its box showed.
+    const logged = await runOrAlert("Couldn't log the Set", () =>
+      tracker.logSet(entry.id, values, next.fields.unit),
+    );
+    if (logged) {
       next.clearReps();
     }
   }

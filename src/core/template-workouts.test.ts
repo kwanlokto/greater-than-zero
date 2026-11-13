@@ -76,11 +76,11 @@ describe('Starting a Workout from a Template', () => {
     const tracker = createTracker(createTestDatabase());
     const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
     const { workout: last, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 40, reps: 15, isWarmUp: true });
-    await tracker.logSet(entry.id, { weight: 60, reps: 12 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 3 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
-    await tracker.logSet(entry.id, { weight: 60, reps: 9 });
+    await tracker.logSet(entry.id, { weight: 40, reps: 15, isWarmUp: true }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 12 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 3 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 60, reps: 9 }, 'kg');
     const mistake = (await setsOf(tracker, last.id))[2];
     await tracker.deleteSet(mistake.id);
     await tracker.finishWorkout(last.id);

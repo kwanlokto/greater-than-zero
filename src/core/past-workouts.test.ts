@@ -17,8 +17,8 @@ describe('A finished Workout', () => {
     const clock = clockAt('2026-09-12T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 60, reps: 10 });
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     clock.setTime('2026-09-12T19:00:00-04:00');
     await tracker.finishWorkout(workout.id);
     const [warmUp, working] = await setsOf(tracker, workout.id);
@@ -30,7 +30,7 @@ describe('A finished Workout', () => {
     await tracker.saveEntryNotes(entry.id, 'Knees caved on the last one');
     const legPress = await findExerciseByName(tracker, 'Leg Press');
     const added = await tracker.addExerciseToWorkout(workout.id, legPress.id);
-    await tracker.logSet(added.id, { weight: 180, reps: 10 });
+    await tracker.logSet(added.id, { weight: 180, reps: 10 }, 'kg');
 
     expect(await tracker.getWorkout(workout.id)).toMatchObject({
       localDate: '2026-09-12',
@@ -56,9 +56,9 @@ describe('A finished Workout', () => {
   it('can lose Sets and Exercises while a Set remains', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entries } = await startWorkoutWithEach(tracker, ['Squat', 'Leg Press', 'Lunge']);
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 4 });
-    await tracker.logSet(entries[1].id, { weight: 180, reps: 10 });
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 }, 'kg');
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 4 }, 'kg');
+    await tracker.logSet(entries[1].id, { weight: 180, reps: 10 }, 'kg');
     await tracker.finishWorkout(workout.id);
     const [, squatTypo] = await setsOf(tracker, workout.id);
 
@@ -84,8 +84,8 @@ describe('A finished Workout', () => {
   it('keeps its last Sets when the Exercise holding them all would be removed', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entries } = await startWorkoutWithEach(tracker, ['Squat', 'Leg Press']);
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
-    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 });
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 }, 'kg');
+    await tracker.logSet(entries[0].id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     await expect(tracker.removeExerciseFromWorkout(entries[0].id)).rejects.toThrow(
@@ -137,7 +137,7 @@ describe('Deleting a finished Workout', () => {
   it("isn't how a Workout in progress goes: that's discarding", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat');
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
 
     await expect(tracker.deleteWorkout(workout.id)).rejects.toThrow('No such finished Workout');
     expect((await tracker.getWorkoutInProgress())?.id).toBe(workout.id);
@@ -151,7 +151,7 @@ describe('A Workout added to a past date', () => {
     });
 
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat', { localDate: '2026-09-10' });
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
     expect(await tracker.getTrainingDays('2026-09')).toEqual(['2026-09-10']);
@@ -166,7 +166,7 @@ describe('A Workout added to a past date', () => {
     });
     const { workout, entry } = await startWorkoutWith(tracker, 'Squat', { localDate: '2026-09-10' });
 
-    await tracker.logSet(entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.logSameAsLastSet(entry.id);
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toBeNull();
@@ -177,12 +177,12 @@ describe('A Workout added to a past date', () => {
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const live = await startWorkoutWith(tracker, 'Squat');
     clock.setTime('2026-09-13T00:15:00-04:00');
-    await tracker.logSet(live.entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(live.entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(live.workout.id);
     clock.setTime('2026-09-14T20:00:00-04:00');
     await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
     const added = await startWorkoutWith(tracker, 'Squat', { localDate: '2026-09-12' });
-    await tracker.logSet(added.entry.id, { weight: 100, reps: 5 });
+    await tracker.logSet(added.entry.id, { weight: 100, reps: 5 }, 'kg');
     await tracker.finishWorkout(added.workout.id);
 
     const backfilledOn = async (localDate: string) =>
@@ -212,7 +212,7 @@ describe('A Workout added to a past date', () => {
     await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
     clock.setTime('2026-09-14T20:00:00-04:00');
     const added = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
-    await tracker.logSet(added.entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(added.entry.id, { weight: 60, reps: 8 }, 'kg');
     await tracker.finishWorkout(added.workout.id);
 
     clock.setTime('2026-09-15T18:00:00-04:00');
@@ -243,7 +243,7 @@ describe('A Workout added to a past date', () => {
     const live = await doWorkout(tracker, 'Bench Press', [{ weight: 65, reps: 5 }]);
     clock.setTime('2026-09-14T20:00:00-04:00');
     const added = await startWorkoutWith(tracker, 'Bench Press', { localDate: '2026-09-10' });
-    await tracker.logSet(added.entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(added.entry.id, { weight: 60, reps: 8 }, 'kg');
     await tracker.finishWorkout(added.workout.id);
 
     clock.setTime('2026-09-15T18:00:00-04:00');

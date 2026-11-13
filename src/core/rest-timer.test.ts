@@ -8,7 +8,7 @@ describe('Rest', () => {
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
       new Date('2026-09-13T18:02:00-04:00'),
@@ -22,7 +22,7 @@ describe('Rest', () => {
     await tracker.setExerciseDefaultRest(benchPress.id, 180);
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     expect((await tracker.getExercise(benchPress.id))?.defaultRestSeconds).toBe(180);
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
@@ -34,10 +34,10 @@ describe('Rest', () => {
     const clock = clockAt('2026-09-13T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     clock.setTime('2026-09-13T18:01:30-04:00');
-    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 }, 'kg');
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
       new Date('2026-09-13T18:03:30-04:00'),
@@ -48,7 +48,7 @@ describe('Rest', () => {
     const clock = clockAt('2026-09-13T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     const restEndsAt = async () => (await tracker.getWorkout(workout.id))?.restEndsAt;
 
     await tracker.moveRestEnd(workout.id, 15);
@@ -62,7 +62,7 @@ describe('Rest', () => {
     const clock = clockAt('2026-09-13T18:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     clock.setTime('2026-09-13T18:02:30-04:00');
     await tracker.logSameAsLastSet(entry.id);
@@ -78,7 +78,7 @@ describe('Rest', () => {
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
     clock.setTime('2026-09-13T00:10:00-04:00');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
       new Date('2026-09-13T00:12:00-04:00'),
@@ -88,10 +88,10 @@ describe('Rest', () => {
   it("doesn't start for a Set added to a finished Workout", async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
     await tracker.finishWorkout(workout.id);
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 7 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 7 }, 'kg');
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toBeNull();
   });
@@ -101,7 +101,7 @@ describe('Rest', () => {
     const database = createTestDatabase();
     const tracker = createTracker(database, { now: clock.now });
     const { entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     const reopened = createTracker(database, { now: clock.now });
 
@@ -113,7 +113,7 @@ describe('Rest', () => {
   it('ends when the Workout is finished', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     await tracker.finishWorkout(workout.id);
 
@@ -161,7 +161,7 @@ describe('Rest lengths', () => {
     await tracker.setExerciseDefaultRest(benchPress.id, null);
     const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press');
 
-    await tracker.logSet(entry.id, { weight: 60, reps: 8 });
+    await tracker.logSet(entry.id, { weight: 60, reps: 8 }, 'kg');
 
     expect((await tracker.getWorkout(workout.id))?.restEndsAt).toEqual(
       new Date('2026-09-13T18:02:00-04:00'),
