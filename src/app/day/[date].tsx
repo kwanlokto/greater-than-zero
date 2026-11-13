@@ -1,7 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { formatBodyWeight } from '@/body-weight-labels';
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
@@ -10,7 +9,7 @@ import { MealCard } from '@/components/meal-card';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { WorkoutCard } from '@/components/workout-card';
-import { canAddWorkoutOn, localDateOf } from '@/core/tracker';
+import { canAddWorkoutOn, formatWeight, localDateOf } from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday, formatTimeOfDay } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
@@ -121,7 +120,7 @@ export default function DayScreen() {
         <Section title="Weigh-in">
           {day.weighIn ? (
             <Card style={styles.weighIn}>
-              <AppText variant="heading">{formatBodyWeight(day.weighIn.displayWeight)}</AppText>
+              <AppText variant="heading">{formatWeight(day.weighIn.displayWeight)}</AppText>
               <AppText variant="caption" tone="muted">
                 at {formatTimeOfDay(day.weighIn.weighedAt)}
               </AppText>

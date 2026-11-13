@@ -1,7 +1,7 @@
 // The lifter's body weight: one Weigh-in a day, and its trend.
 
 import type { WeightUnit } from './schema';
-import type { Weight } from './tracker';
+import type { Weight } from './weights';
 
 // The lifter's body weight on a day.
 export type WeighIn = {

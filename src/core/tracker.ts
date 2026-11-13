@@ -55,6 +55,16 @@ import {
 } from './progress';
 import * as schema from './schema';
 import {
+  convertWeight,
+  displayedWeight,
+  displayWeightOf,
+  isAtLeast,
+  isHeavier,
+  lightestOf,
+  roundedForDisplay,
+  type Weight,
+} from './weights';
+import {
   exerciseEntries,
   exercises,
   foodItems,
@@ -108,6 +118,7 @@ export {
   type SavedFoodValues,
   type TimeOfDay,
 } from './food';
+export { describeLoad, describeSet, formatWeight, type Weight } from './weights';
 export {
   muscleGroups,
   trackingTypes,
@@ -153,11 +164,6 @@ export type SetValues = {
   reps: number;
   // A working Set unless marked as a warm-up.
   isWarmUp?: boolean;
-};
-
-export type Weight = {
-  value: number;
-  unit: WeightUnit;
 };
 
 export type WorkoutSet = {
@@ -366,36 +372,6 @@ const exerciseQueryColumns = {
   isCustom: true,
   defaultRestSeconds: true,
 } as const;
-
-const kilogramsPerPound = 0.45359237;
-
-// A weight in another unit, at full precision.
-function convertWeight(weight: number, from: WeightUnit, to: WeightUnit): number {
-  if (from === to) return weight;
-  return from === 'lb' ? weight * kilogramsPerPound : weight / kilogramsPerPound;
-}
-
-// Converts for showing only; records keep the value and unit as entered.
-function displayWeightOf(
-  weight: number | null,
-  unit: WeightUnit,
-  displayUnit: WeightUnit,
-): Weight | null {
-  if (weight === null) return null;
-  return displayedWeight(weight, unit, displayUnit);
-}
-
-// The same, for a weight that's always there.
-function displayedWeight(weight: number, unit: WeightUnit, displayUnit: WeightUnit): Weight {
-  return { value: roundedForDisplay(convertWeight(weight, unit, displayUnit)), unit: displayUnit };
-}
-
-// A weight as shown: to one decimal place, halves away from zero, so help from
-// an assisted machine rounds the same way as added weight.
-function roundedForDisplay(weight: number): number {
-  const tenths = Math.round(Math.abs(weight) * 10) / 10;
-  return weight < 0 ? -tenths : tenths;
-}
 
 function withDisplayWeight(
   set: Omit<WorkoutSet, 'displayWeight'>,
@@ -647,36 +623,6 @@ function targetOf(row: typeof templateExercises.$inferSelect): TargetValues {
     weight: row.targetWeight,
     weightUnit: row.targetWeightUnit,
   };
-}
-
-// For comparing weights entered in either unit. Plain bodyweight, stored as
-// null, is no added weight.
-function kilogramsOf({ weight, weightUnit }: Weighed): number {
-  return convertWeight(weight ?? 0, weightUnit, 'kg');
-}
-
-// Weights in different units closer than this, in kilograms, are the same
-// weight: a Set entered in kilograms against a Target in pounds rarely converts
-// exactly (135 lb is 61.235 kg, loaded as 61.25), and no plate is this small.
-const sameWeightTolerance = 0.05;
-
-type Weighed = Pick<WorkoutSet, 'weight' | 'weightUnit'>;
-
-// Plain bodyweight, stored as null, is no added weight. Weights in one unit
-// compare exactly; across units, allowing for conversion (sameWeightTolerance).
-function isHeavier(weight: Weighed, than: Weighed): boolean {
-  if (weight.weightUnit === than.weightUnit) return (weight.weight ?? 0) > (than.weight ?? 0);
-  return kilogramsOf(weight) - kilogramsOf(than) >= sameWeightTolerance;
-}
-
-function isAtLeast(weight: Weighed, than: Weighed): boolean {
-  return !isHeavier(than, weight);
-}
-
-function lightestOf(weighed: WorkoutSet[]): WorkoutSet {
-  return weighed.reduce((lightestSoFar, next) =>
-    kilogramsOf(next) < kilogramsOf(lightestSoFar) ? next : lightestSoFar,
-  );
 }
 
 function workingSetsOf(loggedSets: WorkoutSet[]): WorkoutSet[] {

@@ -1,7 +1,6 @@
 import { ask, tell, type Question } from '@/ask';
-import type { FinishSummary } from '@/core/tracker';
+import { describeLoad, type FinishSummary } from '@/core/tracker';
 import { tracker } from '@/database';
-import { describeTargetWeight } from '@/template-labels';
 
 // After a Workout from a Template finishes, asks about each of its finish
 // summary's offers in turn: updating the Template's Exercise list, then raising
@@ -24,8 +23,8 @@ export async function askFinishOffers(workoutId: string, summary: FinishSummary)
   }
   for (const targetUpdate of targetUpdateOffers) {
     const { trackingType, name } = targetUpdate.exercise;
-    const current = describeTargetWeight(trackingType, targetUpdate.target);
-    const proposed = describeTargetWeight(trackingType, targetUpdate);
+    const current = describeLoad(trackingType, targetUpdate.target);
+    const proposed = describeLoad(trackingType, targetUpdate);
     await offer(
       {
         title: `Raise the ${name} target?`,

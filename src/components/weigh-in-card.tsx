@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { formatBodyWeight } from '@/body-weight-labels';
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Input } from '@/components/input';
-import { problemWithWeighIn, type WeighIn, type WeightUnit } from '@/core/tracker';
+import { formatWeight, problemWithWeighIn, type WeighIn, type WeightUnit } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
 import { parseDecimal } from '@/numbers';
 import { space } from '@/theme';
@@ -39,7 +38,7 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
     return (
       <Card style={styles.recorded}>
         <View style={styles.reading}>
-          <AppText variant="title">{formatBodyWeight(weighIn.displayWeight)}</AppText>
+          <AppText variant="title">{formatWeight(weighIn.displayWeight)}</AppText>
           <AppText variant="caption" tone="muted">
             at {formatTimeOfDay(weighIn.weighedAt)}
           </AppText>

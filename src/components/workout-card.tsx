@@ -3,8 +3,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
-import { setLabels, setPresentationFor } from '@/components/set-fields';
-import type { ExerciseEntry, Workout } from '@/core/tracker';
+import { setLabels } from '@/components/set-fields';
+import { describeSet, type ExerciseEntry, type Workout } from '@/core/tracker';
 import { radius, space, useAppTheme } from '@/theme';
 import { workoutTimes } from '@/workout-labels';
 
@@ -39,7 +39,6 @@ export function WorkoutCard({ workout, onPress }: Props) {
 // warm-up, then 1, 2… for working Sets.
 function RecordedExerciseEntry({ entry }: { entry: ExerciseEntry }) {
   const { colors } = useAppTheme();
-  const { describe } = setPresentationFor[entry.exercise.trackingType];
   const labels = setLabels(entry.sets);
 
   return (
@@ -61,7 +60,7 @@ function RecordedExerciseEntry({ entry }: { entry: ExerciseEntry }) {
               <AppText variant="label" tone="muted">
                 {labels[index]}
               </AppText>
-              <AppText variant="caption">{describe(set)}</AppText>
+              <AppText variant="caption">{describeSet(entry.exercise.trackingType, set)}</AppText>
             </View>
           ))}
         </View>

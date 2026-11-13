@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 
-import { formatBodyWeight } from '@/body-weight-labels';
 import { describeChart } from '@/chart-labels';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
@@ -8,6 +7,7 @@ import { LineChart } from '@/components/line-chart';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
+import { formatWeight } from '@/core/tracker';
 import { tracker } from '@/database';
 import { exerciseDetails } from '@/exercise-labels';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -21,7 +21,7 @@ export default function ProgressScreen() {
   const trendPoints = trend
     ? trend.points.map(point => ({
         ...point,
-        label: formatBodyWeight({ value: point.displayValue, unit: trend.unit }),
+        label: formatWeight({ value: point.displayValue, unit: trend.unit }),
       }))
     : [];
 

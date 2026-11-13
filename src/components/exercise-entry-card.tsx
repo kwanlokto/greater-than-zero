@@ -20,6 +20,7 @@ import {
 import { Toggle } from '@/components/toggle';
 import {
   canSwapExercise,
+  describeSet,
   type ExerciseEntry,
   type PlannedSet,
   type TrackingType,
@@ -256,7 +257,7 @@ function SetRow({ set, label, trackingType, onPress }: SetRowProps) {
     >
       <SetBadge kind="done" label={label} />
       <AppText variant="bodyStrong" style={styles.setText}>
-        {setPresentationFor[trackingType].describe(set)}
+        {describeSet(trackingType, set)}
       </AppText>
       <Ionicons name="create-outline" size={20} color={colors.textFaint} />
     </Pressable>
@@ -351,7 +352,7 @@ function LastTimeLine({ entry }: { entry: ExerciseEntry }) {
   const lastTime = useTrackerQuery(() => tracker.getLastTime(id), [id]);
   if (!lastTime) return null;
 
-  const { describe } = setPresentationFor[exercise.trackingType];
+  const describe = (set: WorkoutSet) => describeSet(exercise.trackingType, set);
   return (
     <View style={styles.lastTime}>
       <Ionicons

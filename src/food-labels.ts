@@ -27,9 +27,13 @@ function grams(value: number): string {
   return String(roundedIn('g', value));
 }
 
-// An amount of food to at most two decimal places, e.g. "0.25".
+// An amount of food to at most two decimal places, e.g. 0.25.
+export function roundedAmount(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function amountOf(value: number): string {
-  return String(Math.round(value * 100) / 100);
+  return String(roundedAmount(value));
 }
 
 // "520 kcal · P 40 g · C 50 g · F 18 g".
