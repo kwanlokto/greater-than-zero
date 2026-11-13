@@ -1,3 +1,10 @@
+import { and, asc, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
+
+import { localDateOf } from './local-dates';
+import { notDeleted, positionAfterLast, softDelete, stillThere } from './records';
+import { foodItems, meals, savedFoods } from './schema';
+import type { TrackerDatabase } from './tracker';
+
 // Meals and the Food items they're made of.
 
 // Calories, and the grams of each macro.
@@ -294,4 +301,306 @@ export function dailyTotalsOf(meals: Meal[], targets: MacroTargets): DailyTotals
     carbs: progressOf('carbs'),
     fat: progressOf('fat'),
   };
+}
+
+// Meals go in order by date, then by when they were eaten; latestMealFirst is
+// the other way round. Meals added at the same moment go in the order added.
+const mealOrder = [asc(meals.localDate), asc(meals.eatenAt), asc(meals.createdAt)];
+
+const latestMealFirst = [desc(meals.localDate), desc(meals.eatenAt), desc(meals.createdAt)];
+
+// A Saved food's columns, for selecting one.
+const savedFoodColumns = {
+  id: savedFoods.id,
+  name: savedFoods.name,
+  servingAmount: savedFoods.servingAmount,
+  servingUnit: savedFoods.servingUnit,
+  calories: savedFoods.calories,
+  protein: savedFoods.protein,
+  carbs: savedFoods.carbs,
+  fat: savedFoods.fat,
+};
+
+type FoodDependencies = {
+  db: TrackerDatabase;
+  now: () => Date;
+  getMacroTargets: () => Promise<MacroTargets>;
+};
+
+export function createFood({ db, now, getMacroTargets }: FoodDependencies) {
+  // The Meals matching `where`, in the order they were eaten, or the latest
+  // first, up to `limit`, each with its Food items in the order they were
+  // added. Deleted ones are left out.
+  async function findMeals(
+    where: SQL | undefined,
+    { latestFirst = false, limit }: { latestFirst?: boolean; limit?: number } = {},
+  ): Promise<Meal[]> {
+    const found = await db.query.meals.findMany({
+      where: and(where, notDeleted(meals)),
+      orderBy: latestFirst ? latestMealFirst : mealOrder,
+      limit,
+      columns: { id: true, localDate: true, eatenAt: true, name: true },
+      with: {
+        items: {
+          where: notDeleted(foodItems),
+          orderBy: asc(foodItems.position),
+          columns: {
+            id: true,
+            name: true,
+            quantity: true,
+            unit: true,
+            calories: true,
+            protein: true,
+            carbs: true,
+            fat: true,
+            savedFoodId: true,
+          },
+        },
+      },
+    });
+    return found.map(({ items, ...meal }) => {
+      const foodItems = items.map(withCaloriesWorkedOut);
+      return { ...meal, items: foodItems, totals: totalsOf(foodItems) };
+    });
+  }
+
+  // Adds a Food item, already checked, after the Meal's others, as part of a
+  // larger transaction.
+  function insertFoodItem(
+    tx: TrackerDatabase,
+    mealId: string,
+    values: FoodItemValues,
+    savedFoodId: string | null = null,
+  ): { id: string } {
+    const meal = tx.select({ id: meals.id }).from(meals).where(stillThere(meals, mealId)).get();
+    if (!meal) throw new Error('No such Meal');
+    const position = positionAfterLast(
+      tx,
+      foodItems,
+      foodItems.position,
+      eq(foodItems.mealId, mealId),
+    );
+    return tx
+      .insert(foodItems)
+      .values({ mealId, position, ...values, savedFoodId })
+      .returning({ id: foodItems.id })
+      .get();
+  }
+
+  // The Saved foods matching `where`, by name. Deleted ones are left out.
+  async function findSavedFoods(where: SQL | undefined): Promise<SavedFood[]> {
+    const found = await db
+      .select(savedFoodColumns)
+      .from(savedFoods)
+      .where(and(where, notDeleted(savedFoods)))
+      .orderBy(sql`${savedFoods.name} COLLATE NOCASE`);
+    return found.map(withCaloriesWorkedOut);
+  }
+
+  // The Meals added on a local date, as YYYY-MM-DD, in the order eaten.
+  function mealsOn(localDate: string): Promise<Meal[]> {
+    return findMeals(eq(meals.localDate, localDate));
+  }
+
+  const commands = {
+    // A new Meal eaten now, on today's date, named for the time of day.
+    async createMeal(): Promise<{ id: string }> {
+      const eatenAt = now();
+      return db
+        .insert(meals)
+        .values({ localDate: localDateOf(eatenAt), eatenAt, name: defaultMealName(eatenAt) })
+        .returning({ id: meals.id })
+        .get();
+    },
+
+    async renameMeal(id: string, name: string): Promise<void> {
+      const renamed = await db
+        .update(meals)
+        .set({ name: requireMealName(name) })
+        .where(stillThere(meals, id))
+        .returning({ id: meals.id });
+      if (renamed.length === 0) throw new Error('No such Meal');
+    },
+
+    // Moves the Meal to another time on the day it's recorded on, which
+    // doesn't change.
+    async setMealTime(id: string, time: TimeOfDay): Promise<void> {
+      db.transaction(tx => {
+        const meal = tx
+          .select({ localDate: meals.localDate })
+          .from(meals)
+          .where(stillThere(meals, id))
+          .get();
+        if (!meal) throw new Error('No such Meal');
+        tx.update(meals)
+          .set({ eatenAt: timeOnDay(meal.localDate, time) })
+          .where(eq(meals.id, id))
+          .run();
+      });
+    },
+
+    // A new Meal eaten now, on today's date, with the Meal's name and a copy
+    // of each of its Food items as logged: the same amounts and macros (typed
+    // calories kept, blank ones still worked out), and the same Saved food
+    // links, so the copy counts as using them again.
+    async copyMeal(id: string): Promise<{ id: string }> {
+      const eatenAt = now();
+      return db.transaction(tx => {
+        const meal = tx.select({ name: meals.name }).from(meals).where(stillThere(meals, id)).get();
+        if (!meal) throw new Error('No such Meal');
+        const items = tx
+          .select({
+            name: foodItems.name,
+            quantity: foodItems.quantity,
+            unit: foodItems.unit,
+            calories: foodItems.calories,
+            protein: foodItems.protein,
+            carbs: foodItems.carbs,
+            fat: foodItems.fat,
+            savedFoodId: foodItems.savedFoodId,
+          })
+          .from(foodItems)
+          .where(and(eq(foodItems.mealId, id), notDeleted(foodItems)))
+          .orderBy(asc(foodItems.position))
+          .all();
+        const copy = tx
+          .insert(meals)
+          .values({ localDate: localDateOf(eatenAt), eatenAt, name: meal.name })
+          .returning({ id: meals.id })
+          .get();
+        for (const { savedFoodId, ...values } of items) {
+          insertFoodItem(tx, copy.id, values, savedFoodId);
+        }
+        return copy;
+      });
+    },
+
+    // Soft-deletes the Meal with its Food items, together.
+    async deleteMeal(id: string): Promise<void> {
+      db.transaction(tx => {
+        const deleted = softDelete(tx, meals, eq(meals.id, id), now());
+        if (deleted.length === 0) throw new Error('No such Meal');
+      });
+    },
+
+    // Adds a Food item after the Meal's others. Enforces problemWithFoodItem.
+    async addFoodItem(mealId: string, values: FoodItemValues): Promise<{ id: string }> {
+      const checked = requireValidFoodItem(values);
+      // Checked and added together, so the Meal can't be deleted in between.
+      return db.transaction(tx => insertFoodItem(tx, mealId, checked));
+    },
+
+    // Adds `quantity` of a Saved food, in its Serving unit, after the Meal's
+    // other Food items: a copy of it with its macros scaled to match (see
+    // foodItemFromSavedFood), linked to it. Enforces problemWithPortion.
+    async addSavedFoodToMeal(
+      mealId: string,
+      savedFoodId: string,
+      quantity: number,
+    ): Promise<{ id: string }> {
+      // Looked up first: the copy stands on its own, so the Saved food being
+      // deleted meanwhile leaves a Food item linked to a deleted one, which
+      // is how every Food item ends up once its Saved food is deleted.
+      const [savedFood] = await findSavedFoods(eq(savedFoods.id, savedFoodId));
+      if (!savedFood) throw new Error('No such Saved food');
+      const values = requireValidFoodItem(foodItemFromSavedFood(savedFood, quantity));
+      return db.transaction(tx => insertFoodItem(tx, mealId, values, savedFood.id));
+    },
+
+    // Enforces problemWithFoodItem. Null calories work them out from the
+    // macros again.
+    async editFoodItem(foodItemId: string, values: FoodItemValues): Promise<void> {
+      const changed = await db
+        .update(foodItems)
+        .set(requireValidFoodItem(values))
+        .where(stillThere(foodItems, foodItemId))
+        .returning({ id: foodItems.id });
+      if (changed.length === 0) throw new Error('No such Food item');
+    },
+
+    // Soft delete: the others keep their positions, so their order holds.
+    async deleteFoodItem(foodItemId: string): Promise<void> {
+      const deleted = softDelete(db, foodItems, eq(foodItems.id, foodItemId), now());
+      if (deleted.length === 0) throw new Error('No such Food item');
+    },
+
+    // The Meals added on a local date, as YYYY-MM-DD, in the order eaten.
+    getMeals(localDate: string): Promise<Meal[]> {
+      return mealsOn(localDate);
+    },
+
+    // What was eaten on a local date, as YYYY-MM-DD, against the Macro targets.
+    async getDailyTotals(localDate: string): Promise<DailyTotals> {
+      return dailyTotalsOf(await mealsOn(localDate), await getMacroTargets());
+    },
+
+    // The latest Meals from before a local date, as YYYY-MM-DD, up to `limit`,
+    // the most recent first: the ones to copy into today from.
+    getMealsBefore(localDate: string, limit: number): Promise<Meal[]> {
+      return findMeals(lt(meals.localDate, localDate), { latestFirst: true, limit });
+    },
+
+    async getMeal(id: string): Promise<Meal | undefined> {
+      const [meal] = await findMeals(eq(meals.id, id));
+      return meal;
+    },
+
+    // Enforces problemWithSavedFood.
+    async createSavedFood(values: SavedFoodValues): Promise<{ id: string }> {
+      return db
+        .insert(savedFoods)
+        .values(requireValidSavedFood(values))
+        .returning({ id: savedFoods.id })
+        .get();
+    },
+
+    // Enforces problemWithSavedFood. Food items added from it before keep the
+    // macros they were logged with.
+    async editSavedFood(id: string, values: SavedFoodValues): Promise<void> {
+      const changed = await db
+        .update(savedFoods)
+        .set(requireValidSavedFood(values))
+        .where(stillThere(savedFoods, id))
+        .returning({ id: savedFoods.id });
+      if (changed.length === 0) throw new Error('No such Saved food');
+    },
+
+    // Soft delete. Food items added from it keep their copies.
+    async deleteSavedFood(id: string): Promise<void> {
+      const deleted = softDelete(db, savedFoods, eq(savedFoods.id, id), now());
+      if (deleted.length === 0) throw new Error('No such Saved food');
+    },
+
+    // Every Saved food, by name.
+    getSavedFoods(): Promise<SavedFood[]> {
+      return findSavedFoods(undefined);
+    },
+
+    // Every Saved food, those most recently added to a Meal first, for adding
+    // food quickly; then those never added, or whose Food items were all
+    // deleted, by name.
+    async getSavedFoodsByRecentUse(): Promise<SavedFood[]> {
+      // Its last Food item still logged: rowids go up as rows are added, rows
+      // are only ever soft-deleted, and a Backup import puts them back in the
+      // same order (see writeTables), so the highest is the latest. Null, for
+      // one never used, sorts after every rowid.
+      const lastUse = sql`max(${foodItems}.rowid)`;
+      const found = await db
+        .select(savedFoodColumns)
+        .from(savedFoods)
+        // Deleting a Meal deletes its Food items too.
+        .leftJoin(foodItems, and(eq(foodItems.savedFoodId, savedFoods.id), notDeleted(foodItems)))
+        .where(notDeleted(savedFoods))
+        .groupBy(savedFoods.id)
+        .orderBy(desc(lastUse), sql`${savedFoods.name} COLLATE NOCASE`);
+      return found.map(withCaloriesWorkedOut);
+    },
+
+    async getSavedFood(id: string): Promise<SavedFood | undefined> {
+      const [savedFood] = await findSavedFoods(eq(savedFoods.id, id));
+      return savedFood;
+    },
+  };
+
+  return { commands, mealsOn };
 }

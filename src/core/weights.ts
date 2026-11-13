@@ -113,3 +113,20 @@ export function describeSet(
   const load = describeLoad(trackingType, set);
   return `${load.charAt(0).toUpperCase()}${load.slice(1)} × ${set.reps}`;
 }
+
+// Sets and Targets take the same weights: a weighted Exercise needs one, and
+// only a bodyweight Exercise's added weight can be negative, for assistance.
+export function problemWithWeight(
+  trackingType: TrackingType,
+  weight: number | null,
+  what: 'Set' | 'Target',
+): string | undefined {
+  if (weight === null) {
+    if (trackingType === 'weighted') return `A weighted ${what} needs a weight`;
+  } else if (!Number.isFinite(weight)) {
+    return `A ${what}'s weight must be a number`;
+  } else if (weight < 0 && trackingType === 'weighted') {
+    return `Only bodyweight ${what}s can have a negative weight`;
+  }
+  return undefined;
+}

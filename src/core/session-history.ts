@@ -8,15 +8,10 @@ import { and, asc, desc, eq, isNotNull, isNull, lt, lte, ne, or, sql, type SQL }
 
 import { notDeleted } from './records';
 import { exerciseEntries, exercises, sets, workouts, type WeightUnit } from './schema';
-import type {
-  LastTime,
-  Template,
-  TemplateExercise,
-  TrackerDatabase,
-  Workout,
-  WorkoutSet,
-} from './tracker';
+import type { Template, TemplateExercise } from './templates';
+import type { TrackerDatabase } from './tracker';
 import { withDisplayWeight, type EnteredWeight } from './weights';
+import type { LastTime, Workout, WorkoutSet } from './workouts';
 
 // A Workout that's neither finished nor discarded. Starting, finishing and
 // discarding all go by this, so a discarded Workout can never be finished.
@@ -96,6 +91,8 @@ type Dependencies = {
   // Undefined once it's deleted.
   findTemplate: (id: string) => Promise<Template | undefined>;
 };
+
+export type SessionHistory = ReturnType<typeof createSessionHistory>;
 
 export function createSessionHistory(
   db: TrackerDatabase,
