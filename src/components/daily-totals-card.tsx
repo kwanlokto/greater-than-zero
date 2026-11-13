@@ -18,34 +18,36 @@ const gramMacros: Macro[] = ['protein', 'carbs', 'fat'];
 
 // A day's calories and macros, each against its target when one is set: how
 // much was eaten, a bar filling towards the target, and what's left or over.
-// Calories lead; protein, carbs and fat sit side by side under them.
+// Calories lead, with what's left beside the bar; protein, carbs and fat sit
+// side by side under them.
 export function DailyTotalsCard({ totals, hint, onPress }: Props) {
-  const { colors } = useAppTheme();
-
   return (
     <Card onPress={onPress} accessibilityHint={hint} style={styles.card}>
-      <View style={styles.calories}>
-        <View style={styles.row}>
-          <AppText variant="subheading">{macroNames.calories}</AppText>
-          <AppText variant="bodyStrong">{describeEaten('calories', totals.calories)}</AppText>
-        </View>
-        <Meter progress={totals.calories} over={isOver('calories', totals.calories)} thick />
-        <Left macro="calories" progress={totals.calories} />
+      <View style={styles.row}>
+        <AppText variant="bodyStrong">{macroNames.calories}</AppText>
+        <AppText variant="bodyStrong">{describeEaten('calories', totals.calories)}</AppText>
       </View>
-      <View style={[styles.rule, { backgroundColor: colors.border }]} />
+      {totals.calories.target !== null && (
+        <View style={styles.meterRow}>
+          <Meter
+            progress={totals.calories}
+            over={isOver('calories', totals.calories)}
+            thick
+            style={styles.flex}
+          />
+          <Left macro="calories" progress={totals.calories} />
+        </View>
+      )}
       <View style={styles.columns}>
         {gramMacros.map(macro => (
           <View key={macro} style={styles.column}>
-            <AppText variant="label">{macroNames[macro]}</AppText>
-            <Meter progress={totals[macro]} over={isOver(macro, totals[macro])} />
-            <AppText
-              variant="caption"
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
+            <AppText variant="caption" tone="muted">
+              {macroNames[macro]}
+            </AppText>
+            <AppText variant="label" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
               {describeEaten(macro, totals[macro])}
             </AppText>
+            <Meter progress={totals[macro]} over={isOver(macro, totals[macro])} />
             <Left macro={macro} progress={totals[macro]} />
           </View>
         ))}
@@ -54,17 +56,16 @@ export function DailyTotalsCard({ totals, hint, onPress }: Props) {
   );
 }
 
-// A bar filling towards the target; nothing with no target to fill towards.
-// Past the target it turns to the warning colour, track and all.
-function Meter({
-  progress,
-  over,
-  thick = false,
-}: {
+type MeterProps = {
   progress: MacroProgress;
   over: boolean;
   thick?: boolean;
-}) {
+  style?: object;
+};
+
+// A bar filling towards the target; nothing with no target to fill towards.
+// Past the target it turns to the warning colour, track and all.
+function Meter({ progress, over, thick = false, style }: MeterProps) {
   const { colors } = useAppTheme();
   // Only a target above 0 to fill towards; one imported below that isn't.
   if (progress.target === null || progress.target <= 0) return null;
@@ -76,6 +77,7 @@ function Meter({
         styles.track,
         thick && styles.thick,
         { backgroundColor: over ? colors.markOverTrack : colors.markTrack },
+        style,
       ]}
     >
       <View
@@ -114,10 +116,8 @@ function Left({ macro, progress }: { macro: Macro; progress: MacroProgress }) {
 
 const styles = StyleSheet.create({
   card: {
-    gap: space.md,
-  },
-  calories: {
     gap: space.sm,
+    paddingVertical: space.md,
   },
   row: {
     flexDirection: 'row',
@@ -125,16 +125,22 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: space.sm,
   },
-  rule: {
-    height: StyleSheet.hairlineWidth,
+  meterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+  },
+  flex: {
+    flex: 1,
   },
   columns: {
     flexDirection: 'row',
     gap: space.lg,
+    marginTop: space.xs,
   },
   column: {
     flex: 1,
-    gap: space.xs,
+    gap: 3,
   },
   track: {
     height: 6,

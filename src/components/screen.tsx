@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: space.lg,
-    gap: space.xl,
+    gap: space.lg,
   },
   footer: {
     paddingHorizontal: space.lg,

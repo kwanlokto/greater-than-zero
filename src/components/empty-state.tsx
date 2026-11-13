@@ -22,7 +22,7 @@ export function EmptyState({ icon, title, message, action }: Props) {
     <View style={styles.container}>
       {icon && (
         <View style={[styles.icon, { backgroundColor: colors.field }]}>
-          <Ionicons name={icon} size={28} color={colors.textMuted} />
+          <Ionicons name={icon} size={24} color={colors.textMuted} />
         </View>
       )}
       <AppText variant="subheading" style={styles.centred}>
@@ -51,12 +51,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.sm,
     paddingHorizontal: space.xl,
-    paddingVertical: space.xxl,
+    paddingVertical: space.lg,
   },
   icon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.xs,

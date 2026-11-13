@@ -1,19 +1,23 @@
 import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
+import { AppText } from '@/components/app-text';
 import { describeChart } from '@/chart-labels';
 import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { LineChart } from '@/components/line-chart';
-import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
-import { formatWeight } from '@/core/tracker';
+import { formatWeight, type Exercise } from '@/core/tracker';
 import { tracker } from '@/database';
-import { exerciseDetails } from '@/exercise-labels';
+import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// The body-weight trend, then the Exercises to chart: those with a working Set
-// in a finished Workout, the most recently done first.
+// How many Exercises the tab shows: the most recently done, two to a row, by
+// name. The rest are a tap away, so the tab fits on one screen.
+const exercisesShown = 6;
+
+// The body-weight trend, then the Exercises most recently done, to chart.
 export default function ProgressScreen() {
   const router = useRouter();
   const trend = useTrackerQuery(() => tracker.getBodyWeightTrend(), []);
@@ -25,8 +29,12 @@ export default function ProgressScreen() {
       }))
     : [];
 
+  const openChart = (exercise: Exercise) =>
+    // navigate, not push, so a double tap can't open it twice.
+    router.navigate({ pathname: '/progress/[exerciseId]', params: { exerciseId: exercise.id } });
+
   return (
-    <Screen onTab>
+    <Screen onTab contentStyle={styles.content}>
       {trend && (
         <Section
           title="Body weight"
@@ -36,31 +44,40 @@ export default function ProgressScreen() {
               : undefined
           }
         >
-          {trendPoints.length === 0 ? (
-            <Card>
+          <Card>
+            {trendPoints.length === 0 ? (
               <EmptyState
                 icon="scale-outline"
                 title="No weigh-ins yet"
                 message="Record one on Today to see your body-weight trend."
                 action={{ label: 'Go to Today', onPress: () => router.navigate('/') }}
               />
-            </Card>
-          ) : (
-            <Card>
+            ) : (
               <LineChart
                 points={trendPoints}
+                height={150}
                 description={describeChart(
                   'Body weight',
                   { one: 'weigh-in', many: 'weigh-ins' },
                   trendPoints,
                 )}
               />
-            </Card>
-          )}
+            )}
+          </Card>
         </Section>
       )}
       {exercises && (
-        <Section title="Exercises">
+        <Section
+          title="Exercises"
+          action={
+            exercises.length > exercisesShown
+              ? {
+                  label: `All ${exercises.length}`,
+                  onPress: () => router.navigate('/progress/all'),
+                }
+              : undefined
+          }
+        >
           {exercises.length === 0 ? (
             <Card>
               <EmptyState
@@ -70,26 +87,42 @@ export default function ProgressScreen() {
               />
             </Card>
           ) : (
-            <ListGroup>
-              {exercises.map(exercise => (
-                <ListRow
+            <View style={styles.grid}>
+              {exercises.slice(0, exercisesShown).map(exercise => (
+                <Card
                   key={exercise.id}
-                  title={exercise.name}
-                  subtitle={exerciseDetails(exercise)}
+                  onPress={() => openChart(exercise)}
                   accessibilityHint="Opens its progress chart"
-                  // navigate, not push, so a double tap can't open it twice.
-                  onPress={() =>
-                    router.navigate({
-                      pathname: '/progress/[exerciseId]',
-                      params: { exerciseId: exercise.id },
-                    })
-                  }
-                />
+                  style={styles.tile}
+                >
+                  <AppText variant="bodyStrong" numberOfLines={2}>
+                    {exercise.name}
+                  </AppText>
+                </Card>
               ))}
-            </ListGroup>
+            </View>
           )}
         </Section>
       )}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  content: {
+    gap: space.md,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+  },
+  // Two to a row, each tall enough for a name on two lines.
+  tile: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 68,
+    justifyContent: 'center',
+    paddingVertical: space.md,
+  },
+});

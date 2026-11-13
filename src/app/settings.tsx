@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
-import { Card } from '@/components/card';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
@@ -12,6 +12,7 @@ import { formatCalories, formatGrams } from '@/food-labels';
 import { importBackupFromFile } from '@/import-backup-file';
 import { runOrAlert } from '@/run-or-alert';
 import { shareBackup } from '@/share-backup';
+import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
 export default function SettingsScreen() {
@@ -30,14 +31,26 @@ export default function SettingsScreen() {
       targets.carbs !== null && `C ${formatGrams(targets.carbs)} g`,
       targets.fat !== null && `F ${formatGrams(targets.fat)} g`,
     ]
+      // Wrapped, if at all, between targets: never inside one.
+      .map(part => part && part.replace(/ /g, '\u00a0'))
       .filter(Boolean)
       .join(' · ');
 
   return (
-    <Screen>
-      <Section title="Display unit">
-        <UnitPicker value={displayUnit} onChange={unit => tracker.setDisplayUnit(unit)} />
-      </Section>
+    <Screen contentStyle={styles.content}>
+      <ListGroup>
+        <ListRow
+          icon="scale"
+          title="Weight unit"
+          trailing={
+            <UnitPicker
+              compact
+              value={displayUnit}
+              onChange={unit => tracker.setDisplayUnit(unit)}
+            />
+          }
+        />
+      </ListGroup>
       <Section title="Training">
         <ListGroup>
           <ListRow
@@ -81,29 +94,47 @@ export default function SettingsScreen() {
         </ListGroup>
       </Section>
       <Section title="Backup">
-        <Card>
-          <AppText tone="muted">
-            Save all your data to a file you can keep in Drive or send by email, and bring it back
-            on a new phone.
-          </AppText>
+        <AppText variant="caption" tone="muted" style={styles.note}>
+          All your data in one file, to keep in Drive or email and restore on a new phone.
+        </AppText>
+        <View style={styles.backup}>
           <Button
             icon="share-outline"
-            label="Export backup"
+            label="Export"
+            accessibilityLabel="Export backup"
             onPress={async () => {
               await runOrAlert("Couldn't export the backup", shareBackup);
             }}
-            style={{ marginTop: 8 }}
+            style={styles.flex}
           />
           <Button
             variant="secondary"
             icon="download-outline"
-            label="Import backup"
+            label="Import"
+            accessibilityLabel="Import backup"
             onPress={async () => {
               await runOrAlert("Couldn't import the backup", importBackupFromFile);
             }}
+            style={styles.flex}
           />
-        </Card>
+        </View>
       </Section>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  content: {
+    gap: space.md,
+  },
+  note: {
+    paddingHorizontal: space.xs,
+  },
+  backup: {
+    flexDirection: 'row',
+    gap: space.md,
+  },
+  flex: {
+    flex: 1,
+  },
+});

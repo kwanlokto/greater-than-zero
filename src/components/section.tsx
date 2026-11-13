@@ -27,8 +27,8 @@ export function Section({ title, action, children }: Props) {
             label={action.label}
             icon={action.icon}
             onPress={action.onPress}
-            // Drawn 32 high to sit beside the title; touched like 48.
-            hitSlop={8}
+            // Drawn 28 high to sit beside the title; touched like 48.
+            hitSlop={10}
             style={styles.action}
           />
         )}
@@ -45,14 +45,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 32,
+    minHeight: 28,
     paddingHorizontal: space.xs,
   },
   title: {
     flex: 1,
   },
   action: {
-    minHeight: 32,
+    minHeight: 28,
     paddingHorizontal: space.sm,
     marginRight: -space.sm,
   },

@@ -16,9 +16,10 @@ type Props = {
   wholeNumbers?: boolean;
   // What the chart shows, for screen readers; the screen lists the values too.
   description: string;
+  // Of the plot, without the readout above it.
+  height?: number;
 };
 
-const height = 200;
 const margin = { top: 12, right: 12, bottom: 24, left: 40 };
 // Past this many points, only the selected one gets a marker.
 const maxMarkedPoints = 40;
@@ -27,7 +28,7 @@ const maxMarkedPoints = 40;
 // gridlines at clean values, and the first and last dates. The readout above
 // leads with the latest point's value and date; touching the chart moves a
 // crosshair to the nearest point and reads that one out instead.
-export function LineChart({ points, wholeNumbers = false, description }: Props) {
+export function LineChart({ points, wholeNumbers = false, description, height = 200 }: Props) {
   const { colors } = useAppTheme();
   const [width, setWidth] = useState(0);
   const [touchedIndex, setTouchedIndex] = useState<number>();
@@ -70,7 +71,7 @@ export function LineChart({ points, wholeNumbers = false, description }: Props) 
   return (
     <View style={styles.chart}>
       <View style={styles.readout}>
-        <AppText variant="title">{points[selected].label}</AppText>
+        <AppText variant="heading">{points[selected].label}</AppText>
         <AppText tone="muted">
           {touched ? '' : 'Latest · '}
           {formatLocalDate(points[selected].localDate)}
@@ -211,6 +212,9 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   readout: {
-    gap: 2,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    columnGap: space.sm,
   },
 });

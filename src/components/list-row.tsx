@@ -26,7 +26,7 @@ type RowProps = {
   accessibilityHint?: string;
 };
 
-// One line of a list: at least 60 high, so it's easy to hit. With onPress the
+// One line of a list: at least 52 high, so it's easy to hit. With onPress the
 // whole row is the button, and a second tap while it works is ignored.
 export function ListRow({
   title,
@@ -142,9 +142,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    minHeight: 60,
+    minHeight: 52,
     paddingHorizontal: space.lg,
-    paddingVertical: space.md,
+    paddingVertical: space.sm,
   },
   pressed: {
     opacity: 0.6,

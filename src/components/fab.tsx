@@ -13,7 +13,7 @@ type Props = {
 };
 
 // How much room to leave under a list so its last row clears the button.
-export const fabClearance = 96;
+export const fabClearance = 80;
 
 // The screen's "add" action, floating over the bottom corner where a thumb
 // reaches it.

@@ -38,7 +38,7 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
     return (
       <Card style={styles.recorded}>
         <View style={styles.reading}>
-          <AppText variant="title">{formatWeight(weighIn.displayWeight)}</AppText>
+          <AppText variant="heading">{formatWeight(weighIn.displayWeight)}</AppText>
           <AppText variant="caption" tone="muted">
             at {formatTimeOfDay(weighIn.weighedAt)}
           </AppText>
@@ -49,7 +49,7 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
   }
 
   return (
-    <Card>
+    <Card style={styles.compact}>
       <View style={styles.entry}>
         <Input
           value={text}
@@ -75,13 +75,21 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // One row: the weight and when, then Change.
   recorded: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
+    paddingVertical: space.md,
   },
   reading: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.sm,
+  },
+  compact: {
+    paddingVertical: space.md,
   },
   entry: {
     flexDirection: 'row',

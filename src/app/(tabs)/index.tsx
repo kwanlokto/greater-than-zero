@@ -1,29 +1,27 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { DailyTotalsCard } from '@/components/daily-totals-card';
-import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { WeighInCard } from '@/components/weigh-in-card';
 import type { Template } from '@/core/tracker';
 import { tracker } from '@/database';
-import { formatLocalDateWithWeekday } from '@/dates';
 import { hasMacroTargets } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseList } from '@/template-labels';
-import { space, useAppTheme } from '@/theme';
+import { radius, space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
 
+// Today at a glance, on one screen: what to train, what's been eaten against
+// the day's targets, and today's weight.
 export default function TodayScreen() {
   const router = useRouter();
-  const { colors } = useAppTheme();
   const workoutInProgress = useWorkoutInProgress();
   const templates = useTrackerQuery(() => tracker.getTemplates(), []);
   // Null once loaded with no active Rotation, or an empty one.
@@ -42,88 +40,85 @@ export default function TodayScreen() {
   }
 
   return (
-    <Screen onTab>
-      <AppText tone="muted" style={styles.date}>
-        {formatLocalDateWithWeekday(today)}
-      </AppText>
+    <Screen onTab contentStyle={styles.content}>
       {/* Only one Workout can be in progress; while one is, the Workout bar
           returns to it. */}
       {workoutInProgress === null && templates && nextUp !== undefined && (
         <>
           {nextUp && <NextUp template={nextUp} onStart={() => start(nextUp.id)} />}
           <Section
-            title="Start from template"
+            title="Start a workout"
             action={
               templates.length > 0
-                ? { label: 'Manage', onPress: () => router.navigate('/templates') }
+                ? { label: 'Templates', onPress: () => router.navigate('/templates') }
                 : undefined
             }
           >
-            {templates.length === 0 ? (
-              <Card>
-                <AppText variant="bodyStrong">No templates yet.</AppText>
-                <AppText tone="muted">
-                  A template is a workout you repeat, with a target for each exercise.
-                </AppText>
+            {/* One row whatever the number of Templates: it scrolls sideways. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.pillBar}
+              contentContainerStyle={styles.pills}
+            >
+              {templates.map(template => (
                 <Button
+                  key={template.id}
                   variant="tonal"
-                  icon="add"
-                  label="Create one"
-                  onPress={() => router.navigate('/templates/new')}
-                  style={styles.cardAction}
+                  icon="play"
+                  label={template.name}
+                  accessibilityLabel={`Start ${template.name}`}
+                  accessibilityHint={exerciseList(template)}
+                  // Guarded by the button: a double tap starts one Workout.
+                  onPress={() => start(template.id)}
+                  style={styles.pill}
                 />
-              </Card>
-            ) : (
-              <ListGroup>
-                {templates.map(template => (
-                  <ListRow
-                    key={template.id}
-                    title={template.name}
-                    subtitle={exerciseList(template)}
-                    subtitleLines={1}
-                    accessibilityLabel={`Start ${template.name}`}
-                    trailing={<Ionicons name="play-circle" size={32} color={colors.primary} />}
-                    // Guarded by the row: a double tap starts one Workout.
-                    onPress={() => start(template.id)}
-                  />
-                ))}
-                {/* Next up comes from the active Rotation; point the way to one. */}
-                {!nextUp && templates.length > 1 && (
-                  <ListRow
-                    icon="repeat"
-                    title="Set up a rotation"
-                    subtitle="Today then shows which template is next up"
-                    onPress={() => router.navigate('/rotations')}
-                  />
-                )}
-              </ListGroup>
-            )}
-            <Button
-              variant={nextUp ? 'secondary' : 'primary'}
-              icon="add"
-              label="Start empty workout"
-              onPress={() => start()}
-            />
+              ))}
+              <Button
+                variant={templates.length === 0 ? 'primary' : 'secondary'}
+                icon="add"
+                label="Empty workout"
+                accessibilityLabel="Start empty workout"
+                onPress={() => start()}
+                style={styles.pill}
+              />
+              {templates.length === 0 && (
+                <Button
+                  variant="secondary"
+                  icon="list"
+                  label="Create a template"
+                  onPress={() => router.navigate('/templates/new')}
+                  style={styles.pill}
+                />
+              )}
+              {/* Next up comes from the active Rotation; point the way to one. */}
+              {!nextUp && templates.length > 1 && (
+                <Button
+                  variant="secondary"
+                  icon="repeat"
+                  label="Set up a rotation"
+                  onPress={() => router.navigate('/rotations')}
+                  style={styles.pill}
+                />
+              )}
+            </ScrollView>
           </Section>
         </>
       )}
       {dailyTotals && (
         <Section
           title="Today's food"
-          action={{ label: 'Meals', onPress: () => router.navigate('/food') }}
+          action={
+            hasMacroTargets(dailyTotals)
+              ? { label: 'Meals', onPress: () => router.navigate('/food') }
+              : { label: 'Set daily targets', onPress: () => router.navigate('/macro-targets') }
+          }
         >
           <DailyTotalsCard
             totals={dailyTotals}
             hint="Opens today's meals"
             onPress={() => router.navigate('/food')}
           />
-          {!hasMacroTargets(dailyTotals) && (
-            <Button
-              variant="ghost"
-              label="Set daily targets"
-              onPress={() => router.navigate('/macro-targets')}
-            />
-          )}
         </Section>
       )}
       {weighIn !== undefined && displayUnit && (
@@ -155,35 +150,54 @@ type NextUpProps = {
 function NextUp({ template, onStart }: NextUpProps) {
   return (
     <Card style={styles.nextUp}>
-      <AppText accessibilityRole="header" variant="overline" tone="primary">
-        Next up
-      </AppText>
-      <AppText variant="title">{template.name}</AppText>
-      <AppText tone="muted" numberOfLines={2}>
-        {exerciseList(template)}
-      </AppText>
+      <View style={styles.nextUpText}>
+        <AppText accessibilityRole="header" variant="overline" tone="primary">
+          Next up
+        </AppText>
+        <AppText variant="heading" numberOfLines={1}>
+          {template.name}
+        </AppText>
+        <AppText variant="caption" tone="muted" numberOfLines={1}>
+          {exerciseList(template)}
+        </AppText>
+      </View>
       <Button
-        size="large"
         icon="play"
-        label={`Start ${template.name}`}
+        label="Start"
+        accessibilityLabel={`Start ${template.name}`}
         onPress={onStart}
-        style={styles.cardAction}
+        style={styles.start}
       />
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  date: {
-    marginTop: -space.sm,
-    marginBottom: -space.sm,
-    paddingHorizontal: space.xs,
+  content: {
+    gap: space.md,
   },
   nextUp: {
-    gap: space.xs,
-    padding: space.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
   },
-  cardAction: {
-    marginTop: space.md,
+  nextUpText: {
+    flex: 1,
+    gap: 2,
+  },
+  start: {
+    paddingHorizontal: space.xl,
+  },
+  // Runs to the screen's edges, so the row scrolls under them.
+  pillBar: {
+    marginHorizontal: -space.lg,
+    flexGrow: 0,
+  },
+  pills: {
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+  },
+  pill: {
+    borderRadius: radius.pill,
   },
 });

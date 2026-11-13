@@ -4,10 +4,13 @@ import { BottomTabBar, Tabs, type BottomTabBarProps } from 'expo-router/js-tabs'
 import { View, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppText } from '@/components/app-text';
 import type { IconName } from '@/components/button';
 import { IconButton } from '@/components/icon-button';
 import { WorkoutBar } from '@/components/workout-bar';
+import { formatLocalDateWithWeekday } from '@/dates';
 import { space, useAppTheme } from '@/theme';
+import { useToday } from '@/use-today';
 
 // Filled while its tab is open, outlined otherwise, so the open tab stands
 // out by more than its colour.
@@ -56,7 +59,11 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: 'Today', tabBarIcon: tabIcon('today-outline', 'today') }}
+        options={{
+          title: 'Today',
+          headerTitle: () => <TodayTitle />,
+          tabBarIcon: tabIcon('today-outline', 'today'),
+        }}
       />
       <Tabs.Screen
         name="history"
@@ -85,5 +92,21 @@ function SettingsButton() {
       onPress={() => router.navigate('/settings')}
       style={{ marginRight: space.sm }}
     />
+  );
+}
+
+// "Today" with the date under it, so the screen below needn't say it.
+function TodayTitle() {
+  const today = useToday();
+
+  return (
+    <View>
+      <AppText accessibilityRole="header" variant="title" style={{ fontSize: 26, lineHeight: 30 }}>
+        Today
+      </AppText>
+      <AppText variant="caption" tone="muted">
+        {formatLocalDateWithWeekday(today)}
+      </AppText>
+    </View>
   );
 }
