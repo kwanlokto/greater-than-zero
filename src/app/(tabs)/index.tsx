@@ -129,9 +129,11 @@ export default function TodayScreen() {
           <WeighInCard
             weighIn={weighIn}
             displayUnit={displayUnit}
-            onSave={weight =>
-              runOrAlert("Couldn't save the weigh-in", () =>
-                tracker.setWeighIn(weight, displayUnit),
+            onSave={async weight =>
+              Boolean(
+                await runOrAlert("Couldn't save the weigh-in", () =>
+                  tracker.setWeighIn(weight, displayUnit),
+                ),
               )
             }
           />

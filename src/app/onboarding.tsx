@@ -22,8 +22,9 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState<'unit' | 'targets'>('unit');
 
   async function chooseUnit(unit: WeightUnit) {
-    await tracker.setDisplayUnit(unit);
-    setStep('targets');
+    if (await runOrAlert("Couldn't save the unit", () => tracker.setDisplayUnit(unit))) {
+      setStep('targets');
+    }
   }
 
   async function saveTargets(targets: MacroTargets) {

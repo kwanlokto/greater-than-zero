@@ -41,7 +41,8 @@ export default function ChooseExerciseScreen() {
   async function choose(exercise: Exercise) {
     if (!choice || choosing.current) return;
     choosing.current = true;
-    if (await runOrAlert(choice.failure, () => choice.run(exercise))) router.back();
+    // Adding and swapping return different things; only whether it ran matters.
+    if (await runOrAlert<unknown>(choice.failure, () => choice.run(exercise))) router.back();
     else choosing.current = false;
   }
 

@@ -13,11 +13,11 @@ export default function NewSavedFoodScreen() {
   const router = useRouter();
 
   async function create(values: SavedFoodValues) {
-    let savedFoodId: string | undefined;
-    const created = await runOrAlert("Couldn't save the food", async () => {
-      savedFoodId = (await tracker.createSavedFood(values)).id;
-    });
-    if (!created || !savedFoodId) return;
+    const created = await runOrAlert("Couldn't save the food", () =>
+      tracker.createSavedFood(values),
+    );
+    if (!created) return;
+    const savedFoodId = created.result.id;
     if (mealId) router.replace({ pathname: '/meals/portion', params: { mealId, savedFoodId } });
     else router.back();
   }

@@ -25,30 +25,36 @@ export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Runs a core command, telling the lifter why if it's refused. True if it ran.
-export async function runOrTell(
+// What running a command came to: what it returned, or undefined when it
+// didn't run. Truthy whenever it ran, even for a command that returns nothing,
+// so `if (await runOrTell(…))` asks whether it ran.
+export type Ran<T> = { result: T } | undefined;
+
+// Runs a core command, telling the lifter why if it's refused. Every command a
+// screen or flow runs goes through here or confirmAndRun, so a refusal always
+// reaches the lifter.
+export async function runOrTell<T>(
   prompter: Prompter,
   failureTitle: string,
-  command: () => Promise<unknown>,
-): Promise<boolean> {
+  command: () => Promise<T>,
+): Promise<Ran<T>> {
   try {
-    await command();
-    return true;
+    return { result: await command() };
   } catch (error) {
     // Not waited for: the screen carries on underneath it.
     void prompter.tell(failureTitle, messageOf(error));
-    return false;
+    return undefined;
   }
 }
 
 // Asks first, then runs the command only if the lifter accepts, telling them
-// why if it's refused. True only if it ran.
-export async function confirmAndRun(
+// why if it's refused. Undefined when they decline, as when it's refused.
+export async function confirmAndRun<T>(
   prompter: Prompter,
   question: Question,
   failureTitle: string,
-  command: () => Promise<unknown>,
-): Promise<boolean> {
-  if (!(await prompter.ask(question))) return false;
+  command: () => Promise<T>,
+): Promise<Ran<T>> {
+  if (!(await prompter.ask(question))) return undefined;
   return runOrTell(prompter, failureTitle, command);
 }

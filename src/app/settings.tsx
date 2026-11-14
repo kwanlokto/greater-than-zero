@@ -46,7 +46,9 @@ export default function SettingsScreen() {
             <UnitPicker
               compact
               value={displayUnit}
-              onChange={unit => tracker.setDisplayUnit(unit)}
+              onChange={unit =>
+                runOrAlert("Couldn't change the weight unit", () => tracker.setDisplayUnit(unit))
+              }
             />
           }
         />
