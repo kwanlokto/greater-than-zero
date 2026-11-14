@@ -4,7 +4,7 @@
 
 import { and, asc, desc, eq, inArray, isNotNull, like, sql, type SQL } from 'drizzle-orm';
 
-import { exerciseQueryColumns, type Exercise } from './exercises';
+import type { Exercise } from './exercises';
 import { isLocalDate, localDateOf, relativeToToday } from './local-dates';
 import { notDeleted, positionAfterLast, softDelete } from './records';
 import type { Rotations } from './rotations';
@@ -17,16 +17,12 @@ import {
   type TrackingType,
   type WeightUnit,
 } from './schema';
-import {
-  finished,
-  inProgress,
-  setStillLogged,
-  workoutOrder,
-  type SessionHistory,
-} from './session-history';
-import type { Template, Templates, TargetUpdateOffer } from './templates';
+import { finished, inProgress, setStillLogged, type SessionHistory } from './session-history';
+import type { TargetUpdateOffer, TemplateWorkouts } from './template-workouts';
+import type { Template } from './templates';
 import type { TrackerDatabase } from './tracker';
-import { problemWithWeight, withDisplayWeight, type Weight } from './weights';
+import { problemWithWeight, type Weight } from './weights';
+import type { WorkoutReads } from './workout-reads';
 
 // What the lifter enters for a Set. Each command says which unit the weight is
 // in. For a bodyweight Exercise the weight is the added weight: null for plain
@@ -210,11 +206,9 @@ type WorkoutDependencies = {
   history: SessionHistory;
   getDisplayUnit: () => Promise<WeightUnit>;
   getFallbackRestSeconds: () => Promise<number>;
-  templates: Pick<
-    Templates,
-    'planFromTemplate' | 'templateUpdateFor' | 'targetUpdateOffersFor' | 'readyToGoHeavier'
-  >;
+  templateWorkouts: Pick<TemplateWorkouts, 'plan' | 'readyToGoHeavier' | 'finishing'>;
   rotations: Pick<Rotations, 'idOfActiveRotationWith' | 'findNextUp'>;
+  reads: WorkoutReads;
 };
 
 export function createWorkouts({
@@ -223,12 +217,12 @@ export function createWorkouts({
   history,
   getDisplayUnit,
   getFallbackRestSeconds,
-  templates,
+  templateWorkouts,
   rotations,
+  reads,
 }: WorkoutDependencies) {
-  const { planFromTemplate, templateUpdateFor, targetUpdateOffersFor, readyToGoHeavier } =
-    templates;
   const { idOfActiveRotationWith, findNextUp } = rotations;
+  const { findWorkout } = reads;
 
   // Positions aren't renumbered when a Set is deleted, so new Sets always go
   // after every earlier one.
@@ -386,78 +380,15 @@ export function createWorkouts({
   // The Workouts matching `where`, in the order Workouts go in, each with its
   // Exercises and Sets in order. Deleted Workouts, removed Exercises and
   // deleted Sets are left out.
-  async function findWorkouts(where: SQL | undefined): Promise<Workout[]> {
-    const found = await db.query.workouts.findMany({
-      where: and(where, notDeleted(workouts)),
-      orderBy: workoutOrder,
-      columns: {
-        id: true,
-        localDate: true,
-        startedAt: true,
-        finishedAt: true,
-        isBackfilled: true,
-        restEndsAt: true,
-        templateId: true,
-        rotationId: true,
-      },
-      with: {
-        entries: {
-          where: notDeleted(exerciseEntries),
-          orderBy: asc(exerciseEntries.position),
-          columns: { id: true, notes: true },
-          with: {
-            exercise: { columns: exerciseQueryColumns },
-            sets: {
-              where: notDeleted(sets),
-              orderBy: asc(sets.position),
-              columns: {
-                id: true,
-                weight: true,
-                weightUnit: true,
-                reps: true,
-                isWarmUp: true,
-                loggedAt: true,
-              },
-            },
-            plannedSets: {
-              where: notDeleted(plannedSets),
-              orderBy: asc(plannedSets.position),
-              columns: { id: true, weight: true, weightUnit: true, reps: true },
-            },
-          },
-        },
-      },
-    });
-    const displayUnit = await getDisplayUnit();
-    return found.map(workout => ({
-      ...workout,
-      entries: workout.entries.map(entry => ({
-        ...entry,
-        sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),
-      })),
-    }));
-  }
-
-  async function findWorkout(id: string): Promise<Workout | undefined> {
-    const [workout] = await findWorkouts(eq(workouts.id, id));
-    return workout;
-  }
-
-  // Each entry with its Last time and hint, worked out together: the Template
-  // pairing once for the Workout, not once per entry.
+  // Each entry with its Last time and hint.
   async function toLog(workout: Workout): Promise<WorkoutToLog> {
-    // The hint is only for a Workout in progress.
-    const pairing = workout.finishedAt === null ? await history.pairing(workout) : null;
+    const readyToGoHeavier = await templateWorkouts.readyToGoHeavier(workout);
     const entries: EntryToLog[] = [];
     for (const entry of workout.entries) {
-      const templateExercise = pairing?.pairs.get(entry.id);
       entries.push({
         ...entry,
         lastTime: await history.lastTime(entry.exercise.id, workout),
-        readyToGoHeavier:
-          pairing !== null && templateExercise !== undefined
-            ? await readyToGoHeavier(pairing.template, templateExercise, workout)
-            : false,
+        readyToGoHeavier: readyToGoHeavier.has(entry.id),
       });
     }
     return { ...workout, entries };
@@ -477,7 +408,7 @@ export function createWorkouts({
       };
       // Worked out before anything is saved: pre-filling looks at the sessions
       // before this one, which doesn't exist yet.
-      const plan = templateId === undefined ? [] : await planFromTemplate(templateId, workout);
+      const plan = templateId === undefined ? [] : await templateWorkouts.plan(templateId, workout);
       // Checked and inserted without awaiting in between, so two presses at the
       // same moment can't both start one.
       return db.transaction(tx => {
@@ -666,9 +597,7 @@ export function createWorkouts({
       // Worked out first, so if it fails the Workout is left unfinished, rather
       // than finished with the lifter told it wasn't.
       const workout = await findWorkout(id);
-      const pairing = workout && (await history.pairing(workout));
-      const update = pairing && (await templateUpdateFor(workout, pairing));
-      const targetUpdateOffers = pairing ? await targetUpdateOffersFor(workout, pairing) : [];
+      const finishing = workout && (await templateWorkouts.finishing(workout));
       const nextUp = await findNextUp(id);
       const finishedAt = now();
       db.transaction(tx => {
@@ -687,20 +616,7 @@ export function createWorkouts({
           inArray(plannedSets.exerciseEntryId, entryIdsOf(tx, id)),
           finishedAt,
         );
-        // Recorded, so later sessions under the Template find which Template
-        // exercise each entry was done for.
-        pairing?.pairs.forEach((templateExercise, entryId) => {
-          tx.update(exerciseEntries)
-            .set({ templateExerciseId: templateExercise.id })
-            // Unless it was swapped for another Exercise meanwhile.
-            .where(
-              and(
-                eq(exerciseEntries.id, entryId),
-                eq(exerciseEntries.exerciseId, templateExercise.exercise.id),
-              ),
-            )
-            .run();
-        });
+        finishing?.recordPairing(tx);
         tx.update(workouts)
           // The rest belongs to the Workout in progress, so it ends here too.
           .set({ finishedAt, restEndsAt: null })
@@ -708,10 +624,8 @@ export function createWorkouts({
           .run();
       });
       return {
-        templateUpdateOffer: update?.differs
-          ? { templateId: update.templateId, templateName: update.templateName }
-          : null,
-        targetUpdateOffers,
+        templateUpdateOffer: finishing?.templateUpdateOffer ?? null,
+        targetUpdateOffers: finishing?.targetUpdateOffers ?? [],
         nextUp,
       };
     },
@@ -743,5 +657,5 @@ export function createWorkouts({
     },
   };
 
-  return { commands, findWorkouts };
+  return { commands };
 }

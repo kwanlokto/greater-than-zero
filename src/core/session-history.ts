@@ -1,8 +1,8 @@
 // Which past sessions count, and what was done in them. Last time, the "ready
 // to go heavier" hint, Target update offers, next up and progress charts all
-// look back at earlier Workouts; they ask here, so the order Workouts go in,
-// what a working Set is and which entry was done for which Template exercise
-// are each decided once.
+// look back at earlier Workouts; they ask here, so the order Workouts go in
+// and what a working Set is are each decided once. Which entry was done for
+// which Template exercise is decided in template-workouts.ts.
 
 import { and, asc, desc, eq, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 
@@ -76,71 +76,20 @@ export function workingSetsOf<S extends Pick<WorkoutSet, 'isWarmUp'>>(loggedSets
   return loggedSets.filter(set => !set.isWarmUp);
 }
 
-// The Template a Workout started from, and which of its Exercises each entry
-// was done for, by entry ID (see pairWithTemplate).
-export type TemplatePairing = {
-  template: Template;
-  pairs: Map<string, TemplateExercise>;
-};
-
 // A working Set of a past session, as entered.
 export type SessionSet = EnteredWeight & { reps: number };
 
 type Dependencies = {
   getDisplayUnit: () => Promise<WeightUnit>;
-  // Undefined once it's deleted.
-  findTemplate: (id: string) => Promise<Template | undefined>;
 };
 
 export type SessionHistory = ReturnType<typeof createSessionHistory>;
 
 export function createSessionHistory(
   db: TrackerDatabase,
-  { getDisplayUnit, findTemplate }: Dependencies,
+  { getDisplayUnit }: Dependencies,
 ) {
-  // Pairs each of a Workout's entries with the Exercise in its Template it was
-  // done for. An entry takes the Template exercise it was copied from, if it's
-  // still in the Template. One that lost that link, by being swapped away and
-  // back or removed and added again, then takes the first one left of the same
-  // Exercise, so it keeps its Target. Entries added or swapped in have none.
-  // Finishing records the pairs on the entries, which is how latestSessionFor
-  // tells apart two copies of one Exercise in later sessions.
-  async function pairWithTemplate(
-    workout: Workout,
-    template: Template,
-  ): Promise<Map<string, TemplateExercise>> {
-    const links = await db
-      .select({ id: exerciseEntries.id, templateExerciseId: exerciseEntries.templateExerciseId })
-      .from(exerciseEntries)
-      .where(eq(exerciseEntries.workoutId, workout.id));
-    const linkOf = new Map(links.map(link => [link.id, link.templateExerciseId]));
-    const unpaired = new Map(template.exercises.map(exercise => [exercise.id, exercise]));
-    const pairs = new Map<string, TemplateExercise>();
-    const pair = (entryId: string, templateExercise: TemplateExercise) => {
-      pairs.set(entryId, templateExercise);
-      unpaired.delete(templateExercise.id);
-    };
-    for (const entry of workout.entries) {
-      const linked = unpaired.get(linkOf.get(entry.id) ?? '');
-      if (linked) pair(entry.id, linked);
-    }
-    for (const entry of workout.entries) {
-      if (pairs.has(entry.id)) continue;
-      const same = [...unpaired.values()].find(({ exercise }) => exercise.id === entry.exercise.id);
-      if (same) pair(entry.id, same);
-    }
-    return pairs;
-  }
-
   return {
-    // Null for a Workout started empty, or from a Template since deleted.
-    async pairing(workout: Workout): Promise<TemplatePairing | null> {
-      if (!workout.templateId) return null;
-      const template = await findTemplate(workout.templateId);
-      if (!template) return null;
-      return { template, pairs: await pairWithTemplate(workout, template) };
-    },
-
     // An Exercise's working Sets from the most recent finished Workout, with a
     // working Set of it, that comes before `before`: so a past or backfilled
     // Workout sees the session before it, and one where the Exercise was only
