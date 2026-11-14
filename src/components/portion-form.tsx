@@ -8,9 +8,9 @@ import { Chip } from '@/components/chip';
 import { Field } from '@/components/field';
 import { Input } from '@/components/input';
 import { MacroSummary } from '@/components/macro-summary';
-import { portionOf, problemWithPortion, type SavedFood } from '@/core/tracker';
-import { describeServing, roundedAmount } from '@/food-labels';
-import { parseDecimal } from '@/numbers';
+import { portionOf, type SavedFood } from '@/core/tracker';
+import { describeServing } from '@/food-labels';
+import { portionBoxOf, readPortion } from '@/form-values';
 import { space } from '@/theme';
 
 type Props = {
@@ -24,14 +24,12 @@ const servingMultiples = [0.5, 1, 1.5, 2];
 // How much of a Saved food to add to a Meal, in its Serving unit, starting at
 // one Serving and showing the macros that comes to.
 export function PortionForm({ savedFood, onSubmit }: Props) {
-  const [quantity, setQuantity] = useState(String(savedFood.servingAmount));
-  const typed = parseDecimal(quantity) ?? undefined;
-  // The core's own rule decides, so the form can't drift from it.
-  const problem = typed === undefined ? undefined : problemWithPortion(savedFood, typed);
+  const [quantity, setQuantity] = useState(() => portionBoxOf(savedFood.servingAmount));
+  const { values: typed, problem } = readPortion(savedFood, quantity);
   const { servingAmount, servingUnit } = savedFood;
 
   async function submit() {
-    if (typed !== undefined && !problem) await onSubmit(typed);
+    if (typed !== undefined) await onSubmit(typed);
   }
 
   return (
@@ -56,19 +54,19 @@ export function PortionForm({ savedFood, onSubmit }: Props) {
         />
         <View style={styles.chips}>
           {servingMultiples.map(multiple => {
-            const amount = roundedAmount(servingAmount * multiple);
+            const amount = portionBoxOf(servingAmount * multiple);
             return (
               <Chip
                 key={multiple}
                 label={`${amount} ${servingUnit}`}
-                selected={typed === amount}
-                onPress={() => setQuantity(String(amount))}
+                selected={quantity === amount}
+                onPress={() => setQuantity(amount)}
               />
             );
           })}
         </View>
       </Field>
-      {typed !== undefined && !problem && (
+      {typed !== undefined && (
         <Card>
           <AppText variant="label" tone="muted">
             This portion
@@ -80,7 +78,7 @@ export function PortionForm({ savedFood, onSubmit }: Props) {
       <Button
         size="large"
         label="Add to meal"
-        disabled={typed === undefined || !!problem}
+        disabled={typed === undefined}
         onPress={submit}
       />
     </View>

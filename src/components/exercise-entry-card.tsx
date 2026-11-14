@@ -10,13 +10,7 @@ import { Card } from '@/components/card';
 import { Chip } from '@/components/chip';
 import { IconButton } from '@/components/icon-button';
 import { Input } from '@/components/input';
-import {
-  initialFieldsOf,
-  SetFields,
-  setLabels,
-  setPresentationFor,
-  useSetFields,
-} from '@/components/set-fields';
+import { SetFields, setLabels, setPresentationFor, useSetFields } from '@/components/set-fields';
 import { Toggle } from '@/components/toggle';
 import {
   canSwapExercise,
@@ -178,6 +172,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
               style={styles.log}
             />
           </View>
+          {next.problem && <SetProblem problem={next.problem} />}
           <View style={styles.options}>
             <Chip
               label="Warm-up"
@@ -282,7 +277,7 @@ type PlannedSetRowProps = {
 // A Set planned from the Template's Target, pre-filled in the Target's unit.
 // Logging it confirms it, with any numbers changed on the day.
 function PlannedSetRow({ planned, label, trackingType, isNext }: PlannedSetRowProps) {
-  const fields = useSetFields(trackingType, planned.weightUnit, initialFieldsOf(planned));
+  const fields = useSetFields(trackingType, planned.weightUnit, planned);
 
   async function confirm() {
     const { values } = fields;
@@ -291,18 +286,30 @@ function PlannedSetRow({ planned, label, trackingType, isNext }: PlannedSetRowPr
   }
 
   return (
-    <View style={styles.inputs}>
-      <SetBadge kind="planned" label={label} />
-      <SetFields {...fields.fields} />
-      <Button
-        variant={isNext ? 'primary' : 'tonal'}
-        label="Log"
-        accessibilityLabel={`Log set ${label}`}
-        disabled={!fields.values}
-        onPress={confirm}
-        style={styles.log}
-      />
-    </View>
+    <>
+      <View style={styles.inputs}>
+        <SetBadge kind="planned" label={label} />
+        <SetFields {...fields.fields} />
+        <Button
+          variant={isNext ? 'primary' : 'tonal'}
+          label="Log"
+          accessibilityLabel={`Log set ${label}`}
+          disabled={!fields.values}
+          onPress={confirm}
+          style={styles.log}
+        />
+      </View>
+      {fields.problem && <SetProblem problem={fields.problem} />}
+    </>
+  );
+}
+
+// Why a Set's row can't be logged yet, under it.
+function SetProblem({ problem }: { problem: string }) {
+  return (
+    <AppText variant="caption" tone="danger">
+      {problem}
+    </AppText>
   );
 }
 
@@ -316,7 +323,7 @@ type SetEditorProps = {
 // deletes it. Nothing changes until Save.
 function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
   const { colors } = useAppTheme();
-  const edit = useSetFields(trackingType, set.weightUnit, initialFieldsOf(set));
+  const edit = useSetFields(trackingType, set.weightUnit, set);
 
   async function save() {
     const { values } = edit;
@@ -335,6 +342,7 @@ function SetEditor({ set, trackingType, onDone }: SetEditorProps) {
       <View style={styles.inputs}>
         <SetFields {...edit.fields} />
       </View>
+      {edit.problem && <SetProblem problem={edit.problem} />}
       <View style={styles.warmUp}>
         <AppText style={styles.setText}>Warm-up</AppText>
         <Toggle

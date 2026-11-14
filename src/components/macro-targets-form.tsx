@@ -5,9 +5,9 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Field } from '@/components/field';
 import { Input } from '@/components/input';
-import { problemWithMacroTargets, type Macro, type MacroTargets } from '@/core/tracker';
+import type { Macro, MacroTargets } from '@/core/tracker';
 import { macroNames, macroUnits } from '@/food-labels';
-import { parseDecimal } from '@/numbers';
+import { macroTargetBoxesOf, readMacroTargets } from '@/form-values';
 import { space } from '@/theme';
 
 type Props = {
@@ -21,14 +21,11 @@ const gramMacros: Macro[] = ['protein', 'carbs', 'fat'];
 // How much to eat in a day, in calories and grams of each macro. A field left
 // blank sets no target for it.
 export function MacroTargetsForm({ initial, submitLabel, onSubmit }: Props) {
-  const [text, setText] = useState(() => textOf(initial));
-
-  const typed = typedTargets(text);
-  // The core's own rule decides, so the form can't drift from it.
-  const problem = typed ? problemWithMacroTargets(typed) : undefined;
+  const [text, setText] = useState(() => macroTargetBoxesOf(initial));
+  const { values, problem } = readMacroTargets(text, initial);
 
   async function submit() {
-    if (typed && !problem) await onSubmit(typed);
+    if (values) await onSubmit(values);
   }
 
   const box = (macro: Macro) => (
@@ -58,31 +55,9 @@ export function MacroTargetsForm({ initial, submitLabel, onSubmit }: Props) {
         Leave any blank for no target.
       </AppText>
       {problem && <AppText tone="danger">{problem}</AppText>}
-      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      <Button size="large" label={submitLabel} disabled={!values} onPress={submit} />
     </View>
   );
-}
-
-// The targets as they're typed in: blank for none.
-function textOf(targets: MacroTargets): Record<Macro, string> {
-  const textOfTarget = (target: number | null) => (target === null ? '' : String(target));
-  return {
-    calories: textOfTarget(targets.calories),
-    protein: textOfTarget(targets.protein),
-    carbs: textOfTarget(targets.carbs),
-    fat: textOfTarget(targets.fat),
-  };
-}
-
-// Undefined while a field holds something that isn't a number. Blank is null.
-function typedTargets(text: Record<Macro, string>): MacroTargets | undefined {
-  const calories = parseDecimal(text.calories);
-  const protein = parseDecimal(text.protein);
-  const carbs = parseDecimal(text.carbs);
-  const fat = parseDecimal(text.fat);
-  if (calories === undefined || protein === undefined) return undefined;
-  if (carbs === undefined || fat === undefined) return undefined;
-  return { calories, protein, carbs, fat };
 }
 
 const styles = StyleSheet.create({
