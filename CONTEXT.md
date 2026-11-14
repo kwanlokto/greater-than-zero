@@ -1,4 +1,4 @@
-# Greater Than Zero
+# Notch
 
 A lifter's own training and food log, kept on their phone: Workouts planned from Templates, Meals counted against Macro targets, and daily Weigh-ins.
 

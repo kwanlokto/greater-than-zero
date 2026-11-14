@@ -1,6 +1,6 @@
 # Releasing on Google Play
 
-This is how to take Greater Than Zero from EAS builds that friends install to a public Google Play listing. The first release takes three to four weeks, mostly because a new personal developer account must run a 14-day closed test before Google allows a production release. After that, an update is a build, an upload and Google's review.
+This is how to take Notch from EAS builds that friends install to a public Google Play listing. The first release takes three to four weeks, mostly because a new personal developer account must run a 14-day closed test before Google allows a production release. After that, an update is a build, an upload and Google's review.
 
 It follows the "Play Store prerequisites" in spec #1: the closed test, the EAS signing key in Play App Signing, and a privacy policy and Data safety form.
 
@@ -49,7 +49,7 @@ Personal accounts created after 13 November 2023 must run a closed test before t
 
 In Play Console, choose **Create app** and fill it in:
 
-- **App name:** Greater Than Zero
+- **App name:** Notch
 - **App or game:** App
 - **Free or paid:** Free. A free app can never become paid.
 
@@ -90,7 +90,7 @@ Internal testing reaches up to 100 testers you name, usually within minutes. Use
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create or reuse a project. Go to **IAM & Admin → Service Accounts**, create a service account, and copy its email. Under **Manage keys**, add a key of type JSON and save the file.
 2. In the same project, enable the **Google Play Android Developer API**.
-3. In Play Console, go to **Users and permissions → Invite new users** and enter the service account's email. Under app permissions, pick Greater Than Zero and allow:
+3. In Play Console, go to **Users and permissions → Invite new users** and enter the service account's email. Under app permissions, pick Notch and allow:
    - View app information (read-only)
    - Edit and delete draft apps
    - Release to production, exclude devices, and use Play App Signing
