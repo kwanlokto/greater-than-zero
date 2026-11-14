@@ -38,7 +38,7 @@ export default function OnboardingScreen() {
       <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
         <View style={styles.centred}>
           <StepCount step={1} />
-          <AppText variant="title">Greater Than Zero</AppText>
+          <AppText variant="title">Notch</AppText>
           <AppText variant="heading">Which unit do you lift in?</AppText>
           <UnitPicker onChange={chooseUnit} large />
           <AppText tone="muted">You can change this later in Settings.</AppText>

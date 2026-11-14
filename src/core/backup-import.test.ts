@@ -9,9 +9,9 @@ import {
 } from './test-helpers';
 import { createTracker, type BackupFile, type Tracker } from './tracker';
 
-const damagedFile = "That file isn't a Greater Than Zero backup, or it's damaged";
+const damagedFile = "That file isn't a Notch backup, or it's damaged";
 const fromNewerApp =
-  'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.';
+  'That backup is from a newer version of Notch. Update the app, then import it again.';
 
 // How many migrations there were before Rotations: an app's schema version then.
 const beforeRotations = journal.entries.findIndex(({ tag }) => tag === '0013_create_rotations');

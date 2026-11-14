@@ -167,12 +167,12 @@ function isVersion(value: unknown): value is number {
 
 function fromNewerApp(): Error {
   return new Error(
-    'That backup is from a newer version of Greater Than Zero. Update the app, then import it again.',
+    'That backup is from a newer version of Notch. Update the app, then import it again.',
   );
 }
 
 function damaged(why: string): Error {
-  return new Error(`That file isn't a Greater Than Zero backup, or it's damaged: ${why}.`);
+  return new Error(`That file isn't a Notch backup, or it's damaged: ${why}.`);
 }
 
 // Replaces every table's rows with the file's, as part of a larger
