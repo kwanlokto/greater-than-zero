@@ -5,7 +5,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, like, sql, type SQL } from 'drizzle-orm';
 
 import { exerciseQueryColumns, type Exercise } from './exercises';
-import { localDateOf } from './local-dates';
+import { isLocalDate, localDateOf, relativeToToday } from './local-dates';
 import { notDeleted, positionAfterLast, softDelete } from './records';
 import type { Rotations } from './rotations';
 import {
@@ -171,9 +171,10 @@ export function canFinishWorkout(workout: Pick<Workout, 'entries'>): boolean {
 
 // A Workout can be added to a date before today's, to backfill a session that
 // wasn't logged; today's are started as they happen. startWorkout enforces it;
-// screens use it to decide whether to offer adding one.
-export function canAddWorkoutOn(localDate: string, now: Date): boolean {
-  return localDate < localDateOf(now);
+// screens use it, with today from useToday, to decide whether to offer adding
+// one.
+export function canAddWorkoutOn(localDate: string, today: string): boolean {
+  return relativeToToday(localDate, today) === 'past';
 }
 
 // The time left to rest, in seconds, worked out from the rest's end time so
@@ -197,13 +198,8 @@ function requireValidSet(trackingType: TrackingType, set: SetValues) {
 
 // A YYYY-MM-DD date on the calendar that canAddWorkoutOn allows.
 function requireBackfillDate(localDate: string, now: Date) {
-  const [year, month, day] = localDate.split('-').map(Number);
-  // Anything else doesn't come back the same: a day past its month's end rolls
-  // into the next month, and text that isn't a date isn't one.
-  if (localDateOf(new Date(year, month - 1, day)) !== localDate) {
-    throw new Error(`No such date as ${localDate}`);
-  }
-  if (!canAddWorkoutOn(localDate, now)) {
+  if (!isLocalDate(localDate)) throw new Error(`No such date as ${localDate}`);
+  if (!canAddWorkoutOn(localDate, localDateOf(now))) {
     throw new Error('A Workout can only be added to a past date');
   }
 }

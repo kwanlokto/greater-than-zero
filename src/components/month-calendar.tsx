@@ -3,14 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
 import { IconButton } from '@/components/icon-button';
-import {
-  calendarWeeks,
-  dayOfMonth,
-  formatLocalDateWithWeekday,
-  formatMonth,
-  shiftMonth,
-  weekdayInitials,
-} from '@/dates';
+import { addMonths, calendarWeeks, partsOf, relativeToToday } from '@/core/tracker';
+import { formatLocalDateWithWeekday, formatMonth, weekdayInitials } from '@/dates';
 import { space, useAppTheme } from '@/theme';
 
 type Props = {
@@ -35,7 +29,7 @@ export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPre
         <IconButton
           icon="chevron-back"
           label="Previous month"
-          onPress={() => onChangeMonth(shiftMonth(month, -1))}
+          onPress={() => onChangeMonth(addMonths(month, -1))}
         />
         <View style={styles.title}>
           <AppText accessibilityRole="header" variant="heading">
@@ -48,7 +42,7 @@ export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPre
         <IconButton
           icon="chevron-forward"
           label="Next month"
-          onPress={() => onChangeMonth(shiftMonth(month, 1))}
+          onPress={() => onChangeMonth(addMonths(month, 1))}
         />
       </View>
       <View style={styles.week} importantForAccessibility="no-hide-descendants">
@@ -66,9 +60,8 @@ export function MonthCalendar({ month, trainingDays, today, onChangeMonth, onPre
                 key={localDate}
                 localDate={localDate}
                 trained={trained.has(localDate)}
-                isToday={localDate === today}
-                // Dates compare in order as text.
-                isAhead={localDate > today}
+                isToday={relativeToToday(localDate, today) === 'today'}
+                isAhead={relativeToToday(localDate, today) === 'ahead'}
                 onPress={() => onPressDay(localDate)}
               />
             ) : (
@@ -124,7 +117,7 @@ function CalendarDay({ localDate, trained, isToday, isAhead, onPress }: Calendar
             color: trained ? colors.onPrimary : isAhead ? colors.textMuted : colors.text,
           }}
         >
-          {dayOfMonth(localDate)}
+          {partsOf(localDate).day}
         </AppText>
       </DayMark>
     </Pressable>

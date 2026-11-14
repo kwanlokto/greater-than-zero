@@ -52,7 +52,19 @@ export {
   type SavedFoodValues,
   type TimeOfDay,
 } from './food';
-export { localDateOf } from './local-dates';
+export {
+  addDays,
+  addMonths,
+  calendarWeeks,
+  dateOn,
+  dayNumberOf,
+  firstDayOf,
+  isLocalDate,
+  localDateOf,
+  monthOf,
+  partsOf,
+  relativeToToday,
+} from './local-dates';
 export {
   progressMeasuresFor,
   type ProgressMeasure,

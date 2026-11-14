@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, lt, sql, type SQL } from 'drizzle-orm';
 
-import { localDateOf } from './local-dates';
+import { dateOn, localDateOf } from './local-dates';
 import { notDeleted, positionAfterLast, softDelete, stillThere } from './records';
 import { foodItems, meals, savedFoods } from './schema';
 import type { TrackerDatabase } from './tracker';
@@ -129,8 +129,7 @@ export function timeOnDay(localDate: string, { hours, minutes }: TimeOfDay): Dat
   if (!isWhole(hours, 24) || !isWhole(minutes, 60)) {
     throw new Error('A time of day is 0–23 hours and 0–59 minutes');
   }
-  const [year, month, day] = localDate.split('-').map(Number);
-  return new Date(year, month - 1, day, hours, minutes);
+  return dateOn(localDate, hours, minutes);
 }
 
 // Calories from the macros: 4 kcal per gram of protein and of carbs, 9 per
