@@ -13,3 +13,5 @@ Edit `src/core/schema.ts`, then run `npm run db:generate` to add a migration to 
 ### Builds
 
 Builds run on EAS. Install its CLI with `npm install -g eas-cli` and sign in with `eas login`. `eas build --profile development --platform android` builds the development client and `eas build --profile preview --platform android` builds an installable APK.
+
+To publish on Google Play, follow [Releasing on Google Play](docs/releasing-on-google-play.md).
