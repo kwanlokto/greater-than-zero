@@ -35,11 +35,8 @@ export default function MealScreen() {
 
   // A new Meal today, eaten now, with this one's food, opened in its place.
   async function copyToToday() {
-    let copyId: string | undefined;
-    const copied = await runOrAlert("Couldn't copy the meal", async () => {
-      copyId = (await tracker.copyMeal(id)).id;
-    });
-    if (copied && copyId) router.replace({ pathname: '/meals/[id]', params: { id: copyId } });
+    const copied = await runOrAlert("Couldn't copy the meal", () => tracker.copyMeal(id));
+    if (copied) router.replace({ pathname: '/meals/[id]', params: { id: copied.result.id } });
   }
 
   const confirmDelete = async () => {

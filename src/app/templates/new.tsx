@@ -30,11 +30,8 @@ export default function NewTemplateScreen() {
   const router = useRouter();
 
   async function create(name: string) {
-    let id: string | undefined;
-    const created = await runOrAlert(creation.failure, async () => {
-      id = (await creation.run(name)).id;
-    });
-    if (created && id) router.replace({ pathname: '/templates/[id]', params: { id } });
+    const created = await runOrAlert(creation.failure, () => creation.run(name));
+    if (created) router.replace({ pathname: '/templates/[id]', params: { id: created.result.id } });
   }
 
   return (

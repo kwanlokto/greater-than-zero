@@ -5,9 +5,9 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Input } from '@/components/input';
-import { formatWeight, problemWithWeighIn, type WeighIn, type WeightUnit } from '@/core/tracker';
+import { formatWeight, type WeighIn, type WeightUnit } from '@/core/tracker';
 import { formatTimeOfDay } from '@/dates';
-import { parseDecimal } from '@/numbers';
+import { readWeighIn } from '@/form-values';
 import { space } from '@/theme';
 
 type Props = {
@@ -24,12 +24,10 @@ type Props = {
 export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
   const [changing, setChanging] = useState(false);
   const [text, setText] = useState('');
-  const typed = parseDecimal(text);
-  // The core's own rule decides, so the box can't drift from it.
-  const canSave = typed !== undefined && typed !== null && !problemWithWeighIn(typed);
+  const { values: weight, problem } = readWeighIn(text);
 
   async function save() {
-    if (!canSave || !(await onSave(typed))) return;
+    if (weight === undefined || !(await onSave(weight))) return;
     setText('');
     setChanging(false);
   }
@@ -64,11 +62,16 @@ export function WeighInCard({ weighIn, displayUnit, onSave }: Props) {
         <Button
           label="Save"
           accessibilityLabel="Save weigh-in"
-          disabled={!canSave}
+          disabled={weight === undefined}
           onPress={save}
           style={styles.save}
         />
       </View>
+      {problem && (
+        <AppText variant="caption" tone="danger" style={styles.problem}>
+          {problem}
+        </AppText>
+      )}
       {changing && <Button variant="ghost" label="Cancel" onPress={() => setChanging(false)} />}
     </Card>
   );
@@ -98,6 +101,9 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+  },
+  problem: {
+    marginTop: space.sm,
   },
   save: {
     minHeight: 52,

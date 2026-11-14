@@ -5,9 +5,9 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Field } from '@/components/field';
 import { Input } from '@/components/input';
-import { caloriesFromMacros, type FoodValues } from '@/core/tracker';
+import type { FoodValues } from '@/core/tracker';
 import { formatCalories } from '@/food-labels';
-import { parseDecimal } from '@/numbers';
+import { caloriesWorkedOut, foodBoxesOf, readFood, type FoodBoxes } from '@/form-values';
 import { space } from '@/theme';
 
 type Props = {
@@ -28,6 +28,16 @@ const macroFields = [
   { key: 'fat', label: 'Fat' },
 ] as const;
 
+const newFoodBoxes: FoodBoxes = {
+  name: '',
+  amount: '',
+  unit: 'g',
+  calories: '',
+  protein: '',
+  carbs: '',
+  fat: '',
+};
+
 // A food's name, amount and macros, for a Food item (FoodItemForm) or a Saved
 // food (SavedFoodForm). Calories left blank are worked out from the macros,
 // and a blank macro counts as none.
@@ -39,35 +49,23 @@ export function FoodForm({
   submitLabel,
   onSubmit,
 }: Props) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
-  const [unit, setUnit] = useState(initial?.unit ?? 'g');
-  const [calories, setCalories] = useState(
-    initial?.calories == null ? '' : String(initial.calories),
-  );
-  const [macros, setMacros] = useState({
-    protein: initial ? String(initial.protein) : '',
-    carbs: initial ? String(initial.carbs) : '',
-    fat: initial ? String(initial.fat) : '',
+  const [boxes, setBoxes] = useState(() => (initial ? foodBoxesOf(initial) : newFoodBoxes));
+  const { values, problem } = readFood(boxes, problemOf, initial);
+  const workedOut = boxes.calories.trim() === '' ? caloriesWorkedOut(boxes, initial) : undefined;
+  const box = (key: keyof FoodBoxes) => ({
+    value: boxes[key],
+    onChangeText: (text: string) => setBoxes(current => ({ ...current, [key]: text })),
   });
 
-  const typed = typedFood({ name, amount, unit, calories, ...macros });
-  // The core's own rule decides, so the form can't drift from it. Only said
-  // once the name, amount and unit are filled in, so it doesn't nag while typing.
-  const filledIn = name.trim() !== '' && amount.trim() !== '' && unit.trim() !== '';
-  const problem = typed && problemOf(typed);
-  const workedOut = typed && typed.calories === null ? caloriesFromMacros(typed) : undefined;
-
   async function submit() {
-    if (typed && !problem) await onSubmit(typed);
+    if (values) await onSubmit(values);
   }
 
   return (
     <View style={styles.form}>
       <Field label="Name">
         <Input
-          value={name}
-          onChangeText={setName}
+          {...box('name')}
           placeholder="e.g. Greek yogurt"
           autoCapitalize="sentences"
           autoFocus={!initial}
@@ -78,8 +76,7 @@ export function FoodForm({
         <View style={styles.row}>
           <Field label={amountLabel} style={styles.amount}>
             <Input
-              value={amount}
-              onChangeText={setAmount}
+              {...box('amount')}
               keyboardType="decimal-pad"
               accessibilityLabel={amountLabel}
               align="right"
@@ -88,8 +85,7 @@ export function FoodForm({
           </Field>
           <Field label="Unit" style={styles.unit}>
             <Input
-              value={unit}
-              onChangeText={setUnit}
+              {...box('unit')}
               autoCapitalize="none"
               accessibilityLabel="Unit"
               placeholder="g, ml, scoop…"
@@ -104,8 +100,7 @@ export function FoodForm({
       </View>
       <Field label="Calories" hint="Leave blank to work them out from the macros.">
         <Input
-          value={calories}
-          onChangeText={setCalories}
+          {...box('calories')}
           keyboardType="decimal-pad"
           accessibilityLabel="Calories"
           placeholder={workedOut === undefined ? '' : formatCalories(workedOut)}
@@ -118,8 +113,7 @@ export function FoodForm({
         {macroFields.map(({ key, label }) => (
           <Field key={key} label={label} style={styles.macro}>
             <Input
-              value={macros[key]}
-              onChangeText={text => setMacros(current => ({ ...current, [key]: text }))}
+              {...box(key)}
               keyboardType="decimal-pad"
               accessibilityLabel={`${label} in grams`}
               placeholder="0"
@@ -130,31 +124,10 @@ export function FoodForm({
           </Field>
         ))}
       </View>
-      {filledIn && problem && <AppText tone="danger">{problem}</AppText>}
-      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      {problem && <AppText tone="danger">{problem}</AppText>}
+      <Button size="large" label={submitLabel} disabled={!values} onPress={submit} />
     </View>
   );
-}
-
-// Undefined while a number field holds something that isn't a number. A blank
-// amount is left for the core's rule to refuse.
-function typedFood(text: Record<keyof FoodValues, string>): FoodValues | undefined {
-  const amount = parseDecimal(text.amount);
-  const calories = parseDecimal(text.calories);
-  const protein = parseDecimal(text.protein);
-  const carbs = parseDecimal(text.carbs);
-  const fat = parseDecimal(text.fat);
-  const numbers = [amount, calories, protein, carbs, fat];
-  if (numbers.some(number => number === undefined)) return undefined;
-  return {
-    name: text.name,
-    amount: amount ?? Number.NaN,
-    unit: text.unit,
-    calories: calories ?? null,
-    protein: protein ?? 0,
-    carbs: carbs ?? 0,
-    fat: fat ?? 0,
-  };
 }
 
 const styles = StyleSheet.create({

@@ -4,14 +4,8 @@ import { StyleSheet, type KeyboardTypeOptions } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Input } from '@/components/input';
 
-import {
-  problemWithSet,
-  type SetValues,
-  type TrackingType,
-  type WeightUnit,
-  type WorkoutSet,
-} from '@/core/tracker';
-import { parseDecimal, parseWholeNumber } from '@/numbers';
+import type { TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
+import { readSet, setBoxesOf, type SetBoxes } from '@/form-values';
 
 type SetPresentation = {
   weightField: (unit: WeightUnit) => {
@@ -59,40 +53,33 @@ export function setLabels(sets: WorkoutSet[], plannedCount = 0): string[] {
   return [...logged, ...planned];
 }
 
-type Initial = { weight?: string; reps?: string; isWarmUp?: boolean };
+// A logged Set being corrected, or a planned Set being confirmed.
+type OpenedSet = Pick<WorkoutSet, 'weight' | 'reps'> & { isWarmUp?: boolean };
 
-// The text in a Set's fields and its warm-up mark, plus the Set they add up to:
-// undefined while it isn't one the core would accept. The core's own rule
-// decides, so screens can't drift from it.
-export function useSetFields(trackingType: TrackingType, unit: WeightUnit, initial: Initial = {}) {
-  const [weight, setWeight] = useState(initial.weight ?? '');
-  const [reps, setReps] = useState(initial.reps ?? '');
-  const [isWarmUp, setIsWarmUp] = useState(initial.isWarmUp ?? false);
+// The text in a Set's boxes and its warm-up mark, read by form-values: the Set
+// they add up to once the core would accept it, or the problem to show under
+// the row.
+export function useSetFields(trackingType: TrackingType, unit: WeightUnit, opened?: OpenedSet) {
+  const [boxes, setBoxes] = useState<SetBoxes>(() =>
+    opened ? setBoxesOf(opened) : { weight: '', reps: '' },
+  );
+  const [isWarmUp, setIsWarmUp] = useState(opened?.isWarmUp ?? false);
+  const { values, problem } = readSet(trackingType, boxes, isWarmUp, opened);
 
   return {
     fields: {
       trackingType,
       unit,
-      weight,
-      reps,
-      onChangeWeight: setWeight,
-      onChangeReps: setReps,
+      weight: boxes.weight,
+      reps: boxes.reps,
+      onChangeWeight: (weight: string) => setBoxes(current => ({ ...current, weight })),
+      onChangeReps: (reps: string) => setBoxes(current => ({ ...current, reps })),
     },
     isWarmUp,
     setIsWarmUp,
-    values: typedSet(trackingType, weight, reps, isWarmUp),
-    clearReps: () => setReps(''),
-  };
-}
-
-// A logged Set's fields, for correcting it, or a planned Set's, for confirming it.
-export function initialFieldsOf(
-  set: Pick<WorkoutSet, 'weight' | 'reps'> & { isWarmUp?: boolean },
-): Initial {
-  return {
-    weight: set.weight === null ? '' : String(set.weight),
-    reps: String(set.reps),
-    isWarmUp: set.isWarmUp,
+    values,
+    problem,
+    clearReps: () => setBoxes(current => ({ ...current, reps: '' })),
   };
 }
 
@@ -148,19 +135,6 @@ export function SetFields({
       />
     </>
   );
-}
-
-function typedSet(
-  trackingType: TrackingType,
-  weight: string,
-  reps: string,
-  isWarmUp: boolean,
-): SetValues | undefined {
-  const parsedWeight = parseDecimal(weight);
-  const parsedReps = parseWholeNumber(reps);
-  if (parsedWeight === undefined || parsedReps === undefined) return undefined;
-  const values = { weight: parsedWeight, reps: parsedReps, isWarmUp };
-  return problemWithSet(trackingType, values) === undefined ? values : undefined;
 }
 
 const styles = StyleSheet.create({

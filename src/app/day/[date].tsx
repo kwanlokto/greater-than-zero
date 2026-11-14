@@ -4,12 +4,19 @@ import { StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
+import { EmptyState } from '@/components/empty-state';
 import { IconButton } from '@/components/icon-button';
 import { MealCard } from '@/components/meal-card';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { WorkoutCard } from '@/components/workout-card';
-import { canAddWorkoutOn, formatWeight, localDateOf } from '@/core/tracker';
+import {
+  addDays,
+  canAddWorkoutOn,
+  formatWeight,
+  isLocalDate,
+  relativeToToday,
+} from '@/core/tracker';
 import { tracker } from '@/database';
 import { formatLocalDateWithWeekday, formatTimeOfDay } from '@/dates';
 import { runOrAlert } from '@/run-or-alert';
@@ -17,12 +24,6 @@ import { space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
-
-// The YYYY-MM-DD local date `by` days after this one, or before it.
-function shiftDay(localDate: string, by: number): string {
-  const [year, month, day] = localDate.split('-').map(Number);
-  return localDateOf(new Date(year, month - 1, day + by));
-}
 
 // What was recorded on one local date, opened from the History calendar: a
 // section for each kind of record. Arrows in the header step a day either way.
@@ -32,7 +33,17 @@ export default function DayScreen() {
   const today = useToday();
   const day = useTrackerQuery(() => tracker.getDay(date), [date]);
   const workoutInProgress = useWorkoutInProgress();
-  const canAdd = canAddWorkoutOn(date, new Date());
+
+  // The calendar only opens real dates, but a link can name any.
+  if (!isLocalDate(date)) {
+    return (
+      <Screen>
+        <EmptyState icon="help-circle-outline" title="No such date." />
+      </Screen>
+    );
+  }
+
+  const canAdd = canAddWorkoutOn(date, today);
 
   async function addWorkout() {
     if (
@@ -52,14 +63,14 @@ export default function DayScreen() {
               <IconButton
                 icon="chevron-back"
                 label="Day before"
-                onPress={() => router.setParams({ date: shiftDay(date, -1) })}
+                onPress={() => router.setParams({ date: addDays(date, -1) })}
               />
               <IconButton
                 icon="chevron-forward"
                 label="Day after"
-                // Dates compare in order as text; nothing's recorded ahead of today.
-                disabled={date >= today}
-                onPress={() => router.setParams({ date: shiftDay(date, 1) })}
+                // Nothing's recorded ahead of today.
+                disabled={relativeToToday(date, today) !== 'past'}
+                onPress={() => router.setParams({ date: addDays(date, 1) })}
               />
             </View>
           ),

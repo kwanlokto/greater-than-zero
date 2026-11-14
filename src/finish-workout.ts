@@ -41,13 +41,12 @@ export async function finishWorkout(
     accept: 'Finish',
   });
   if (!finish) return 'kept';
-  let summary: FinishSummary | undefined;
-  const finished = await runOrTell(prompter, "Couldn't finish the workout", async () => {
-    summary = await tracker.finishWorkout(workout.id);
-  });
-  if (!finished || !summary) return 'kept';
+  const finished = await runOrTell(prompter, "Couldn't finish the workout", () =>
+    tracker.finishWorkout(workout.id),
+  );
+  if (!finished) return 'kept';
   closeWorkout();
-  await askFinishOffers(tracker, prompter, workout.id, summary);
+  await askFinishOffers(tracker, prompter, workout.id, finished.result);
   return 'finished';
 }
 

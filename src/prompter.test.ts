@@ -19,9 +19,19 @@ describe('Running a command', () => {
     const { prompter, told } = scriptedPrompter();
     const command = jest.fn(async () => {});
 
-    expect(await runOrTell(prompter, "Couldn't delete the template", command)).toBe(true);
+    expect(await runOrTell(prompter, "Couldn't delete the template", command)).toEqual({
+      result: undefined,
+    });
     expect(command).toHaveBeenCalledTimes(1);
     expect(told).toEqual([]);
+  });
+
+  it('hands back what the command returned', async () => {
+    const { prompter } = scriptedPrompter();
+
+    expect(
+      await runOrTell(prompter, "Couldn't create the template", async () => ({ id: 'push' })),
+    ).toEqual({ result: { id: 'push' } });
   });
 
   it("tells the lifter why when it's refused", async () => {
@@ -29,7 +39,7 @@ describe('Running a command', () => {
 
     expect(
       await runOrTell(prompter, "Couldn't delete the template", refused('No such Template')),
-    ).toBe(false);
+    ).toBeUndefined();
     expect(told).toEqual([{ title: "Couldn't delete the template", message: 'No such Template' }]);
   });
 });
@@ -39,9 +49,9 @@ describe('Confirming a command', () => {
     const { prompter, asked } = scriptedPrompter([false]);
     const command = jest.fn(async () => {});
 
-    expect(await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command)).toBe(
-      false,
-    );
+    expect(
+      await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command),
+    ).toBeUndefined();
     expect(asked).toEqual([deletePush]);
     expect(command).not.toHaveBeenCalled();
   });
@@ -50,9 +60,9 @@ describe('Confirming a command', () => {
     const { prompter } = scriptedPrompter([true]);
     const command = jest.fn(async () => {});
 
-    expect(await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command)).toBe(
-      true,
-    );
+    expect(
+      await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command),
+    ).toEqual({ result: undefined });
     expect(command).toHaveBeenCalledTimes(1);
   });
 
@@ -66,7 +76,7 @@ describe('Confirming a command', () => {
         "Couldn't delete the template",
         refused('No such Template'),
       ),
-    ).toBe(false);
+    ).toBeUndefined();
     expect(told).toEqual([{ title: "Couldn't delete the template", message: 'No such Template' }]);
   });
 });

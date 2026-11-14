@@ -34,11 +34,8 @@ export default function FoodScreen() {
 
   // A new Meal, eaten now and named for the time of day, opened to add food.
   async function addMeal() {
-    let id: string | undefined;
-    const added = await runOrAlert("Couldn't add a meal", async () => {
-      id = (await tracker.createMeal()).id;
-    });
-    if (added && id) router.push({ pathname: '/meals/[id]', params: { id } });
+    const added = await runOrAlert("Couldn't add a meal", () => tracker.createMeal());
+    if (added) router.push({ pathname: '/meals/[id]', params: { id: added.result.id } });
   }
 
   return (

@@ -1,20 +1,18 @@
 import { alertPrompter } from '@/alert-prompter';
-import { confirmAndRun, runOrTell, type Question } from '@/prompter';
+import { confirmAndRun, runOrTell, type Question, type Ran } from '@/prompter';
 
-// Runs a core command, telling the lifter why if it's refused. True if it ran.
-export function runOrAlert(
-  failureTitle: string,
-  command: () => Promise<unknown>,
-): Promise<boolean> {
+// Runs a core command, telling the lifter why if it's refused. See runOrTell
+// for what it hands back.
+export function runOrAlert<T>(failureTitle: string, command: () => Promise<T>): Promise<Ran<T>> {
   return runOrTell(alertPrompter, failureTitle, command);
 }
 
 // Asks the lifter first, then runs the command if they accept, telling them why
-// if it's refused. True only if it ran.
-export function confirmThenRun(
+// if it's refused. See confirmAndRun for what it hands back.
+export function confirmThenRun<T>(
   question: Question,
   failureTitle: string,
-  command: () => Promise<unknown>,
-): Promise<boolean> {
+  command: () => Promise<T>,
+): Promise<Ran<T>> {
   return confirmAndRun(alertPrompter, question, failureTitle, command);
 }

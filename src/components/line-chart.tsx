@@ -3,7 +3,8 @@ import { StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { AppText } from '@/components/app-text';
-import { dayNumberOf, formatLocalDate } from '@/dates';
+import { dayNumberOf } from '@/core/tracker';
+import { formatLocalDate } from '@/dates';
 import { space, useAppTheme } from '@/theme';
 
 // A value on a local date, as YYYY-MM-DD, and how it reads, e.g. "116.7 kg".

@@ -15,7 +15,9 @@ import * as schema from './schema';
 import { workouts } from './schema';
 import { createSessionHistory, finished } from './session-history';
 import { createSettings } from './settings';
+import { createTemplateWorkouts } from './template-workouts';
 import { createTemplates } from './templates';
+import { createWorkoutReads } from './workout-reads';
 import { createWorkouts, type Workout } from './workouts';
 
 export { schema };
@@ -52,7 +54,19 @@ export {
   type SavedFoodValues,
   type TimeOfDay,
 } from './food';
-export { localDateOf } from './local-dates';
+export {
+  addDays,
+  addMonths,
+  calendarWeeks,
+  dateOn,
+  dayNumberOf,
+  firstDayOf,
+  isLocalDate,
+  localDateOf,
+  monthOf,
+  partsOf,
+  relativeToToday,
+} from './local-dates';
 export {
   progressMeasuresFor,
   type ProgressMeasure,
@@ -68,10 +82,10 @@ export {
   type TrackingType,
   type WeightUnit,
 } from './schema';
+export { type TargetUpdateOffer } from './template-workouts';
 export {
   problemWithTarget,
   type Target,
-  type TargetUpdateOffer,
   type TargetValues,
   type Template,
   type TemplateExercise,
@@ -123,19 +137,17 @@ export function createTracker(
 ) {
   const settings = createSettings(db);
   const { getDisplayUnit } = settings;
-  // Session history and Templates read from each other, as do Templates and
-  // Workouts, so each is handed the other's read as a function it calls once
-  // both exist.
-  const history = createSessionHistory(db, {
-    getDisplayUnit,
-    findTemplate: id => templateArea.findTemplate(id),
-  });
-  const templateArea = createTemplates({
+  // Each area is made after the ones it reads from.
+  const history = createSessionHistory(db, { getDisplayUnit });
+  const reads = createWorkoutReads(db, { getDisplayUnit });
+  const templateArea = createTemplates({ db, now, getDisplayUnit });
+  const templateWorkouts = createTemplateWorkouts({
     db,
     now,
     getDisplayUnit,
     history,
-    findWorkouts: where => workoutArea.findWorkouts(where),
+    templates: templateArea,
+    reads,
   });
   const rotationArea = createRotations({
     db,
@@ -149,12 +161,13 @@ export function createTracker(
     history,
     getDisplayUnit,
     getFallbackRestSeconds: settings.getFallbackRestSeconds,
-    templates: templateArea,
+    templateWorkouts,
     rotations: rotationArea,
+    reads,
   });
   const foodArea = createFood({ db, now, getMacroTargets: settings.getMacroTargets });
   const bodyWeightArea = createBodyWeight({ db, now, getDisplayUnit });
-  const { findWorkouts } = workoutArea;
+  const { findWorkouts } = reads;
   const { mealsOn } = foodArea;
   const { getWeighIn } = bodyWeightArea;
 
@@ -163,6 +176,7 @@ export function createTracker(
     ...createExercises({ db, now }).commands,
     ...workoutArea.commands,
     ...templateArea.commands,
+    ...templateWorkouts.commands,
     ...rotationArea.commands,
 
     // A day as History shows it, from three areas at once.

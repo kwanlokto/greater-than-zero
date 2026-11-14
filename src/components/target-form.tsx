@@ -7,14 +7,8 @@ import { Field } from '@/components/field';
 import { Input } from '@/components/input';
 import { setPresentationFor } from '@/components/set-fields';
 import { UnitPicker } from '@/components/unit-picker';
-import {
-  problemWithTarget,
-  type Target,
-  type TargetValues,
-  type TrackingType,
-  type WeightUnit,
-} from '@/core/tracker';
-import { parseDecimal, parseWholeNumber } from '@/numbers';
+import type { Target, TargetValues, TrackingType, WeightUnit } from '@/core/tracker';
+import { readTarget, targetBoxesOf, type TargetBoxes } from '@/form-values';
 import { space } from '@/theme';
 
 type Props = {
@@ -26,27 +20,25 @@ type Props = {
 };
 
 // A new Target starts at 3 × 8–12, the most common aim.
-const newTargetDefaults = { sets: '3', minReps: '8', maxReps: '12', weight: '' };
+const newTargetBoxes: TargetBoxes = { sets: '3', minReps: '8', maxReps: '12', weight: '' };
 
 // Sets × rep range @ weight for an Exercise in a Template. The weight is in the
 // unit chosen here, the display unit to begin with.
 export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Props) {
-  const fields = 'sets' in initial ? fieldsOf(initial) : newTargetDefaults;
-  const [sets, setSets] = useState(fields.sets);
-  const [minReps, setMinReps] = useState(fields.minReps);
-  const [maxReps, setMaxReps] = useState(fields.maxReps);
-  const [weight, setWeight] = useState(fields.weight);
+  const opened = 'sets' in initial ? initial : undefined;
+  const [boxes, setBoxes] = useState(() => (opened ? targetBoxesOf(opened) : newTargetBoxes));
   const [weightUnit, setWeightUnit] = useState(initial.weightUnit);
 
-  const typed = typedTarget({ sets, minReps, maxReps, weight, weightUnit });
-  // The core's own rule decides, so the form can't drift from it. Only said
-  // once every field holds a number, so it doesn't nag while typing.
-  const problem = typed && problemWithTarget(trackingType, typed);
+  const { values, problem } = readTarget(trackingType, boxes, weightUnit, opened);
   const presentation = setPresentationFor[trackingType];
   const weightField = presentation.weightField(weightUnit);
+  const box = (key: keyof TargetBoxes) => ({
+    value: boxes[key],
+    onChangeText: (text: string) => setBoxes(current => ({ ...current, [key]: text })),
+  });
 
   async function submit() {
-    if (typed && !problem) await onSubmit(typed);
+    if (values) await onSubmit(values);
   }
 
   return (
@@ -54,8 +46,7 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
       <View style={styles.row}>
         <Field label="Sets" style={styles.sets}>
           <Input
-            value={sets}
-            onChangeText={setSets}
+            {...box('sets')}
             keyboardType="number-pad"
             accessibilityLabel="Target sets"
             align="center"
@@ -66,8 +57,7 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
         <Field label="Rep range" style={styles.reps}>
           <View style={styles.row}>
             <Input
-              value={minReps}
-              onChangeText={setMinReps}
+              {...box('minReps')}
               keyboardType="number-pad"
               accessibilityLabel="Fewest reps"
               align="center"
@@ -77,8 +67,7 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
             />
             <AppText tone="muted">to</AppText>
             <Input
-              value={maxReps}
-              onChangeText={setMaxReps}
+              {...box('maxReps')}
               keyboardType="number-pad"
               accessibilityLabel="Most reps"
               align="center"
@@ -94,8 +83,7 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
         hint={presentation.hint}
       >
         <Input
-          value={weight}
-          onChangeText={setWeight}
+          {...box('weight')}
           keyboardType={weightField.keyboardType}
           placeholder={weightField.placeholder}
           accessibilityLabel={weightField.accessibilityLabel}
@@ -106,35 +94,9 @@ export function TargetForm({ trackingType, initial, submitLabel, onSubmit }: Pro
         <UnitPicker value={weightUnit} onChange={setWeightUnit} />
       </Field>
       {problem && <AppText tone="danger">{problem}</AppText>}
-      <Button size="large" label={submitLabel} disabled={!typed || !!problem} onPress={submit} />
+      <Button size="large" label={submitLabel} disabled={!values} onPress={submit} />
     </View>
   );
-}
-
-function fieldsOf(target: Target) {
-  return {
-    sets: String(target.sets),
-    minReps: String(target.minReps),
-    maxReps: String(target.maxReps),
-    weight: target.weight === null ? '' : String(target.weight),
-  };
-}
-
-// Undefined while a field doesn't hold a number.
-function typedTarget(text: {
-  sets: string;
-  minReps: string;
-  maxReps: string;
-  weight: string;
-  weightUnit: WeightUnit;
-}): TargetValues | undefined {
-  const sets = parseWholeNumber(text.sets);
-  const minReps = parseWholeNumber(text.minReps);
-  const maxReps = parseWholeNumber(text.maxReps);
-  const weight = parseDecimal(text.weight);
-  if (sets === undefined || minReps === undefined || maxReps === undefined) return undefined;
-  if (weight === undefined) return undefined;
-  return { sets, minReps, maxReps, weight, weightUnit: text.weightUnit };
 }
 
 const styles = StyleSheet.create({

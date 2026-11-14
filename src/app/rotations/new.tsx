@@ -9,11 +9,10 @@ export default function NewRotationScreen() {
   const router = useRouter();
 
   async function create(name: string) {
-    let id: string | undefined;
-    const created = await runOrAlert("Couldn't create the rotation", async () => {
-      id = (await tracker.createRotation(name)).id;
-    });
-    if (created && id) router.replace({ pathname: '/rotations/[id]', params: { id } });
+    const created = await runOrAlert("Couldn't create the rotation", () =>
+      tracker.createRotation(name),
+    );
+    if (created) router.replace({ pathname: '/rotations/[id]', params: { id: created.result.id } });
   }
 
   return <NameForm placeholder="e.g. PPL" submitLabel="Create rotation" onSubmit={create} />;
