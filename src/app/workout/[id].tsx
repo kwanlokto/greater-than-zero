@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
-import { ExerciseEntryCard } from '@/components/exercise-entry-card';
+import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-card';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
 import { confirmThenRun } from '@/run-or-alert';
@@ -52,7 +52,7 @@ export default function PastWorkoutScreen() {
         {finishedWorkoutWhen(workout)}
       </AppText>
       {workout.entries.map(entry => (
-        <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
+        <ExerciseEntryCard key={entryCardKey(entry)} entry={entry} displayUnit={displayUnit} />
       ))}
       <Button
         variant="secondary"

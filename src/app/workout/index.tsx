@@ -2,7 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
-import { ExerciseEntryCard } from '@/components/exercise-entry-card';
+import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-card';
 import { IconButton } from '@/components/icon-button';
 import { RestTimer } from '@/components/rest-timer';
 import { Screen } from '@/components/screen';
@@ -90,7 +90,7 @@ export default function WorkoutScreen() {
           />
         )}
         {workout.entries.map(entry => (
-          <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
+          <ExerciseEntryCard key={entryCardKey(entry)} entry={entry} displayUnit={displayUnit} />
         ))}
         <Button
           variant={workout.entries.length === 0 ? 'primary' : 'secondary'}

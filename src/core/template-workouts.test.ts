@@ -168,23 +168,51 @@ describe('A Workout started from a Template', () => {
     expect(changed?.templateId).toBe(template.id);
   });
 
-  it('drops the planned Sets of an Exercise swapped for another, as they were for the old one', async () => {
+  it('keeps the planned Sets and reps of an Exercise swapped for another, but not the weight', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template } = await createTemplateWith(tracker, 'Pull', ['Pull-up'], {
+    await tracker.setDisplayUnit('kg');
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press'], {
       ...threeByEightToTwelve,
-      weight: null,
+      weight: 135,
+      weightUnit: 'lb',
     });
     const workout = await tracker.startWorkout({ templateId: template.id });
     const [entry] = await entriesOf(tracker, workout.id);
-    const latPulldown = await findExerciseByName(tracker, 'Lat Pulldown');
+    const incline = await findExerciseByName(tracker, 'Incline Bench Press');
 
-    await tracker.swapExercise(entry.id, latPulldown.id);
+    await tracker.swapExercise(entry.id, incline.id);
 
+    // The weight was the Target's for Bench Press, so it's typed afresh, in
+    // the display unit.
     const [swapped] = await entriesOf(tracker, workout.id);
-    expect(swapped.plannedSets).toEqual([]);
-    await expect(
-      tracker.confirmPlannedSet(entry.plannedSets[0].id, { weight: null, reps: 8 }),
-    ).rejects.toThrow('No such planned Set');
+    const planned = swapped.plannedSets.map(set => [set.weight, set.weightUnit, set.reps]);
+    expect(swapped.exercise.name).toBe('Incline Bench Press');
+    expect(planned).toEqual([
+      [null, 'kg', 8],
+      [null, 'kg', 8],
+      [null, 'kg', 8],
+    ]);
+  });
+
+  it('logs a kept planned Set to the Exercise swapped in, in the display unit', async () => {
+    const tracker = createTracker(createTestDatabase());
+    await tracker.setDisplayUnit('kg');
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press'], {
+      ...threeByEightToTwelve,
+      weightUnit: 'lb',
+    });
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const [entry] = await entriesOf(tracker, workout.id);
+    const incline = await findExerciseByName(tracker, 'Incline Bench Press');
+    await tracker.swapExercise(entry.id, incline.id);
+    const [swapped] = await entriesOf(tracker, workout.id);
+
+    await tracker.confirmPlannedSet(swapped.plannedSets[0].id, { weight: 30, reps: 9 });
+
+    const [logged] = await entriesOf(tracker, workout.id);
+    expect(logged.exercise.name).toBe('Incline Bench Press');
+    expect(logged.sets.map(set => [set.weight, set.weightUnit, set.reps])).toEqual([[30, 'kg', 9]]);
+    expect(logged.plannedSets).toHaveLength(2);
   });
 
   it("is called by its Template's name as it is now, even once the Template is deleted", async () => {
