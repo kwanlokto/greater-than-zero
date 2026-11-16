@@ -13,20 +13,25 @@ type Props = {
   onPress: () => void;
 };
 
-// A finished Workout as it was recorded: when it took place, then each
-// Exercise with its notes and Sets, weights in the display unit. Pressing it
-// opens it for editing.
+// A finished Workout as it was recorded: its Template's name, if it started
+// from one, and when it took place, then each Exercise with its notes and
+// Sets, weights in the display unit. Pressing it opens it for editing.
 export function WorkoutCard({ workout, onPress }: Props) {
   const { colors } = useAppTheme();
 
   return (
     <Card onPress={onPress} accessibilityHint="Opens this workout for editing" style={styles.card}>
-      <View style={styles.header}>
-        <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-        <AppText variant="label" tone="muted" style={styles.time}>
-          {workoutTimes(workout)}
-        </AppText>
-        <Ionicons name="create-outline" size={20} color={colors.textFaint} />
+      <View style={styles.heading}>
+        {workout.templateName !== null && (
+          <AppText variant="heading">{workout.templateName}</AppText>
+        )}
+        <View style={styles.header}>
+          <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+          <AppText variant="label" tone="muted" style={styles.time}>
+            {workoutTimes(workout)}
+          </AppText>
+          <Ionicons name="create-outline" size={20} color={colors.textFaint} />
+        </View>
       </View>
       {workout.entries.map(entry => (
         <RecordedExerciseEntry key={entry.id} entry={entry} />
@@ -72,6 +77,10 @@ function RecordedExerciseEntry({ entry }: { entry: ExerciseEntry }) {
 const styles = StyleSheet.create({
   card: {
     gap: space.lg,
+  },
+  // The name sits close to the time under it, which belongs with it.
+  heading: {
+    gap: space.xs,
   },
   header: {
     flexDirection: 'row',

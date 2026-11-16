@@ -187,6 +187,19 @@ describe('A Workout started from a Template', () => {
     ).rejects.toThrow('No such planned Set');
   });
 
+  it("is called by its Template's name as it is now, even once the Template is deleted", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    const workout = await tracker.startWorkout({ templateId: template.id });
+    const nameNow = async () => (await tracker.getWorkout(workout.id))?.templateName;
+
+    expect(await nameNow()).toBe('Push');
+    await tracker.renameTemplate(template.id, 'Push A');
+    expect(await nameNow()).toBe('Push A');
+    await tracker.deleteTemplate(template.id);
+    expect(await nameNow()).toBe('Push A');
+  });
+
   it('starts empty from a Template with no Exercises yet, like an empty Workout', async () => {
     const tracker = createTracker(createTestDatabase());
     const template = await tracker.createTemplate('Push');

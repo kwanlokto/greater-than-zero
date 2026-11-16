@@ -13,7 +13,7 @@ import { confirmThenRun } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
-import { backfillTitle } from '@/workout-labels';
+import { backfillTitle, workoutName } from '@/workout-labels';
 
 export default function WorkoutScreen() {
   const router = useRouter();
@@ -53,7 +53,7 @@ export default function WorkoutScreen() {
     <>
       <Stack.Screen
         options={{
-          title: backfillTitle(workout) ?? 'Workout',
+          title: backfillTitle(workout) ?? workoutName(workout),
           // Hides the Workout without ending it; the Workout bar brings it back.
           headerLeft: () => (
             <IconButton

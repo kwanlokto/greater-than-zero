@@ -83,6 +83,10 @@ export type Workout = {
   restEndsAt: Date | null;
   // The Template it was started from, or null when started empty.
   templateId: string | null;
+  // That Template's name as it is now, e.g. after a rename. Still there once
+  // the Template is deleted, as deleting only hides it. Null when started
+  // empty.
+  templateName: string | null;
   // The Rotation it counted toward: the one active when it was started from
   // one of its Templates. Null otherwise.
   rotationId: string | null;

@@ -280,7 +280,8 @@ export const rotationEntriesRelations = relations(rotationEntries, ({ one }) => 
   template: one(templates, { fields: [rotationEntries.templateId], references: [templates.id] }),
 }));
 
-export const workoutsRelations = relations(workouts, ({ many }) => ({
+export const workoutsRelations = relations(workouts, ({ one, many }) => ({
+  template: one(templates, { fields: [workouts.templateId], references: [templates.id] }),
   entries: many(exerciseEntries),
 }));
 
