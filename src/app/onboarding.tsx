@@ -6,6 +6,7 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { MacroTargetsForm } from '@/components/macro-targets-form';
 import { UnitPicker } from '@/components/unit-picker';
+import { Wordmark } from '@/components/wordmark';
 import type { MacroTargets, WeightUnit } from '@/core/tracker';
 import { tracker } from '@/database';
 import { useFinishOnboarding } from '@/onboarding';
@@ -38,7 +39,7 @@ export default function OnboardingScreen() {
       <SafeAreaView style={[styles.screen, { backgroundColor: colors.background }]}>
         <View style={styles.centred}>
           <StepCount step={1} />
-          <AppText variant="title">Notch</AppText>
+          <Wordmark height={28} color={colors.text} />
           <AppText variant="heading">Which unit do you lift in?</AppText>
           <UnitPicker onChange={chooseUnit} large />
           <AppText tone="muted">You can change this later in Settings.</AppText>

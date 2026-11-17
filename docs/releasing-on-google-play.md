@@ -18,15 +18,9 @@ Pick one of these before the first release:
 
 The in-app rest timer stays exact whichever you choose, because it counts down from the rest end time. Only the notification is affected.
 
-### Add an app icon
+### The app icon is ready
 
-`app.json` has no `icon` or `android.adaptiveIcon` yet, so builds show a default icon. You need three images:
-
-- A 1024×1024 PNG for `expo.icon`.
-- An adaptive icon: `android.adaptiveIcon.foregroundImage` (a 1024×1024 PNG with the artwork centred on a transparent background) and `android.adaptiveIcon.backgroundColor`. Expo's [app icon guide](https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/) covers the safe area.
-- A 512×512 PNG of the icon for the store listing.
-
-The icon is built into the app, so it ships with the next build.
+The logo is a stepped N: its right stem stands one notch taller than its left. `app.json` uses the files in `assets/` for the app icon (a black tile), the themed icon, the light and dark splash screens and the notification icon. These are built into the app, so a change ships with the next build. The store listing's images are in `assets/store/` (step 6).
 
 ### Write a privacy policy
 
@@ -124,8 +118,8 @@ Play Console won't send the app for review until these are done. The dashboard l
 **Main store listing:**
 
 - App name (up to 30 characters), short description (up to 80) and full description (up to 4,000)
-- App icon: 512×512 PNG
-- Feature graphic: 1024×500 JPEG or PNG with no transparency
+- App icon: 512×512 PNG, `assets/store/icon-512.png`
+- Feature graphic: 1024×500 JPEG or PNG with no transparency, `assets/store/feature-graphic.png`
 - At least two phone screenshots. Each side must be 320–3,840 px, and the long side can be at most twice the short side. Most phone screenshots are taller than that, so crop them (1080×1920 works).
 - Category: Health & Fitness, plus a contact email, which is shown publicly
 

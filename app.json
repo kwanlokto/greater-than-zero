@@ -9,6 +9,7 @@
     "orientation": "portrait",
     "scheme": "greaterthanzero",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.rkwan.greater_than_zero",
       "allowBackup": true,
@@ -16,7 +17,12 @@
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
     },
     "plugins": [
       "expo-router",
@@ -24,15 +30,24 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-blank.png",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
           "backgroundColor": "#ffffff",
           "dark": {
+            "image": "./assets/splash-icon-dark.png",
             "backgroundColor": "#000000"
           }
         }
       ],
       "expo-sqlite",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#000000"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
