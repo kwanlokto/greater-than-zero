@@ -10,10 +10,10 @@ import type { TrackerDatabase } from './tracker';
 // Bumped by hand when importing an older file needs more than leaving tables
 // added since empty and giving columns added since their defaults: when the
 // document's own layout changes, or a migration changes rows already there
-// (e.g. adding a built-in Exercise). Each bump adds a step to formatUpgrades.
-// An app refuses files from a newer version. The tables' shape is versioned
-// apart, by schemaVersion.
-export const backupFormatVersion = 1;
+// (e.g. adding a built-in Exercise) or drops a column. Each bump adds a step to
+// formatUpgrades. An app refuses files from a newer version. The tables' shape
+// is versioned apart, by schemaVersion.
+export const backupFormatVersion = 2;
 
 export type BackupFile = {
   formatVersion: number;
@@ -61,11 +61,34 @@ export function readTables(db: TrackerDatabase): BackupFile['tables'] {
 }
 
 // Brings a file in an older format up to date, one version at a time:
-// formatUpgrades[n] turns a version n file into a version n + 1 one. Empty
-// until the format first changes, when bumping backupFormatVersion to 2 means
-// adding formatUpgrades[1].
+// formatUpgrades[n] turns a version n file into a version n + 1 one.
 const formatUpgrades: Record<number, (file: Record<string, unknown>) => Record<string, unknown>> =
-  {};
+  {
+    // Exercise notes were dropped (migration 0018), so a version 1 file's
+    // Exercise entries have a notes column the database no longer has.
+    1: file => withoutColumn(file, 'exercise_entries', 'notes'),
+  };
+
+// `file` with `column` taken out of every row of `table`. Anything not laid out
+// as a Backup file is left as it is, for checkTables to refuse.
+function withoutColumn(file: Record<string, unknown>, table: string, column: string) {
+  const { tables } = file;
+  if (!isRecord(tables)) return file;
+  const rows = tables[table];
+  if (!Array.isArray(rows)) return file;
+  return {
+    ...file,
+    tables: {
+      ...tables,
+      [table]: rows.map((row: unknown) => {
+        if (!isRecord(row)) return row;
+        const kept = { ...row };
+        delete kept[column];
+        return kept;
+      }),
+    },
+  };
+}
 
 // The Backup file in `contents`, checked and in the current format, for a
 // database that's had `schemaVersion` migrations. Throws, saying why, for one

@@ -122,6 +122,7 @@ Today's Weigh-in is entered on S05 itself.
 ```mermaid
 flowchart LR
   S09["S09 Workout in progress"] -->|Add exercise| S10["S10 Choose exercise"]
+  S09 -->|an Exercise's name, before any Set| S10
   S09 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   D06 -->|Remove exercise, with Sets| D07{{"D07 Remove and its sets?"}}
@@ -151,6 +152,7 @@ flowchart TD
   S12 -->|Add workout, on a past day| S09["S09 Workout in progress"]
   S12 -->|Go to the workout in progress| S09
   S11 -->|Add exercise| S10["S10 Choose exercise"]
+  S11 -->|an Exercise's name, before any Set| S10
   S11 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   S10 -->|pick an Exercise| S11

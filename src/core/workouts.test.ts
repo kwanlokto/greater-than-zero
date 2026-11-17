@@ -486,16 +486,6 @@ describe('Warm-up Sets', () => {
 });
 
 describe('Exercises in a Workout', () => {
-  it('start with no notes and keep the notes written for them', async () => {
-    const tracker = createTracker(createTestDatabase());
-    const { workout, entry } = await startWorkoutWith(tracker, 'Leg Press');
-    const notes = async () => (await tracker.getWorkout(workout.id))?.entries.map(e => e.notes);
-
-    expect(await notes()).toEqual(['']);
-    await tracker.saveEntryNotes(entry.id, 'Seat on 4, feet high');
-    expect(await notes()).toEqual(['Seat on 4, feet high']);
-  });
-
   it('can be removed, leaving the others in order', async () => {
     const tracker = createTracker(createTestDatabase());
     const { workout, entries } = await startWorkoutWithEach(tracker, [
@@ -540,19 +530,6 @@ describe('Exercises in a Workout', () => {
       'Dumbbell Bench Press',
       'Barbell Row',
     ]);
-  });
-
-  it('keep their notes when swapped, so nothing the lifter wrote is lost', async () => {
-    const tracker = createTracker(createTestDatabase());
-    const { workout, entry } = await startWorkoutWith(tracker, 'Leg Press');
-    await tracker.saveEntryNotes(entry.id, 'Leg press taken, back in 10 min');
-    const squat = await findExerciseByName(tracker, 'Squat');
-
-    await tracker.swapExercise(entry.id, squat.id);
-
-    expect((await tracker.getWorkout(workout.id))?.entries[0].notes).toBe(
-      'Leg press taken, back in 10 min',
-    );
   });
 
   it("can't be swapped once a Set is logged for them", async () => {

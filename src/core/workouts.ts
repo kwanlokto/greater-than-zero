@@ -63,7 +63,6 @@ export type PlannedSet = {
 export type ExerciseEntry = {
   id: string;
   exercise: Exercise;
-  notes: string;
   sets: WorkoutSet[];
   plannedSets: PlannedSet[];
 };
@@ -337,19 +336,6 @@ export function createWorkouts({
     });
   }
 
-  // Removed entries can't change.
-  async function updateEntry(
-    exerciseEntryId: string,
-    values: Partial<typeof exerciseEntries.$inferInsert>,
-  ) {
-    const changed = await db
-      .update(exerciseEntries)
-      .set(values)
-      .where(and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries)))
-      .returning({ id: exerciseEntries.id });
-    if (changed.length === 0) throw new Error('No such Exercise in a Workout');
-  }
-
   // Deleted Sets can't change.
   async function updateSet(setId: string, values: Partial<typeof sets.$inferInsert>) {
     const changed = await db
@@ -439,12 +425,8 @@ export function createWorkouts({
       });
     },
 
-    async saveEntryNotes(exerciseEntryId: string, notes: string): Promise<void> {
-      await updateEntry(exerciseEntryId, { notes });
-    },
-
     // The new Exercise takes the old one's place in the Workout, keeping its
-    // notes and its planned Sets: as many, with the same reps, but no weight,
+    // planned Sets: as many, with the same reps, but no weight,
     // as that was planned for the Exercise swapped out. The weight is then
     // typed in the display unit, as for any new Set. Enforces
     // canSwapExercise's rule against the saved Sets.

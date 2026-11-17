@@ -27,7 +27,6 @@ describe('A finished Workout', () => {
     await tracker.editSet(warmUp.id, { weight: 60, reps: 10, isWarmUp: true });
     await tracker.editSet(working.id, { weight: 102.5, reps: 5 });
     await tracker.logSameAsLastSet(entry.id);
-    await tracker.saveEntryNotes(entry.id, 'Knees caved on the last one');
     const legPress = await findExerciseByName(tracker, 'Leg Press');
     const added = await tracker.addExerciseToWorkout(workout.id, legPress.id);
     await tracker.logSet(added.id, { weight: 180, reps: 10 }, 'kg');
@@ -39,7 +38,6 @@ describe('A finished Workout', () => {
       entries: [
         {
           exercise: { name: 'Squat' },
-          notes: 'Knees caved on the last one',
           sets: [
             { weight: 60, reps: 10, isWarmUp: true },
             { weight: 102.5, reps: 5, isWarmUp: false },

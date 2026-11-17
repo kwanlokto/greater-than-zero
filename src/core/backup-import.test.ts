@@ -1,4 +1,5 @@
 import journal from '../../drizzle/meta/_journal.json';
+import { backupFormatVersion } from './backup';
 import { createTestDatabase } from './test-database';
 import {
   clockAt,
@@ -15,6 +16,13 @@ const fromNewerApp =
 
 // How many migrations there were before Rotations: an app's schema version then.
 const beforeRotations = journal.entries.findIndex(({ tag }) => tag === '0013_create_rotations');
+// And before Exercise notes were dropped.
+const beforeNotesDropped = journal.entries.findIndex(
+  ({ tag }) => tag === '0018_drop_exercise_entries_notes',
+);
+
+// A format version only a newer app could have written.
+const newerFormat = backupFormatVersion + 1;
 
 // A phone with a little of everything on it: a display unit, a hidden custom
 // Exercise, a Rotation of Templates, finished Workouts and one in progress.
@@ -107,8 +115,8 @@ describe('Backup import', () => {
   });
 
   it.each<[string, (backup: BackupFile) => object]>([
-    ['format version', backup => ({ ...backup, formatVersion: 2 })],
-    ['format version, laid out differently', () => ({ formatVersion: 2, workouts: [] })],
+    ['format version', backup => ({ ...backup, formatVersion: newerFormat })],
+    ['format version, laid out differently', () => ({ formatVersion: newerFormat, workouts: [] })],
     ['schema version', backup => ({ ...backup, schemaVersion: journal.entries.length + 1 })],
   ])('refuses a file with a newer %s, from a newer app', async (_, newer) => {
     await expectRefused(JSON.stringify(newer(await backupWithData())), fromNewerApp);
@@ -179,6 +187,29 @@ describe('Backup import', () => {
     const [workout] = (await phone.getDay('2026-09-28')).workouts;
     expect(workout.rotationId).toBeNull();
     expect(workout.entries.map(entry => entry.exercise.name)).toEqual(['Bench Press']);
+  });
+
+  it('takes a file from before Exercise notes were dropped, leaving the notes out', async () => {
+    const backup = await backupWithData();
+    // As an app from before then would have written it: format version 1,
+    // with notes on every Exercise entry.
+    const withNotes = {
+      ...backup,
+      formatVersion: 1,
+      schemaVersion: beforeNotesDropped,
+      tables: {
+        ...backup.tables,
+        exercise_entries: backup.tables.exercise_entries.map(entry => ({
+          ...entry,
+          notes: 'Pause at the bottom',
+        })),
+      },
+    };
+    const phone = createTracker(createTestDatabase());
+
+    await phone.importBackup(JSON.stringify(withNotes));
+
+    expect(await dataOn(phone)).toEqual(backup.tables);
   });
 
   it('can be checked first, to say when it was exported, changing nothing', async () => {

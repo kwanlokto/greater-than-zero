@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ActionSheet, type SheetAction } from '@/components/action-sheet';
@@ -9,7 +9,6 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Chip } from '@/components/chip';
 import { IconButton } from '@/components/icon-button';
-import { Input } from '@/components/input';
 import { SetFields, setLabels, setPresentationFor, useSetFields } from '@/components/set-fields';
 import { Toggle } from '@/components/toggle';
 import {
@@ -38,8 +37,8 @@ export function entryCardKey(entry: Pick<EntryToLog, 'id' | 'exercise'>): string
   return `${entry.id}:${entry.exercise.id}`;
 }
 
-// One Exercise in a Workout: its notes, its Sets, each open to correction, the
-// Sets still planned, and a row to log another one.
+// One Exercise in a Workout: its Sets, each open to correction, the Sets still
+// planned, and a row to log another one.
 export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const router = useRouter();
   const { colors } = useAppTheme();
@@ -132,7 +131,6 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
       </View>
       <LastTimeLine entry={entry} />
       <ReadyToGoHeavierLine entry={entry} />
-      <EntryNotes entry={entry} />
       {(entry.sets.length > 0 || hasPlanned) && (
         <View style={styles.sets}>
           {entry.sets.map((set, index) =>
@@ -415,44 +413,6 @@ function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
         Ready to go heavier
       </AppText>
     </View>
-  );
-}
-
-// Saved shortly after the lifter stops typing, and when the card goes away, so
-// a note isn't lost if they finish the Workout straight after writing it.
-function EntryNotes({ entry }: { entry: EntryToLog }) {
-  const [notes, setNotes] = useState(entry.notes);
-  const latest = useRef(entry.notes);
-  const saved = useRef(entry.notes);
-
-  const save = useCallback(() => {
-    if (latest.current === saved.current) return;
-    saved.current = latest.current;
-    tracker
-      .saveEntryNotes(entry.id, latest.current)
-      // Only fails once the Exercise has been removed or the Workout discarded.
-      .catch(error => console.warn('Could not save notes', error));
-  }, [entry.id]);
-
-  useEffect(() => {
-    const timer = setTimeout(save, 600);
-    return () => clearTimeout(timer);
-  }, [notes, save]);
-  useEffect(() => save, [save]);
-
-  return (
-    <Input
-      value={notes}
-      onChangeText={text => {
-        latest.current = text;
-        setNotes(text);
-      }}
-      onEndEditing={save}
-      placeholder="Notes"
-      multiline
-      dense
-      accessibilityLabel={`Notes for ${entry.exercise.name}`}
-    />
   );
 }
 
