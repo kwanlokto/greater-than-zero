@@ -35,6 +35,8 @@ export function createWorkoutReads(
         rotationId: true,
       },
       with: {
+        // Deleted ones too, so a past Workout keeps its Template's name.
+        template: { columns: { name: true } },
         entries: {
           where: notDeleted(exerciseEntries),
           orderBy: asc(exerciseEntries.position),
@@ -63,8 +65,9 @@ export function createWorkoutReads(
       },
     });
     const displayUnit = await getDisplayUnit();
-    return found.map(workout => ({
+    return found.map(({ template, ...workout }) => ({
       ...workout,
+      templateName: template?.name ?? null,
       entries: workout.entries.map(entry => ({
         ...entry,
         sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),

@@ -83,6 +83,10 @@ export type Workout = {
   restEndsAt: Date | null;
   // The Template it was started from, or null when started empty.
   templateId: string | null;
+  // That Template's name as it is now, e.g. after a rename. Still there once
+  // the Template is deleted, as deleting only hides it. Null when started
+  // empty.
+  templateName: string | null;
   // The Rotation it counted toward: the one active when it was started from
   // one of its Templates. Null otherwise.
   rotationId: string | null;
@@ -440,8 +444,12 @@ export function createWorkouts({
     },
 
     // The new Exercise takes the old one's place in the Workout, keeping its
-    // notes but not its planned Sets. Enforces canSwapExercise's rule against the saved Sets.
+    // notes and its planned Sets: as many, with the same reps, but no weight,
+    // as that was planned for the Exercise swapped out. The weight is then
+    // typed in the display unit, as for any new Set. Enforces
+    // canSwapExercise's rule against the saved Sets.
     async swapExercise(exerciseEntryId: string, exerciseId: string): Promise<void> {
+      const displayUnit = await getDisplayUnit();
       // All together, so a planned Set confirmed meanwhile can't land on the
       // new Exercise.
       db.transaction(tx => {
@@ -459,8 +467,10 @@ export function createWorkouts({
           .returning({ id: exerciseEntries.id })
           .all();
         if (swapped.length === 0) throw new Error('No such Exercise in a Workout');
-        // They were planned from the Target of the Exercise swapped out.
-        softDelete(tx, plannedSets, eq(plannedSets.exerciseEntryId, exerciseEntryId), now());
+        tx.update(plannedSets)
+          .set({ weight: null, weightUnit: displayUnit })
+          .where(and(eq(plannedSets.exerciseEntryId, exerciseEntryId), notDeleted(plannedSets)))
+          .run();
       });
     },
 

@@ -31,6 +31,13 @@ type Props = {
   displayUnit: WeightUnit;
 };
 
+// The key to give each card. Swapping the Exercise starts its card afresh, so
+// the boxes of its planned Sets don't keep numbers meant for the Exercise
+// swapped out.
+export function entryCardKey(entry: Pick<EntryToLog, 'id' | 'exercise'>): string {
+  return `${entry.id}:${entry.exercise.id}`;
+}
+
 // One Exercise in a Workout: its notes, its Sets, each open to correction, the
 // Sets still planned, and a row to log another one.
 export function ExerciseEntryCard({ entry, displayUnit }: Props) {
@@ -81,19 +88,15 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
     );
   }
 
+  // Only before a Set is logged for it, as Sets belong to the Exercise they
+  // were done on. navigate, not push, so a double tap opens the chooser once.
+  const canSwap = canSwapExercise(entry);
+  const swap = () =>
+    router.navigate({ pathname: '/workout/choose-exercise', params: { swapEntryId: entry.id } });
+
   const actions: SheetAction[] = [
-    ...(canSwapExercise(entry)
-      ? [
-          {
-            label: 'Swap exercise',
-            icon: 'swap-horizontal' as const,
-            onPress: () =>
-              router.push({
-                pathname: '/workout/choose-exercise',
-                params: { swapEntryId: entry.id },
-              }),
-          },
-        ]
+    ...(canSwap
+      ? [{ label: 'Swap exercise', icon: 'swap-horizontal' as const, onPress: swap }]
       : []),
     { label: 'Remove exercise', icon: 'trash-outline', destructive: true, onPress: confirmRemove },
   ];
@@ -101,9 +104,25 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   return (
     <Card style={styles.card}>
       <View style={styles.header}>
-        <AppText variant="heading" style={styles.name}>
-          {entry.exercise.name}
-        </AppText>
+        {canSwap ? (
+          // Tapping the name swaps it, while it can still be swapped.
+          <Pressable
+            onPress={swap}
+            accessibilityRole="button"
+            accessibilityLabel={`Swap ${entry.exercise.name}`}
+            accessibilityHint="Chooses another exercise to do in its place"
+            style={({ pressed }) => [styles.name, styles.swap, pressed && styles.pressed]}
+          >
+            <AppText variant="heading" style={styles.swapName}>
+              {entry.exercise.name}
+            </AppText>
+            <Ionicons name="swap-horizontal" size={20} color={colors.primary} />
+          </Pressable>
+        ) : (
+          <AppText variant="heading" style={styles.name}>
+            {entry.exercise.name}
+          </AppText>
+        )}
         <IconButton
           icon="ellipsis-horizontal"
           label={`More for ${entry.exercise.name}`}
@@ -448,6 +467,16 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
+  },
+  swap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: minTouch,
+  },
+  // Wraps a long name, keeping the icon after it.
+  swapName: {
+    flexShrink: 1,
   },
   // Its icon lines up with the card's edge; the touch area runs past it.
   more: {

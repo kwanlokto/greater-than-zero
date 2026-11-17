@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { maxFontScale, radius, space, useAppTheme } from '@/theme';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
-import { backfillTitle } from '@/workout-labels';
+import { backfillTitle, workoutName } from '@/workout-labels';
 
 // Shown on every tab while a Workout is in progress; tapping it returns there.
 export function WorkoutBar() {
@@ -37,7 +37,7 @@ export function WorkoutBar() {
             numberOfLines={1}
             style={[styles.title, { color: colors.onPrimary }]}
           >
-            {backfillTitle(workout) ?? 'Workout in progress'}
+            {backfillTitle(workout) ?? `${workoutName(workout)} in progress`}
           </Text>
           <Text
             maxFontSizeMultiplier={maxFontScale}

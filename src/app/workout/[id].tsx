@@ -4,14 +4,13 @@ import { StyleSheet } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
-import { ExerciseEntryCard } from '@/components/exercise-entry-card';
+import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-card';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
-import { formatLocalDateWithWeekday } from '@/dates';
 import { confirmThenRun } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
-import { workoutTimes } from '@/workout-labels';
+import { finishedWorkoutTitle, finishedWorkoutWhen } from '@/workout-labels';
 
 // A finished Workout opened from History, corrected with the same tools as
 // during a Workout. It keeps its date and stays finished; there's no rest.
@@ -48,12 +47,12 @@ export default function PastWorkoutScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
-      <Stack.Screen options={{ title: formatLocalDateWithWeekday(workout.localDate) }} />
+      <Stack.Screen options={{ title: finishedWorkoutTitle(workout) }} />
       <AppText tone="muted" style={styles.times}>
-        {workoutTimes(workout)}
+        {finishedWorkoutWhen(workout)}
       </AppText>
       {workout.entries.map(entry => (
-        <ExerciseEntryCard key={entry.id} entry={entry} displayUnit={displayUnit} />
+        <ExerciseEntryCard key={entryCardKey(entry)} entry={entry} displayUnit={displayUnit} />
       ))}
       <Button
         variant="secondary"
