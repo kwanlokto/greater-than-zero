@@ -40,7 +40,7 @@ export function createWorkoutReads(
         entries: {
           where: notDeleted(exerciseEntries),
           orderBy: asc(exerciseEntries.position),
-          columns: { id: true, notes: true },
+          columns: { id: true },
           with: {
             exercise: { columns: exerciseQueryColumns },
             sets: {

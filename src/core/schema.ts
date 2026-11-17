@@ -154,7 +154,9 @@ export const exerciseEntries = sqliteTable('exercise_entries', {
     .notNull()
     .references(() => exercises.id),
   position: integer('position').notNull(),
-  // Free text, e.g. cues, pain or machine settings.
+  // Notes the lifter could once write for it. The app no longer shows or
+  // sets them (removed 2026-11-16); the column stays so notes already written
+  // aren't deleted and Backups keep the same shape.
   notes: text('notes').notNull().default(''),
   // The Template exercise it was copied from when the Workout started from a
   // Template; empty for one added during the Workout or swapped in.

@@ -14,8 +14,8 @@ type Props = {
 };
 
 // A finished Workout as it was recorded: its Template's name, if it started
-// from one, and when it took place, then each Exercise with its notes and
-// Sets, weights in the display unit. Pressing it opens it for editing.
+// from one, and when it took place, then each Exercise with its Sets, weights
+// in the display unit. Pressing it opens it for editing.
 export function WorkoutCard({ workout, onPress }: Props) {
   const { colors } = useAppTheme();
 
@@ -49,11 +49,6 @@ function RecordedExerciseEntry({ entry }: { entry: ExerciseEntry }) {
   return (
     <View style={styles.entry}>
       <AppText variant="subheading">{entry.exercise.name}</AppText>
-      {entry.notes !== '' && (
-        <AppText variant="caption" tone="muted">
-          {entry.notes}
-        </AppText>
-      )}
       {entry.sets.length === 0 ? (
         <AppText variant="caption" tone="muted">
           No sets

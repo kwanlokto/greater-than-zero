@@ -57,13 +57,12 @@ describe('Training days', () => {
 });
 
 describe('A day', () => {
-  it('lists its finished Workouts in the order they started, with their Exercises, notes and Sets', async () => {
+  it('lists its finished Workouts in the order they started, with their Exercises and Sets', async () => {
     const clock = clockAt('2026-09-12T07:00:00-04:00');
     const tracker = createTracker(createTestDatabase(), { now: clock.now });
     const morning = await startWorkoutWith(tracker, 'Squat');
     await tracker.logSet(morning.entry.id, { weight: 60, reps: 10, isWarmUp: true }, 'kg');
     await tracker.logSet(morning.entry.id, { weight: 100, reps: 5 }, 'kg');
-    await tracker.saveEntryNotes(morning.entry.id, 'Belt on');
     clock.setTime('2026-09-12T08:00:00-04:00');
     await tracker.finishWorkout(morning.workout.id);
     clock.setTime('2026-09-12T18:00:00-04:00');
@@ -83,7 +82,6 @@ describe('A day', () => {
           entries: [
             {
               exercise: { name: 'Squat' },
-              notes: 'Belt on',
               sets: [
                 { weight: 60, reps: 10, isWarmUp: true },
                 { weight: 100, reps: 5, isWarmUp: false },
@@ -96,8 +94,8 @@ describe('A day', () => {
           startedAt: new Date('2026-09-12T18:00:00-04:00'),
           finishedAt: new Date('2026-09-12T19:00:00-04:00'),
           entries: [
-            { exercise: { name: 'Bench Press' }, notes: '', sets: [{ weight: 60, reps: 8 }] },
-            { exercise: { name: 'Pull-up' }, notes: '', sets: [{ weight: null, reps: 8 }] },
+            { exercise: { name: 'Bench Press' }, sets: [{ weight: 60, reps: 8 }] },
+            { exercise: { name: 'Pull-up' }, sets: [{ weight: null, reps: 8 }] },
           ],
         },
       ],
