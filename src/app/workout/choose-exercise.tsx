@@ -31,7 +31,8 @@ function choiceFor({ workoutId, swapEntryId }: Params) {
 }
 
 export default function ChooseExerciseScreen() {
-  const choice = choiceFor(useLocalSearchParams<Params>());
+  const params = useLocalSearchParams<Params>();
+  const choice = choiceFor(params);
   const router = useRouter();
   // One tap picks one Exercise, even if the lifter taps again while leaving.
   const choosing = useRef(false);
@@ -53,6 +54,19 @@ export default function ChooseExerciseScreen() {
         renderExercise={exercise => (
           <ExerciseRow exercise={exercise} icon={choice.icon} onPress={() => choose(exercise)} />
         )}
+        // One the library lacks is made without leaving the Workout: New
+        // exercise is told what this chooser was opened for, and does it.
+        onNewExercise={name =>
+          router.navigate({
+            pathname: '/exercises/new',
+            params: {
+              name,
+              ...(params.swapEntryId
+                ? { swapEntryId: params.swapEntryId }
+                : { workoutId: params.workoutId }),
+            },
+          })
+        }
       />
     </>
   );

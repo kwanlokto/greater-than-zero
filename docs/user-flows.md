@@ -38,7 +38,7 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S33 | Rotation | `/rotations/[id]` | `src/app/rotations/[id].tsx` |
 | S34 | Choose Category for a Rotation | `/rotations/choose-category` | `src/app/rotations/choose-category.tsx` |
 | S35 | Exercise library | `/exercises` | `src/app/exercises/index.tsx` |
-| S36 | New exercise | `/exercises/new` | `src/app/exercises/new.tsx` |
+| S36 | New exercise: in the library, or straight into a Workout | `/exercises/new` | `src/app/exercises/new.tsx` |
 | S37 | Edit exercise | `/exercises/[id]` | `src/app/exercises/[id].tsx` |
 | S38 | Repeat a workout | `/workout/repeat` | `src/app/workout/repeat.tsx` |
 | S39 | Categories | `/categories` | `src/app/categories/index.tsx` |
@@ -128,6 +128,8 @@ flowchart LR
   D06 -->|Swap exercise| S10
   D06 -->|Remove exercise, with Sets| D07{{"D07 Remove and its sets?"}}
   S10 -->|pick an Exercise| S09
+  S10 -->|New exercise, or after a search that found nothing| S36["S36 New exercise"]
+  S36 -->|Add exercise: added, or swapped in| S09
   S09 -->|its title| S40["S40 Choose Category"]
   S40 -->|pick one, add one, or No category| S09
   S09 -->|Finish, once a Set is logged| D01{{"D01 Finish workout?"}}
@@ -165,7 +167,7 @@ flowchart TD
   D08 -->|Delete| S12
 ```
 
-S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05.
+S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05. S10 opened from S11 offers S36 as it does from S09, and S36 then returns to S11.
 
 ### Meals
 
@@ -241,7 +243,7 @@ flowchart LR
   D16 -->|Hide| S35
 ```
 
-S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
+S25 returns to whichever screen opened it: S05 or S24. S36 opened from S10, while choosing an Exercise for a Workout, puts the new one in that Workout and returns there instead of to S35. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
 
 ### Categories and Rotations
 
