@@ -4,11 +4,10 @@
 
 import { and, asc, desc, eq, inArray, isNotNull, like, sql, type SQL } from 'drizzle-orm';
 
-import type { Categories, Category } from './categories';
+import type { Categories } from './categories';
 import type { Exercise } from './exercises';
 import { isLocalDate, localDateOf, relativeToToday } from './local-dates';
 import { notDeleted, positionAfterLast, softDelete } from './records';
-import type { Rotations } from './rotations';
 import {
   exerciseEntries,
   exercises,
@@ -135,13 +134,6 @@ export type LastTime = {
   sets: WorkoutSet[];
 };
 
-// What finishing a Workout reports. Nothing in it needs an answer.
-export type FinishSummary = {
-  // The Category to do next from the active Rotation, now this Workout is
-  // done (see getNextUp).
-  nextUp: Category | null;
-};
-
 // Why a Set can't be logged for an Exercise of this tracking type, or undefined
 // when it can. logSet enforces it; screens use it to decide when to allow logging.
 export function problemWithSet(
@@ -211,7 +203,6 @@ type WorkoutDependencies = {
   getDisplayUnit: () => Promise<WeightUnit>;
   getFallbackRestSeconds: () => Promise<number>;
   categories: Pick<Categories, 'requireCategory'>;
-  rotations: Pick<Rotations, 'findNextUp'>;
   reads: WorkoutReads;
 };
 
@@ -222,10 +213,8 @@ export function createWorkouts({
   getDisplayUnit,
   getFallbackRestSeconds,
   categories,
-  rotations,
   reads,
 }: WorkoutDependencies) {
-  const { findNextUp } = rotations;
   const { findWorkout } = reads;
 
   // Positions aren't renumbered when a Set is deleted, so new Sets always go
@@ -626,11 +615,10 @@ export function createWorkouts({
       if (moved.length === 0) throw new Error('No rest has started');
     },
 
-    // Enforces canFinishWorkout's rule against the saved Sets.
-    async finishWorkout(id: string): Promise<FinishSummary> {
-      // Worked out first, so if it fails the Workout is left unfinished, rather
-      // than finished with the lifter told it wasn't.
-      const nextUp = await findNextUp(id);
+    // Enforces canFinishWorkout's rule against the saved Sets. Nothing comes
+    // back: finishing asks the lifter nothing, and next up is read when it's
+    // shown (see getNextUp).
+    async finishWorkout(id: string): Promise<void> {
       const finishedAt = now();
       db.transaction(tx => {
         const workout = tx
@@ -654,7 +642,6 @@ export function createWorkouts({
           .where(eq(workouts.id, id))
           .run();
       });
-      return { nextUp };
     },
 
     // A Workout with each entry as it's logged (see WorkoutToLog).

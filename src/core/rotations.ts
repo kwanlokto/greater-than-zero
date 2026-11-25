@@ -75,15 +75,11 @@ export function createRotations({ db, now, history, categories }: RotationDepend
   // from History: every finished Workout in one of its Categories counts,
   // whenever it was done and whichever Rotation was active then. The first one
   // when none of them has been done. Null with no active Rotation, or an empty
-  // one. The Workout finishingWorkoutId counts as finished already, so
-  // finishWorkout can work it out before finishing it.
-  async function findNextUp(finishingWorkoutId?: string): Promise<Category | null> {
+  // one.
+  async function findNextUp(): Promise<Category | null> {
     const [active] = await findRotations(activeRotation());
     if (!active || active.entries.length === 0) return null;
-    const lastDone = await history.lastDoneAmong(
-      active.entries.map(({ category }) => category.id),
-      finishingWorkoutId,
-    );
+    const lastDone = await history.lastDoneAmong(active.entries.map(({ category }) => category.id));
     // -1 when none has been done, so the first one.
     const lastIndex = active.entries.findIndex(({ category }) => category.id === lastDone);
     return active.entries[(lastIndex + 1) % active.entries.length].category;
@@ -222,5 +218,5 @@ export function createRotations({ db, now, history, categories }: RotationDepend
     },
   };
 
-  return { commands, findNextUp };
+  return { commands };
 }

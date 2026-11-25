@@ -93,7 +93,6 @@ export {
   restSecondsLeft,
   type EntryToLog,
   type ExerciseEntry,
-  type FinishSummary,
   type LastTime,
   type NewWorkout,
   type PlannedSet,
@@ -143,7 +142,6 @@ export function createTracker(
     getDisplayUnit,
     getFallbackRestSeconds: settings.getFallbackRestSeconds,
     categories: categoryArea,
-    rotations: rotationArea,
     reads,
   });
   const foodArea = createFood({ db, now, getMacroTargets: settings.getMacroTargets });
