@@ -107,3 +107,117 @@ describe('The Workouts to repeat', () => {
     expect(await tracker.getWorkoutsToRepeat()).toEqual([]);
   });
 });
+
+// Each earlier Workout as [name, date].
+async function earlierOf(tracker: Tracker, limit = 20) {
+  const { workouts } = await tracker.getEarlierWorkouts(limit);
+  return workouts.map(workout => [workout.categoryName, workout.localDate]);
+}
+
+describe('The earlier Workouts to repeat', () => {
+  it('are every finished Workout the list of Workouts to repeat leaves out, the latest first', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const push = await tracker.createCategory('Push');
+    const pull = await tracker.createCategory('Pull');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-03T18:00:00-05:00');
+    await doCategoryWorkout(tracker, pull.id);
+    clock.setTime('2026-11-04T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-06T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id);
+
+    expect(await rowsOf(tracker)).toEqual([
+      ['Push', '2026-11-06', ['Bench Press']],
+      ['Pull', '2026-11-03', ['Bench Press']],
+    ]);
+    expect(await earlierOf(tracker)).toEqual([
+      ['Push', '2026-11-04'],
+      ['Push', '2026-11-02'],
+    ]);
+  });
+
+  it('come as many as asked for, saying whether there are more, and a longer list carries on the shorter', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const push = await tracker.createCategory('Push');
+    for (const day of ['03', '04', '05', '06']) {
+      await doCategoryWorkout(tracker, push.id);
+      clock.setTime(`2026-11-${day}T18:00:00-05:00`);
+    }
+    // Four Push Workouts, on the 2nd to the 5th: the 5th is the one to repeat.
+
+    const firstTwo = await tracker.getEarlierWorkouts(2);
+    const allThree = await tracker.getEarlierWorkouts(3);
+
+    expect(firstTwo.workouts.map(workout => workout.localDate)).toEqual(['2026-11-04', '2026-11-03']);
+    expect(firstTwo.more).toBe(true);
+    expect(allThree.workouts.map(workout => workout.localDate)).toEqual([
+      '2026-11-04',
+      '2026-11-03',
+      '2026-11-02',
+    ]);
+    expect(allThree.more).toBe(false);
+    expect((await tracker.getEarlierWorkouts(10)).workouts).toHaveLength(3);
+  });
+
+  it('are none when every finished Workout is the latest of its kind', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    expect(await tracker.getEarlierWorkouts(20)).toEqual({ workouts: [], more: false });
+    const push = await tracker.createCategory('Push');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-04T18:00:00-05:00');
+    await doWorkoutOf(tracker, ['Squat']);
+
+    expect(await tracker.getEarlierWorkouts(20)).toEqual({ workouts: [], more: false });
+  });
+
+  it('count Workouts in no Category as one kind when they hold the same Exercises', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const first = await doWorkoutOf(tracker, ['Bench Press', 'Dip']);
+    clock.setTime('2026-11-04T18:00:00-05:00');
+    await doWorkoutOf(tracker, ['Squat']);
+    clock.setTime('2026-11-05T18:00:00-05:00');
+    await doWorkoutOf(tracker, ['Dip', 'Bench Press']);
+
+    const { workouts } = await tracker.getEarlierWorkouts(20);
+
+    expect(workouts.map(workout => workout.id)).toEqual([first.id]);
+  });
+
+  it('put a backfilled Workout by the day it counts toward, not when it was typed in', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const push = await tracker.createCategory('Push');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-06T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-08T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id, { localDate: '2026-11-04' });
+
+    expect(await rowsOf(tracker)).toEqual([['Push', '2026-11-06', ['Bench Press']]]);
+    expect(await earlierOf(tracker)).toEqual([
+      ['Push', '2026-11-04'],
+      ['Push', '2026-11-02'],
+    ]);
+  });
+
+  it('leave out Workouts in progress and deleted ones', async () => {
+    const clock = clockAt('2026-11-02T18:00:00-05:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const push = await tracker.createCategory('Push');
+    const { workout: deleted } = await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-04T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id);
+    clock.setTime('2026-11-06T18:00:00-05:00');
+    await doCategoryWorkout(tracker, push.id);
+    await tracker.deleteWorkout(deleted.id);
+    clock.setTime('2026-11-07T18:00:00-05:00');
+    await tracker.startWorkout({ categoryId: push.id });
+
+    expect(await earlierOf(tracker)).toEqual([['Push', '2026-11-04']]);
+  });
+});

@@ -108,7 +108,7 @@ Tapping the "Rest over" notification brings the app back where it was. If the ap
 flowchart LR
   S05["S05 Today"] -->|Start next up, or Empty workout| S09["S09 Workout in progress"]
   S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
-  S38 -->|tap a Workout| S09
+  S38 -->|tap a Workout, or an earlier one| S09
   S05 -->|the Done card, once a Workout is finished today| S11["S11 Past Workout"]
   S05 -->|Set up a rotation, with no Rotations yet| S32["S32 New Rotation"]
   S05 -->|Set up a rotation, with some but none active| S31["S31 Rotations"]
@@ -117,7 +117,7 @@ flowchart LR
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
 ```
 
-Once a Workout is finished today, the Done card for the latest takes the Start section's place, and "Start another" brings the Start section back on S05 itself, until a Workout starts. Today's Weigh-in is entered on S05 itself.
+S38 lists the latest Workout of each kind, and "Show earlier workouts" lists every other finished one on S38 itself. Once a Workout is finished today, the Done card for the latest takes the Start section's place, and "Start another" brings the Start section back on S05 itself, until a Workout starts. Today's Weigh-in is entered on S05 itself.
 
 ### Working out
 
