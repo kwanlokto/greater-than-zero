@@ -1,12 +1,7 @@
 import { sql } from 'drizzle-orm';
 
-import {
-  backupFileOf,
-  createTestDatabase,
-  createTestDatabaseBefore,
-  migrateToLatest,
-} from './test-database';
-import { createTracker, type Tracker } from './tracker';
+import { createTestDatabaseBefore, migrateToLatest } from './test-database';
+import { createTracker } from './tracker';
 
 type OldDatabase = ReturnType<typeof createTestDatabaseBefore>;
 
@@ -56,20 +51,6 @@ function phoneWithTemplates(): OldDatabase {
   db.run(sql`INSERT INTO planned_sets (id, exercise_entry_id, position, weight, weight_unit, reps)
              VALUES ('planned-1', 'entry-from-pull', 0, 60, 'kg', 8)`);
   return db;
-}
-
-// Everything on the phone, as its Backup file holds it. When a row was
-// deleted is left out: the migration and an import can't agree on the moment.
-async function dataOn(tracker: Tracker) {
-  const { tables } = JSON.parse(await tracker.exportBackup('1.0.0')) as {
-    tables: Record<string, Record<string, unknown>[]>;
-  };
-  return Object.fromEntries(
-    Object.entries(tables).map(([name, rows]) => [
-      name,
-      rows.map(row => ({ ...row, deleted_at: row.deleted_at !== null })),
-    ]),
-  );
 }
 
 describe('Templates becoming Categories', () => {
@@ -145,15 +126,4 @@ describe('Templates becoming Categories', () => {
     expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
   });
 
-  it('happens the same way to a Backup file from before, when it is imported', async () => {
-    const db = phoneWithTemplates();
-    const fileFromBefore = backupFileOf(db, 3);
-    migrateToLatest(db);
-    const phone = createTracker(createTestDatabase());
-
-    await phone.importBackup(fileFromBefore);
-
-    expect(await dataOn(phone)).toEqual(await dataOn(createTracker(db)));
-    expect((await phone.getWorkoutInProgress())?.categoryName).toBe('Pull');
-  });
 });

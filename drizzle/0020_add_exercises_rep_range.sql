@@ -2,7 +2,7 @@ ALTER TABLE `exercises` ADD `min_reps` integer DEFAULT 8 NOT NULL;--> statement-
 ALTER TABLE `exercises` ADD `max_reps` integer DEFAULT 12 NOT NULL;--> statement-breakpoint
 -- Each Exercise takes its range from the Target changed most recently among
 -- those still in a Template. One that never had a Target keeps 8-12.
--- backupFormatVersion 3 makes the same change to an older Backup file.
+-- An older Backup file goes through this same migration as it's imported.
 UPDATE `exercises` SET
   `min_reps` = (
     SELECT `target`.`min_reps` FROM `template_exercises` AS `target`

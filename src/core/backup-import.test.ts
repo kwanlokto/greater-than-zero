@@ -1,14 +1,16 @@
-import { sql } from 'drizzle-orm';
-
 import journal from '../../drizzle/meta/_journal.json';
 import { backupFormatVersion } from './backup';
-import { backupFileOf, createTestDatabase, createTestDatabaseBefore } from './test-database';
+import {
+  backupFileOf,
+  createTestDatabase,
+  createTestDatabaseBefore,
+  openScratchDatabase,
+} from './test-database';
 import {
   clockAt,
   createRotationWith,
   doCategoryWorkout,
   doWorkout,
-  findExerciseByName,
   startWorkoutWith,
 } from './test-helpers';
 import { createTracker, type BackupFile, type Tracker } from './tracker';
@@ -17,13 +19,6 @@ const damagedFile = "That file isn't a Notch backup, or it's damaged";
 const fromNewerApp =
   'That backup is from a newer version of Notch. Update the app, then import it again.';
 
-// How many migrations there were before Rotations: an app's schema version then.
-const beforeRotations = journal.entries.findIndex(({ tag }) => tag === '0013_create_rotations');
-// And before Exercise notes were dropped.
-const beforeNotesDropped = journal.entries.findIndex(
-  ({ tag }) => tag === '0018_drop_exercise_entries_notes',
-);
-
 // A format version only a newer app could have written.
 const newerFormat = backupFormatVersion + 1;
 
@@ -31,7 +26,7 @@ const newerFormat = backupFormatVersion + 1;
 // Exercise, a Rotation of Categories, finished Workouts and one in progress.
 async function phoneWithData() {
   const clock = clockAt('2026-09-28T18:00:00-04:00');
-  const tracker = createTracker(createTestDatabase(), clock);
+  const tracker = createTracker(createTestDatabase(), { ...clock, openScratchDatabase });
   await tracker.setDisplayUnit('lb');
   await tracker.setMacroTargets({ calories: 2400, protein: 180, carbs: null, fat: null });
   await tracker.setWeighIn(182.4, 'lb');
@@ -86,7 +81,7 @@ describe('Backup import', () => {
   it('replaces all the data on a phone with what was exported, exactly', async () => {
     const oldPhone = await phoneWithData();
     const backup = await oldPhone.exportBackup('1.2.3');
-    const newPhone = createTracker(createTestDatabase());
+    const newPhone = createTracker(createTestDatabase(), { openScratchDatabase });
     await doWorkout(newPhone, 'Bench Press', [{ weight: 60, reps: 10 }]);
 
     await newPhone.importBackup(backup);
@@ -161,87 +156,43 @@ describe('Backup import', () => {
     ],
     [
       'no settings table, even from an older app',
-      ({ tables: { settings, ...tables }, ...rest }) =>
-        JSON.stringify({ ...rest, schemaVersion: beforeRotations, tables }),
+      () => {
+        const file = JSON.parse(backupFileOf(createTestDatabaseBefore('0013_create_rotations'), 1));
+        delete file.tables.settings;
+        return JSON.stringify(file);
+      },
     ],
   ])('rejects a file with %s', async (_, damaged) => {
     await expectRefused(damaged(await backupWithData()), damagedFile);
   });
 
-  it('takes a file from before a table or column was added, leaving them empty', async () => {
-    const {
-      tables: { rotations, rotation_entries, ...tables },
-      ...backup
-    } = await backupWithData();
-    // As an app from before Rotations, and so before Exercises had a rep
-    // range, would have written it.
-    const fromBeforeRotations = {
-      ...backup,
-      schemaVersion: beforeRotations,
-      tables: {
-        ...tables,
-        exercises: tables.exercises.map(({ min_reps, max_reps, ...exercise }) => exercise),
-      },
-    };
-    const phone = createTracker(createTestDatabase());
-
-    await phone.importBackup(JSON.stringify(fromBeforeRotations));
-
-    expect(await phone.getRotations()).toEqual([]);
-    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
-    const [workout] = (await phone.getDay('2026-09-28')).workouts;
-    expect(workout.entries.map(entry => entry.exercise.name)).toEqual(['Bench Press']);
-  });
-
-  it('takes a file from before Exercise notes were dropped, leaving the notes out', async () => {
+  it('can be checked first, as far as its header, to say when it was exported, changing nothing', async () => {
     const backup = await backupWithData();
-    // As an app from before then would have written it: format version 1,
-    // with notes on every Exercise entry.
-    const withNotes = {
-      ...backup,
-      formatVersion: 1,
-      schemaVersion: beforeNotesDropped,
-      tables: {
-        ...backup.tables,
-        exercise_entries: backup.tables.exercise_entries.map(entry => ({
-          ...entry,
-          notes: 'Pause at the bottom',
-        })),
-      },
-    };
-    const phone = createTracker(createTestDatabase());
-
-    await phone.importBackup(JSON.stringify(withNotes));
-
-    expect(await dataOn(phone)).toEqual(backup.tables);
-  });
-
-  it('takes a file from before Exercises had a rep range, giving each the range of its Target', async () => {
-    // As an app from before then held it: a Target of 5–8 for Bench Press.
-    const old = createTestDatabaseBefore('0020_add_exercises_rep_range');
-    old.run(sql`INSERT INTO templates (id, name) VALUES ('push', 'Push')`);
-    old.run(sql`INSERT INTO template_exercises
-                  (id, template_id, exercise_id, position, target_sets, min_reps, max_reps,
-                   target_weight, target_weight_unit)
-                SELECT 'target-1', 'push', id, 0, 3, 5, 8, 60, 'kg'
-                FROM exercises WHERE name = 'Bench Press'`);
-    const phone = createTracker(createTestDatabase());
-
-    await phone.importBackup(backupFileOf(old, 2));
-
-    expect(await findExerciseByName(phone, 'Bench Press')).toMatchObject({ minReps: 5, maxReps: 8 });
-    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
-  });
-
-  it('can be checked first, to say when it was exported, changing nothing', async () => {
-    const backup = await (await phoneWithData()).exportBackup('1.2.3');
     const phone = await phoneWithData();
     const before = await dataOn(phone);
 
-    expect(await phone.checkBackup(backup)).toEqual({
+    expect(await phone.checkBackup(JSON.stringify(backup))).toEqual({
+      exportedAt: new Date('2026-09-29T18:00:00-04:00'),
+    });
+    // Its tables are checked only as it's imported.
+    const damagedTables = JSON.stringify({ ...backup, tables: { ...backup.tables, sets: {} } });
+    expect(await phone.checkBackup(damagedTables)).toEqual({
       exportedAt: new Date('2026-09-29T18:00:00-04:00'),
     });
     await expect(phone.checkBackup('Push day')).rejects.toThrow(damagedFile);
+    expect(await dataOn(phone)).toEqual(before);
+  });
+
+  it('is refused by a tracker with nowhere to bring it up to date, changing nothing', async () => {
+    const backup = await (await phoneWithData()).exportBackup('1.2.3');
+    const phone = createTracker(createTestDatabase());
+    await doWorkout(phone, 'Bench Press', [{ weight: 60, reps: 10 }]);
+    const before = await dataOn(phone);
+
+    await expect(phone.importBackup(backup)).rejects.toThrow(
+      "This tracker can't import Backup files",
+    );
+
     expect(await dataOn(phone)).toEqual(before);
   });
 });

@@ -1,5 +1,6 @@
 -- Templates become Categories, and Template exercises with their Targets go
--- (#40). backupFormatVersion 4 makes the same change to an older Backup file.
+-- (#40). An older Backup file goes through this same migration as it's
+-- imported.
 --
 -- A Workout from a deleted Template is in no Category.
 UPDATE `workouts` SET `template_id` = NULL
