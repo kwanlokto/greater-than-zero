@@ -18,3 +18,7 @@ _Avoid_: Target, draft set
 
 **Exercise entry**:
 One Exercise as done in one Workout, holding the Sets logged for it. "Entry" on its own always means this.
+
+**Backup file**:
+All of a lifter's data as one file, exported from Settings and imported to replace everything on a phone. A file from an older version of Notch is brought up to date the way the phone itself would have been.
+_Avoid_: Export (for the file)
