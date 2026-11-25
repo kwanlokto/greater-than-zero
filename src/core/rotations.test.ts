@@ -113,17 +113,47 @@ describe('Rotations', () => {
     expect((await tracker.getRotations()).map(categoryNamesOf)).toEqual([['Pull'], ['Pull']]);
   });
 
+  it('are active when made while none is, so next up shows without finding a switch', async () => {
+    const tracker = createTracker(createTestDatabase());
+
+    await tracker.createRotation('PPL');
+
+    expect(await activeRotationNames(tracker)).toEqual(['PPL']);
+  });
+
+  it("start inactive when made while another is active, so a second one doesn't change what's next", async () => {
+    const tracker = createTracker(createTestDatabase());
+    await tracker.createRotation('PPL');
+
+    await tracker.createRotation('Upper Lower');
+
+    expect(await activeRotationNames(tracker)).toEqual(['PPL']);
+  });
+
+  it('are active when made after the active one was switched off or deleted', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const ppl = await tracker.createRotation('PPL');
+    await tracker.setActiveRotation(null);
+    await tracker.createRotation('Upper Lower');
+    expect(await activeRotationNames(tracker)).toEqual(['Upper Lower']);
+
+    await tracker.deleteRotation(ppl.id);
+    await tracker.setActiveRotation(null);
+    await tracker.createRotation('Full Body');
+    expect(await activeRotationNames(tracker)).toEqual(['Full Body']);
+  });
+
   it('have at most one active', async () => {
     const tracker = createTracker(createTestDatabase());
     const ppl = await tracker.createRotation('PPL');
     const upperLower = await tracker.createRotation('Upper Lower');
-    expect(await activeRotationNames(tracker)).toEqual([]);
-
-    await tracker.setActiveRotation(ppl.id);
     expect(await activeRotationNames(tracker)).toEqual(['PPL']);
 
     await tracker.setActiveRotation(upperLower.id);
     expect(await activeRotationNames(tracker)).toEqual(['Upper Lower']);
+
+    await tracker.setActiveRotation(ppl.id);
+    expect(await activeRotationNames(tracker)).toEqual(['PPL']);
 
     await tracker.setActiveRotation(null);
     expect(await activeRotationNames(tracker)).toEqual([]);

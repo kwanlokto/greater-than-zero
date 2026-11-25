@@ -110,7 +110,8 @@ flowchart LR
   S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
   S38 -->|tap a Workout| S09
   S05 -->|the Done card, once a Workout is finished today| S11["S11 Past Workout"]
-  S05 -->|Set up a rotation, with none active| S31["S31 Rotations"]
+  S05 -->|Set up a rotation, with no Rotations yet| S32["S32 New Rotation"]
+  S05 -->|Set up a rotation, with some but none active| S31["S31 Rotations"]
   S05 -->|Meals, or the food card| S07["S07 Food"]
   S05 -->|Set daily targets, when none are set| S25["S25 Macro targets"]
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
@@ -255,12 +256,12 @@ flowchart TD
   S39["S39 Categories"] -->|a Category's 🗑| D22{{"D22 Delete Category?"}}
   S31["S31 Rotations"] -->|New rotation| S32["S32 New Rotation"]
   S31 -->|tap a Rotation| S33["S33 Rotation"]
-  S32 -->|Create rotation| S33
+  S32 -->|Create rotation: active when no other is| S33
   S33 -->|Add category| S34["S34 Choose Category"]
-  S34 -->|pick a Category, or add one by a new name| S33
+  S34 -->|pick Categories, or add them by new names, then Done| S33
   S33 -->|a Category's 🗑| D15{{"D15 Remove from Rotation?"}}
   S33 -->|Delete rotation| D14{{"D14 Delete Rotation?"}}
   D14 -->|Delete| S31
 ```
 
-A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself.
+A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself. A Rotation made while none is active is active at once. S34 stays open while Categories are added, each leaving its list, until Done. S32 opened from S05 leads to S33 as it does from S31, and "back" from there returns to S05.

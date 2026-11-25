@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -9,21 +9,29 @@ import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { canAddToRotation } from '@/core/tracker';
 import { tracker } from '@/database';
+import { describeCategoryOrder } from '@/rotation-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// Picks a Category to add to the end of a Rotation: one it can still take, or
-// a new one by name, so a split can be laid out before any of it is trained.
+// Picks Categories to add to the end of a Rotation, in the order they're
+// tapped: ones it can still take, or new ones by name, so a split can be laid
+// out before any of it is trained. It stays open until Done, so a whole split
+// is one visit.
 export default function ChooseRotationCategoryScreen() {
   const { rotationId } = useLocalSearchParams<{ rotationId: string }>();
   const router = useRouter();
-  const addable = useTrackerQuery(async () => {
+  // The Rotation as it stands, and the Categories it can still take. Each one
+  // added leaves the list.
+  const choosing = useTrackerQuery(async () => {
     const [all, rotation] = await Promise.all([
       tracker.getCategories(),
       tracker.getRotation(rotationId),
     ]);
-    return rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [];
+    return {
+      order: rotation && rotation.entries.length > 0 ? describeCategoryOrder(rotation) : undefined,
+      addable: rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [],
+    };
   }, [rotationId]);
   const [newName, setNewName] = useState('');
 
@@ -31,13 +39,24 @@ export default function ChooseRotationCategoryScreen() {
     const added = await runOrAlert("Couldn't add the category", () =>
       tracker.addCategoryToRotation(rotationId, choice),
     );
-    if (added) router.back();
+    // Ready for the next name.
+    if (added && 'name' in choice) setNewName('');
   }
 
-  if (!addable) return null;
+  if (!choosing) return null;
+  const { order, addable } = choosing;
 
   return (
     <Screen contentStyle={{ gap: space.lg }}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Button variant="ghost" size="small" label="Done" onPress={() => router.back()} />
+          ),
+        }}
+      />
+      {/* What's in it so far, so each tap is seen to land, in order. */}
+      {order && <AppText variant="bodyStrong">{order}</AppText>}
       <View style={styles.newCategory}>
         <Input
           value={newName}
@@ -66,7 +85,7 @@ export default function ChooseRotationCategoryScreen() {
               accessibilityLabel={`Add ${category.name}`}
               trailingIcon="add-circle"
               trailingIconTone="primary"
-              // Guarded by the row: a double tap adds it once.
+              // Guarded by the row, and by the core: a double tap adds it once.
               onPress={() => add({ id: category.id })}
             />
           ))}

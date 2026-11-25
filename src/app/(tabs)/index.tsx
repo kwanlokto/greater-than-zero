@@ -51,6 +51,17 @@ export default function TodayScreen() {
     if (started) router.push('/workout');
   }
 
+  // Straight to naming one when there are none yet; the list otherwise, to
+  // switch one on or make another.
+  async function setUpRotation() {
+    const rotations = await runOrAlert("Couldn't open your rotations", () =>
+      tracker.getRotations(),
+    );
+    if (!rotations) return;
+    // navigate, not push, so a double tap opens it once.
+    router.navigate(rotations.result.length === 0 ? '/rotations/new' : '/rotations');
+  }
+
   return (
     <Screen onTab contentStyle={styles.content}>
       {/* Only one Workout can be in progress; while one is, the Workout bar
@@ -82,7 +93,7 @@ export default function TodayScreen() {
               // Next up comes from the active Rotation; point the way to one,
               // once there's a Workout it could suggest.
               !nextUp && toRepeat.length > 0
-                ? { label: 'Set up a rotation', onPress: () => router.navigate('/rotations') }
+                ? { label: 'Set up a rotation', onPress: setUpRotation }
                 : undefined
             }
           >

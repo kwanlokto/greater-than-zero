@@ -254,6 +254,8 @@ describe('Next up', () => {
   it('is nothing with no active Rotation', async () => {
     const tracker = createTracker(createTestDatabase());
     const { categories } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
+    // The first Rotation made is active, so switch it off.
+    await tracker.setActiveRotation(null);
     await doCategoryWorkout(tracker, categories[0].id);
 
     expect(await nextUpName(tracker)).toBeNull();
