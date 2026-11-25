@@ -106,6 +106,10 @@ export default function RootLayout() {
             <Stack.Screen name="workout/choose-exercise" options={{ presentation: 'modal' }} />
             {/* A finished Workout, opened from History to edit. */}
             <Stack.Screen name="workout/[id]" options={{ title: 'Workout' }} />
+            <Stack.Screen
+              name="workout/repeat"
+              options={{ title: 'Repeat a workout', presentation: 'modal' }}
+            />
           </Stack.Protected>
           <Stack.Protected guard={!onboarded}>
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />

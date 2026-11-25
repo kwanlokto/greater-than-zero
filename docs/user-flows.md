@@ -45,6 +45,7 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S35 | Exercise library | `/exercises` | `src/app/exercises/index.tsx` |
 | S36 | New exercise | `/exercises/new` | `src/app/exercises/new.tsx` |
 | S37 | Edit exercise | `/exercises/[id]` | `src/app/exercises/[id].tsx` |
+| S38 | Repeat a workout | `/workout/repeat` | `src/app/workout/repeat.tsx` |
 
 A screen opened for a record that's gone (a deleted Meal, Template, Rotation or Workout) shows that instead of its content, and S12 shows "No such date." for a date that isn't real. These are states of the screen, not screens of their own.
 
@@ -106,10 +107,10 @@ Tapping the "Rest over" notification brings the app back where it was. If the ap
 
 ```mermaid
 flowchart LR
-  S05["S05 Today"] -->|Start next up, a Template, or Empty workout| S09["S09 Workout in progress"]
-  S05 -->|Templates| S26["S26 Templates"]
-  S05 -->|Create a template, when there are none| S27["S27 New Template"]
-  S05 -->|Set up a rotation| S31["S31 Rotations"]
+  S05["S05 Today"] -->|Start next up, or Empty workout| S09["S09 Workout in progress"]
+  S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
+  S38 -->|tap a Workout| S09
+  S05 -->|Set up a rotation, with none active| S31["S31 Rotations"]
   S05 -->|Meals, or the food card| S07["S07 Food"]
   S05 -->|Set daily targets, when none are set| S25["S25 Macro targets"]
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
@@ -139,7 +140,7 @@ flowchart LR
   S09 -.->|the first time a Workout starts| D18{{"D18 Notification permission"}}
 ```
 
-S09 opens from S01, S05, S12 and the Workout bar on any tab, and "back" returns there. Dotted lines are questions that follow on their own: D03 only when the Workout's Exercise list differs from its Template, and D04 once for each Target the session beat.
+S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab, and "back" returns there, or to S05 after S38, whose place the Workout takes. Dotted lines are questions that follow on their own: D03 only when the Workout's Exercise list differs from its Template, and D04 once for each Target the session beat.
 
 ### History
 
@@ -264,4 +265,4 @@ flowchart TD
   D14 -->|Delete| S31
 ```
 
-S27 replaces itself with the new Template, so a Template returns to whatever was under S27: S26, S05, S11 or S33. Renaming a Template or Rotation, reordering and switching a Rotation on happen on the screen itself.
+S27 replaces itself with the new Template, so a Template returns to whatever was under S27: S26, S11 or S33. Renaming a Template or Rotation, reordering and switching a Rotation on happen on the screen itself.

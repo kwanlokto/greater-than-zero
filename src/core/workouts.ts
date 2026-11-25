@@ -696,6 +696,26 @@ export function createWorkouts({
       return workout ? toLog(workout) : null;
     },
 
+    // The Workouts to offer for repeating, the most recently done first: one
+    // for each kind of Workout, its latest finished one. Workouts from the same
+    // Template are one kind. Those from none are one kind when they hold the
+    // same Exercises, whatever the order, the weights or the reps.
+    async getWorkoutsToRepeat(): Promise<Workout[]> {
+      const kinds = new Set<string>();
+      const latestOfEach: string[] = [];
+      for (const { id, templateId, exerciseIds } of await history.finishedWorkoutsLatestFirst()) {
+        const kind = templateId
+          ? `template ${templateId}`
+          : `exercises ${[...new Set(exerciseIds)].sort().join(' ')}`;
+        if (kinds.has(kind)) continue;
+        kinds.add(kind);
+        latestOfEach.push(id);
+      }
+      const found = await reads.findWorkouts(inArray(workouts.id, latestOfEach));
+      // They come in the order Workouts go in, the earliest first.
+      return found.reverse();
+    },
+
     // The local dates in a month, given as YYYY-MM, with at least one finished
     // Workout, in order.
     async getTrainingDays(month: string): Promise<string[]> {

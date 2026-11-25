@@ -185,6 +185,33 @@ export function createSessionHistory(
       return last?.templateId;
     },
 
+    // Every finished Workout, the latest first, with its Template and the
+    // Exercises still in it. For telling which Workouts are the same kind.
+    async finishedWorkoutsLatestFirst(): Promise<
+      { id: string; templateId: string | null; exerciseIds: string[] }[]
+    > {
+      const rows = await db
+        .select({
+          id: workouts.id,
+          templateId: workouts.templateId,
+          exerciseId: exerciseEntries.exerciseId,
+        })
+        .from(workouts)
+        .leftJoin(
+          exerciseEntries,
+          and(eq(exerciseEntries.workoutId, workouts.id), notDeleted(exerciseEntries)),
+        )
+        .where(finished())
+        .orderBy(...latestWorkoutFirst);
+      const found = new Map<string, { id: string; templateId: string | null; exerciseIds: string[] }>();
+      for (const { id, templateId, exerciseId } of rows) {
+        const workout = found.get(id) ?? { id, templateId, exerciseIds: [] };
+        if (exerciseId) workout.exerciseIds.push(exerciseId);
+        found.set(id, workout);
+      }
+      return [...found.values()];
+    },
+
     // The Exercises with a working Set in a finished Workout, by ID: the one
     // whose latest such Workout comes last in the order Workouts go in first,
     // then by name. Hidden ones keep their history, so they're here too.

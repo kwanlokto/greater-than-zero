@@ -5,6 +5,8 @@ import {
   backfillTitle,
   finishedWorkoutTitle,
   finishedWorkoutWhen,
+  lastDone,
+  workoutExercises,
   workoutName,
 } from './workout-labels';
 
@@ -50,6 +52,26 @@ describe('Workout labels', () => {
 
     expect(finishedWorkoutTitle(workout)).toBe('Saturday 12 Sep');
     expect(finishedWorkoutWhen(workout)).toBe(times);
+  });
+
+  it("lists a Workout's Exercises in order, each once", () => {
+    const entryOf = (name: string) =>
+      ({ exercise: { name } }) as Workout['entries'][number];
+    const workout = workoutWith({
+      entries: [entryOf('Bench Press'), entryOf('Dip'), entryOf('Bench Press')],
+    });
+
+    expect(workoutExercises(workout)).toBe('Bench Press, Dip');
+  });
+
+  it('says how long ago a Workout was done, and its date once two weeks have passed', () => {
+    expect(lastDone('2026-11-16', '2026-11-16')).toBe('today');
+    expect(lastDone('2026-11-15', '2026-11-16')).toBe('yesterday');
+    expect(lastDone('2026-11-07', '2026-11-16')).toBe('9 days ago');
+    expect(lastDone('2026-11-03', '2026-11-16')).toBe('13 days ago');
+    expect(lastDone('2026-11-02', '2026-11-16')).toBe('2 Nov');
+    // Across a change of the clocks, and a month's end.
+    expect(lastDone('2026-10-29', '2026-11-04')).toBe('6 days ago');
   });
 
   it('names the day a backfilled Workout is for', () => {

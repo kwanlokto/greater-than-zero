@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
@@ -8,22 +8,24 @@ import { DailyTotalsCard } from '@/components/daily-totals-card';
 import { Screen } from '@/components/screen';
 import { Section } from '@/components/section';
 import { WeighInCard } from '@/components/weigh-in-card';
-import type { Template } from '@/core/tracker';
+import type { NewWorkout } from '@/core/tracker';
 import { tracker } from '@/database';
 import { hasMacroTargets } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
 import { exerciseList } from '@/template-labels';
-import { radius, space } from '@/theme';
+import { space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
+import { lastDone, workoutExercises } from '@/workout-labels';
 
 // Today at a glance, on one screen: what to train, what's been eaten against
 // the day's targets, and today's weight.
 export default function TodayScreen() {
   const router = useRouter();
   const workoutInProgress = useWorkoutInProgress();
-  const templates = useTrackerQuery(() => tracker.getTemplates(), []);
+  // One of each kind of Workout done before, the latest first.
+  const toRepeat = useTrackerQuery(() => tracker.getWorkoutsToRepeat(), []);
   // Null once loaded with no active Rotation, or an empty one.
   const nextUp = useTrackerQuery(() => tracker.getNextUp(), []);
   const today = useToday();
@@ -32,78 +34,67 @@ export default function TodayScreen() {
   const weighIn = useTrackerQuery(() => tracker.getWeighIn(today), [today]);
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
 
-  async function start(templateId?: string) {
+  async function start(workout?: NewWorkout) {
     const started = await runOrAlert("Couldn't start the workout", () =>
-      tracker.startWorkout({ templateId }),
+      tracker.startWorkout(workout),
     );
     if (started) router.push('/workout');
   }
+
+  // Next up is started by repeating the latest Workout from it, which is also
+  // what its card shows; one never done yet starts from its Template.
+  const latestNextUp = nextUp ? toRepeat?.find(done => done.templateId === nextUp.id) : undefined;
 
   return (
     <Screen onTab contentStyle={styles.content}>
       {/* Only one Workout can be in progress; while one is, the Workout bar
           returns to it. */}
-      {workoutInProgress === null && templates && nextUp !== undefined && (
-        <>
-          {nextUp && <NextUp template={nextUp} onStart={() => start(nextUp.id)} />}
-          <Section
-            title="Start a workout"
-            action={
-              templates.length > 0
-                ? { label: 'Templates', onPress: () => router.navigate('/templates') }
-                : undefined
-            }
-          >
-            {/* One row whatever the number of Templates: it scrolls sideways. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.pillBar}
-              contentContainerStyle={styles.pills}
-            >
-              {templates.map(template => (
-                <Button
-                  key={template.id}
-                  variant="tonal"
-                  icon="play"
-                  label={template.name}
-                  accessibilityLabel={`Start ${template.name}`}
-                  accessibilityHint={exerciseList(template)}
-                  // Guarded by the button: a double tap starts one Workout.
-                  onPress={() => start(template.id)}
-                  style={styles.pill}
-                />
-              ))}
+      {workoutInProgress === null && toRepeat && nextUp !== undefined && (
+        <Section
+          title="Start a workout"
+          action={
+            // Next up comes from the active Rotation; point the way to one,
+            // once there's a Workout it could suggest.
+            !nextUp && toRepeat.length > 0
+              ? { label: 'Set up a rotation', onPress: () => router.navigate('/rotations') }
+              : undefined
+          }
+        >
+          {nextUp && (
+            <NextUp
+              name={nextUp.name}
+              detail={
+                latestNextUp
+                  ? // When comes first, so a long list of Exercises is what gets cut short.
+                    `${lastDone(latestNextUp.localDate, today)} · ${workoutExercises(latestNextUp)}`
+                  : exerciseList(nextUp)
+              }
+              // Guarded by the button: a double tap starts one Workout.
+              onStart={() =>
+                start(latestNextUp ? { repeatOf: latestNextUp.id } : { templateId: nextUp.id })
+              }
+            />
+          )}
+          <View style={styles.ways}>
+            {/* Nothing to repeat until a Workout has been finished. */}
+            {toRepeat.length > 0 && (
               <Button
-                variant={templates.length === 0 ? 'primary' : 'secondary'}
-                icon="add"
-                label="Empty workout"
-                accessibilityLabel="Start empty workout"
-                onPress={() => start()}
-                style={styles.pill}
+                variant="tonal"
+                icon="repeat"
+                label="Repeat a workout"
+                // navigate, not push, so a double tap opens the list once.
+                onPress={() => router.navigate('/workout/repeat')}
               />
-              {templates.length === 0 && (
-                <Button
-                  variant="secondary"
-                  icon="list"
-                  label="Create a template"
-                  onPress={() => router.navigate('/templates/new')}
-                  style={styles.pill}
-                />
-              )}
-              {/* Next up comes from the active Rotation; point the way to one. */}
-              {!nextUp && templates.length > 1 && (
-                <Button
-                  variant="secondary"
-                  icon="repeat"
-                  label="Set up a rotation"
-                  onPress={() => router.navigate('/rotations')}
-                  style={styles.pill}
-                />
-              )}
-            </ScrollView>
-          </Section>
-        </>
+            )}
+            <Button
+              variant={toRepeat.length === 0 ? 'primary' : 'secondary'}
+              icon="add"
+              label="Empty workout"
+              accessibilityLabel="Start empty workout"
+              onPress={() => start()}
+            />
+          </View>
+        </Section>
       )}
       {dailyTotals && (
         <Section
@@ -144,12 +135,14 @@ export default function TodayScreen() {
 }
 
 type NextUpProps = {
-  template: Template;
+  name: string;
+  // What's in it and when it was last done.
+  detail: string;
   onStart: () => Promise<void>;
 };
 
-// The active Rotation's next-up Template, to start with one tap.
-function NextUp({ template, onStart }: NextUpProps) {
+// The active Rotation's next up, to start with one tap.
+function NextUp({ name, detail, onStart }: NextUpProps) {
   return (
     <Card style={styles.nextUp}>
       <View style={styles.nextUpText}>
@@ -157,16 +150,17 @@ function NextUp({ template, onStart }: NextUpProps) {
           Next up
         </AppText>
         <AppText variant="heading" numberOfLines={1}>
-          {template.name}
+          {name}
         </AppText>
         <AppText variant="caption" tone="muted" numberOfLines={1}>
-          {exerciseList(template)}
+          {detail}
         </AppText>
       </View>
       <Button
         icon="play"
         label="Start"
-        accessibilityLabel={`Start ${template.name}`}
+        accessibilityLabel={`Start ${name}`}
+        accessibilityHint={detail}
         onPress={onStart}
         style={styles.start}
       />
@@ -190,16 +184,9 @@ const styles = StyleSheet.create({
   start: {
     paddingHorizontal: space.xl,
   },
-  // Runs to the screen's edges, so the row scrolls under them.
-  pillBar: {
-    marginHorizontal: -space.lg,
-    flexGrow: 0,
-  },
-  pills: {
+  // The other ways to start, one under the other: side by side, their labels
+  // don't fit a narrow phone.
+  ways: {
     gap: space.sm,
-    paddingHorizontal: space.lg,
-  },
-  pill: {
-    borderRadius: radius.pill,
   },
 });
