@@ -3,7 +3,6 @@ import { formatTimeOfDay } from '@/dates';
 
 import {
   backfillTitle,
-  finishedWorkoutTitle,
   finishedWorkoutWhen,
   lastDone,
   workoutExercises,
@@ -37,20 +36,12 @@ describe('Workout labels', () => {
     expect(workoutName(workoutWith({}))).toBe('Workout');
   });
 
-  it('titles a finished Workout by its Category, with its date on the line under', () => {
-    const workout = workoutWith(push);
-    const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
-
-    expect(finishedWorkoutTitle(workout)).toBe('Push');
-    expect(finishedWorkoutWhen(workout)).toBe(`Saturday 12 Sep · ${times}`);
-  });
-
-  it('titles a finished Workout in no Category by its date', () => {
+  it("puts a finished Workout's date on the line under its name, whatever its Category", () => {
     const workout = workoutWith({});
     const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
 
-    expect(finishedWorkoutTitle(workout)).toBe('Saturday 12 Sep');
-    expect(finishedWorkoutWhen(workout)).toBe(times);
+    expect(finishedWorkoutWhen(workout)).toBe(`Saturday 12 Sep · ${times}`);
+    expect(finishedWorkoutWhen(workoutWith(push))).toBe(`Saturday 12 Sep · ${times}`);
   });
 
   it("lists a Workout's Exercises in order, each once", () => {

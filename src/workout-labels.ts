@@ -17,8 +17,8 @@ export function backfillTitle(workout: Workout): string | undefined {
   return workout.isBackfilled ? `Workout for ${formatLocalDate(workout.localDate)}` : undefined;
 }
 
-// What a Workout is called: its Category, e.g. "Push", or "Workout" when it
-// has none.
+// What a Workout is called, wherever it's shown: its Category, e.g. "Push", or
+// "Workout" when it has none.
 export function workoutName(workout: Pick<Workout, 'categoryName'>): string {
   return workout.categoryName ?? 'Workout';
 }
@@ -38,17 +38,8 @@ export function lastDone(localDate: string, today: string): string {
   return days < 14 ? `${days} days ago` : formatLocalDate(localDate);
 }
 
-// A finished Workout's title when it's opened to edit: its Category, or its
-// date, e.g. "Saturday 12 Sep", when it has none.
-export function finishedWorkoutTitle(workout: Workout): string {
-  return workout.categoryName ?? formatLocalDateWithWeekday(workout.localDate);
-}
-
-// The line under that title: when it took place, after its date when the title
-// is the Category.
+// The line under a finished Workout's name when it's opened to edit: its date,
+// then when it took place, e.g. "Saturday 12 Sep · 6:00 PM – 7:05 PM".
 export function finishedWorkoutWhen(workout: Workout): string {
-  const times = workoutTimes(workout);
-  return workout.categoryName === null
-    ? times
-    : `${formatLocalDateWithWeekday(workout.localDate)} · ${times}`;
+  return `${formatLocalDateWithWeekday(workout.localDate)} · ${workoutTimes(workout)}`;
 }
