@@ -41,6 +41,20 @@ export function workoutExercises(workout: Pick<Workout, 'entries'>): string {
   return [...new Set(workout.entries.map(entry => entry.exercise.name))].join(', ');
 }
 
+// A finished Workout in a line, under its name on Today: when it took place,
+// then how much was done, e.g. "6:00 PM – 7:05 PM · 3 exercises · 9 sets". An
+// Exercise done twice counts once, and warm-ups count as Sets, as they do on
+// the Workout bar.
+export function doneWorkoutSummary(workout: Workout): string {
+  const exercises = new Set(workout.entries.map(entry => entry.exercise.id)).size;
+  const sets = workout.entries.reduce((count, entry) => count + entry.sets.length, 0);
+  return [
+    workoutTimes(workout),
+    exercises === 1 ? '1 exercise' : `${exercises} exercises`,
+    sets === 1 ? '1 set' : `${sets} sets`,
+  ].join(' · ');
+}
+
 // What finishing a Workout drops, for the lifter to hear first: the planned
 // Sets never logged. Undefined when none are left.
 export function plannedSetsDropped(workout: Pick<Workout, 'entries'>): string | undefined {

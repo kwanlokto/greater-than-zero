@@ -109,13 +109,14 @@ flowchart LR
   S05["S05 Today"] -->|Start next up, or Empty workout| S09["S09 Workout in progress"]
   S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
   S38 -->|tap a Workout| S09
+  S05 -->|the Done card, once a Workout is finished today| S11["S11 Past Workout"]
   S05 -->|Set up a rotation, with none active| S31["S31 Rotations"]
   S05 -->|Meals, or the food card| S07["S07 Food"]
   S05 -->|Set daily targets, when none are set| S25["S25 Macro targets"]
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
 ```
 
-Today's Weigh-in is entered on S05 itself.
+Once a Workout is finished today, the Done card for the latest takes the Start section's place, and "Start another" brings the Start section back on S05 itself, until a Workout starts. Today's Weigh-in is entered on S05 itself.
 
 ### Working out
 

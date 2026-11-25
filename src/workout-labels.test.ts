@@ -4,6 +4,7 @@ import { formatTimeOfDay } from '@/dates';
 import {
   backfillTitle,
   finishedWorkoutWhen,
+  doneWorkoutSummary,
   lastDone,
   plannedSetsDropped,
   setLabels,
@@ -90,6 +91,22 @@ describe('Workout labels', () => {
     expect(plannedSetsDropped(workoutOf(1, 2))).toBe(
       "3 planned sets weren't logged and will be dropped.",
     );
+  });
+
+  it("sums up a finished Workout for Today's card: when it took place, its Exercises and its Sets", () => {
+    const entryOf = (id: string, sets: number) =>
+      ({ exercise: { id }, sets: Array(sets).fill({}) }) as Workout['entries'][number];
+    const workout = workoutWith({ entries: [entryOf('bench', 3), entryOf('dip', 1)] });
+    const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
+
+    expect(doneWorkoutSummary(workout)).toBe(`${times} · 2 exercises · 4 sets`);
+    // One of each reads as one, and an Exercise done twice counts once.
+    expect(doneWorkoutSummary(workoutWith({ entries: [entryOf('bench', 1)] }))).toBe(
+      `${times} · 1 exercise · 1 set`,
+    );
+    expect(
+      doneWorkoutSummary(workoutWith({ entries: [entryOf('bench', 2), entryOf('bench', 1)] })),
+    ).toBe(`${times} · 1 exercise · 3 sets`);
   });
 
   it('names the day a backfilled Workout is for', () => {
