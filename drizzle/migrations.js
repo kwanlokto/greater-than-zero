@@ -20,6 +20,7 @@ import m0015 from './0015_create_saved_foods.sql';
 import m0016 from './0016_add_macro_targets.sql';
 import m0017 from './0017_create_weigh_ins.sql';
 import m0018 from './0018_drop_exercise_entries_notes.sql';
+import m0019 from './0019_add_planned_sets_is_warm_up.sql';
 
   export default {
     journal,
@@ -42,7 +43,8 @@ m0014,
 m0015,
 m0016,
 m0017,
-m0018
+m0018,
+m0019
     }
   }
   

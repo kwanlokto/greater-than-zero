@@ -58,7 +58,7 @@ export function createWorkoutReads(
             plannedSets: {
               where: notDeleted(plannedSets),
               orderBy: asc(plannedSets.position),
-              columns: { id: true, weight: true, weightUnit: true, reps: true },
+              columns: { id: true, weight: true, weightUnit: true, reps: true, isWarmUp: true },
             },
           },
         },

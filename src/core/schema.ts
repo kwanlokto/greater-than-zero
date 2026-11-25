@@ -175,19 +175,23 @@ export const sets = sqliteTable('sets', {
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-// A Set a Workout started from a Template plans to do, pre-filled from the
-// Target. Confirming one logs a Set and deletes it; finishing the Workout
-// deletes the rest, so only logged Sets are ever recorded.
+// A Set a Workout plans to do: pre-filled from the Target when it started from
+// a Template, or from what was logged when it repeats a finished Workout.
+// Confirming one logs a Set and deletes it; finishing the Workout deletes the
+// rest, so only logged Sets are ever recorded.
 export const plannedSets = sqliteTable('planned_sets', {
   ...rowColumns,
   exerciseEntryId: text('exercise_entry_id')
     .notNull()
     .references(() => exerciseEntries.id),
   position: integer('position').notNull(),
-  // The Target's weight, in its unit; empty for plain bodyweight.
+  // In its unit: the Target's, or the Set's it repeats. Empty for plain
+  // bodyweight.
   weight: real('weight'),
   weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
   reps: integer('reps').notNull(),
+  // A repeated warm-up is planned as one. Never set from a Target.
+  isWarmUp: integer('is_warm_up', { mode: 'boolean' }).notNull().default(false),
 });
 
 // A food the lifter keeps to add to Meals again, with the macros of a Serving

@@ -51,7 +51,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
   const next = useSetFields(trackingType, displayUnit);
-  const labels = setLabels(entry.sets, entry.plannedSets.length);
+  const labels = setLabels(entry.sets, entry.plannedSets);
   const { hint } = setPresentationFor[trackingType];
   const hasPlanned = entry.plannedSets.length > 0;
 
@@ -291,8 +291,9 @@ type PlannedSetRowProps = {
   isNext: boolean;
 };
 
-// A Set planned from the Template's Target, pre-filled in the Target's unit.
-// Logging it confirms it, with any numbers changed on the day.
+// A planned Set, pre-filled in its own unit: from the Template's Target, or
+// from the Set it repeats. Logging it confirms it, with any numbers changed on
+// the day.
 function PlannedSetRow({ planned, label, trackingType, isNext }: PlannedSetRowProps) {
   const fields = useSetFields(trackingType, planned.weightUnit, planned);
 
@@ -310,7 +311,7 @@ function PlannedSetRow({ planned, label, trackingType, isNext }: PlannedSetRowPr
         <Button
           variant={isNext ? 'primary' : 'tonal'}
           label="Log"
-          accessibilityLabel={`Log set ${label}`}
+          accessibilityLabel={planned.isWarmUp ? 'Log warm-up' : `Log set ${label}`}
           disabled={!fields.values}
           onPress={confirm}
           style={styles.log}

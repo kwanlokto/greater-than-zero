@@ -1,0 +1,1 @@
+ALTER TABLE `planned_sets` ADD `is_warm_up` integer DEFAULT false NOT NULL;

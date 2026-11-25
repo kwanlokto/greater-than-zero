@@ -1,6 +1,6 @@
-// Workouts and their Sets: starting one, empty or from a Template, logging,
-// correcting and deleting Sets, the rest between them, finishing, and
-// backfilling or correcting past ones.
+// Workouts and their Sets: starting one, empty, from a Template or by
+// repeating a finished one, logging, correcting and deleting Sets, the rest
+// between them, finishing, and backfilling or correcting past ones.
 
 import { and, asc, desc, eq, inArray, isNotNull, like, sql, type SQL } from 'drizzle-orm';
 
@@ -47,15 +47,19 @@ export type WorkoutSet = {
   loggedAt: Date;
 };
 
-// A Set a Workout started from a Template plans to do, pre-filled for the
-// lifter to confirm as they do it. It isn't a logged Set until then.
+// A Set a Workout plans to do, pre-filled for the lifter to confirm as they do
+// it: from the Target when the Workout started from a Template, or from what
+// was logged when it repeats a finished Workout. It isn't a logged Set until
+// then.
 export type PlannedSet = {
   id: string;
-  // In weightUnit, the Target's unit, which it's shown and confirmed in; null
-  // for plain bodyweight.
+  // In weightUnit, which it's shown and confirmed in: the Target's unit, or
+  // the unit of the Set it repeats. Null for plain bodyweight.
   weight: number | null;
   weightUnit: WeightUnit;
   reps: number;
+  // Planned as a warm-up, when it repeats one.
+  isWarmUp: boolean;
 };
 
 // An Exercise within a Workout, with its Sets in the order logged, then the
@@ -94,11 +98,24 @@ export type Workout = {
 
 // Where a new Workout goes: today, unless it's backfilling an earlier date.
 // Started from a Template, it's a copy of the Template's Exercises with their
-// Sets planned from the Targets; otherwise it starts empty.
+// Sets planned from the Targets. Repeating a finished Workout, it's a copy of
+// that Workout's Exercises with the Sets logged then planned as they were
+// done. Otherwise it starts empty.
 export type NewWorkout = {
   localDate?: string;
   templateId?: string;
+  // The finished Workout to repeat. Not together with a Template, and only
+  // onto today.
+  repeatOf?: string;
 };
+
+// What a new Workout starts with: its Exercises in order, each with the Sets
+// planned for it.
+type WorkoutPlan = {
+  exerciseId: string;
+  templateExerciseId: string | null;
+  sets: (Pick<PlannedSet, 'weight' | 'weightUnit' | 'reps'> & { isWarmUp?: boolean })[];
+}[];
 
 // An Exercise entry with what the lifter sees beside it while logging.
 export type EntryToLog = ExerciseEntry & {
@@ -384,12 +401,45 @@ export function createWorkouts({
     return { ...workout, entries };
   }
 
+  // What repeating a finished Workout starts with: its Exercises in order, each
+  // logged Set planned exactly as it was done, warm-ups and units included. The
+  // numbers are that Workout's, not each Exercise's latest. An Exercise with
+  // nothing logged comes along with nothing planned. It keeps the Workout's
+  // Template, and each Exercise's place in it.
+  async function repeatPlanOf(workoutId: string) {
+    const [source] = await reads.findWorkouts(and(eq(workouts.id, workoutId), finished()));
+    if (!source) throw new Error('No such finished Workout');
+    const links = await db
+      .select({ id: exerciseEntries.id, templateExerciseId: exerciseEntries.templateExerciseId })
+      .from(exerciseEntries)
+      .where(eq(exerciseEntries.workoutId, workoutId));
+    const linkOf = new Map(links.map(link => [link.id, link.templateExerciseId]));
+    const plan: WorkoutPlan = source.entries.map(entry => ({
+      exerciseId: entry.exercise.id,
+      templateExerciseId: linkOf.get(entry.id) ?? null,
+      sets: entry.sets.map(({ weight, weightUnit, reps, isWarmUp }) => ({
+        weight,
+        weightUnit,
+        reps,
+        isWarmUp,
+      })),
+    }));
+    return { templateId: source.templateId, plan };
+  }
+
   const commands = {
     // Starts a Workout now, recorded on today's date, or on an earlier
     // `localDate` to backfill a session that wasn't logged at the time.
-    async startWorkout({ localDate, templateId }: NewWorkout = {}): Promise<{ id: string }> {
+    async startWorkout(start: NewWorkout = {}): Promise<{ id: string }> {
+      const { localDate, repeatOf } = start;
       const startedAt = now();
       if (localDate !== undefined) requireBackfillDate(localDate, startedAt);
+      if (repeatOf !== undefined && (localDate !== undefined || start.templateId !== undefined)) {
+        throw new Error('A Workout is repeated onto today, on its own');
+      }
+      const repeated = repeatOf === undefined ? undefined : await repeatPlanOf(repeatOf);
+      // A repeat is a Workout from the same Template as the one it repeats.
+      const templateId = repeated ? (repeated.templateId ?? undefined) : start.templateId;
       const workout = {
         startedAt,
         localDate: localDate ?? localDateOf(startedAt),
@@ -398,7 +448,11 @@ export function createWorkouts({
       };
       // Worked out before anything is saved: pre-filling looks at the sessions
       // before this one, which doesn't exist yet.
-      const plan = templateId === undefined ? [] : await templateWorkouts.plan(templateId, workout);
+      const plan: WorkoutPlan = repeated
+        ? repeated.plan
+        : templateId === undefined
+          ? []
+          : await templateWorkouts.plan(templateId, workout);
       // Checked and inserted without awaiting in between, so two presses at the
       // same moment can't both start one.
       return db.transaction(tx => {
@@ -415,6 +469,8 @@ export function createWorkouts({
             .values({ workoutId: started.id, exerciseId, templateExerciseId, position })
             .returning({ id: exerciseEntries.id })
             .get();
+          // An Exercise repeated with nothing logged for it has none.
+          if (planned.length === 0) return;
           tx.insert(plannedSets)
             .values(
               planned.map((set, index) => ({ ...set, exerciseEntryId: entry.id, position: index })),
@@ -530,6 +586,7 @@ export function createWorkouts({
         .select({
           exerciseEntryId: plannedSets.exerciseEntryId,
           weightUnit: plannedSets.weightUnit,
+          isWarmUp: plannedSets.isWarmUp,
           trackingType: exercises.trackingType,
         })
         .from(plannedSets)
@@ -543,7 +600,9 @@ export function createWorkouts({
       db.transaction(tx => {
         const taken = softDelete(tx, plannedSets, eq(plannedSets.id, plannedSetId), loggedAt);
         if (taken.length === 0) throw new Error('No such planned Set');
-        insertSetRow(tx, planned.exerciseEntryId, set, planned.weightUnit, loggedAt);
+        // A warm-up as planned, unless the lifter says otherwise.
+        const confirmed = { ...set, isWarmUp: set.isWarmUp ?? planned.isWarmUp };
+        insertSetRow(tx, planned.exerciseEntryId, confirmed, planned.weightUnit, loggedAt);
       });
       await startRest(planned.exerciseEntryId, loggedAt);
     },

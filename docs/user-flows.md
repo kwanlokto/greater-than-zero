@@ -156,6 +156,7 @@ flowchart TD
   S11 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   S10 -->|pick an Exercise| S11
+  S11 -->|Repeat this workout| S09
   S11 -->|Save as template| S27["S27 Save as template"]
   S27 -->|Save template| S28["S28 Template"]
   S11 -->|Delete workout| D08{{"D08 Delete this workout?"}}
