@@ -80,32 +80,15 @@ export const exercises = sqliteTable('exercises', {
   maxReps: integer('max_reps').notNull().default(12),
 });
 
-// A Workout to repeat: a name and an ordered list of Exercises with Targets.
-export const templates = sqliteTable('templates', {
+// A kind of Workout the lifter names, such as Push. Workouts belong to one or
+// none, and Rotations put them in order. Names are unique among those not
+// deleted, which the core enforces.
+export const categories = sqliteTable('categories', {
   ...rowColumns,
   name: text('name').notNull(),
 });
 
-// An Exercise in a Template, with its Target: sets × rep range @ weight.
-export const templateExercises = sqliteTable('template_exercises', {
-  ...rowColumns,
-  templateId: text('template_id')
-    .notNull()
-    .references(() => templates.id),
-  exerciseId: text('exercise_id')
-    .notNull()
-    .references(() => exercises.id),
-  position: integer('position').notNull(),
-  targetSets: integer('target_sets').notNull(),
-  minReps: integer('min_reps').notNull(),
-  maxReps: integer('max_reps').notNull(),
-  // Exactly as entered, in the unit it was entered in, like a Set's weight.
-  // For a bodyweight Exercise it's the added weight, empty for none.
-  targetWeight: real('target_weight'),
-  targetWeightUnit: text('target_weight_unit', { enum: weightUnits }).notNull(),
-});
-
-// Templates done in turn, e.g. Push → Pull → Legs, deciding which is next up
+// Categories done in turn, e.g. Push → Pull → Legs, deciding which is next up
 // whatever the weekday.
 export const rotations = sqliteTable('rotations', {
   ...rowColumns,
@@ -114,15 +97,15 @@ export const rotations = sqliteTable('rotations', {
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
 });
 
-// A Template in a Rotation, at its place in the order.
+// A Category in a Rotation, at its place in the order.
 export const rotationEntries = sqliteTable('rotation_entries', {
   ...rowColumns,
   rotationId: text('rotation_id')
     .notNull()
     .references(() => rotations.id),
-  templateId: text('template_id')
+  categoryId: text('category_id')
     .notNull()
-    .references(() => templates.id),
+    .references(() => categories.id),
   position: integer('position').notNull(),
 });
 
@@ -141,10 +124,11 @@ export const workouts = sqliteTable('workouts', {
   finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
   // When the current rest ends. Set by logging a Set; the timer counts down to it.
   restEndsAt: integer('rest_ends_at', { mode: 'timestamp_ms' }),
-  // The Template it was started from; empty when started empty.
-  templateId: text('template_id').references(() => templates.id),
-  // The Rotation it counted toward: the active one, when it was started from
-  // one of its Templates. Empty otherwise.
+  // The Category it's in, if the lifter gave it one: its own, or the one of the
+  // Workout it repeats.
+  categoryId: text('category_id').references(() => categories.id),
+  // The Rotation it counted toward: the active one, when it was started in
+  // one of its Categories. Empty otherwise.
   rotationId: text('rotation_id').references(() => rotations.id),
 });
 
@@ -158,9 +142,6 @@ export const exerciseEntries = sqliteTable('exercise_entries', {
     .notNull()
     .references(() => exercises.id),
   position: integer('position').notNull(),
-  // The Template exercise it was copied from when the Workout started from a
-  // Template; empty for one added during the Workout or swapped in.
-  templateExerciseId: text('template_exercise_id').references(() => templateExercises.id),
 });
 
 export const sets = sqliteTable('sets', {
@@ -174,27 +155,25 @@ export const sets = sqliteTable('sets', {
   weight: real('weight'),
   weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
   reps: integer('reps').notNull(),
-  // Warm-ups are left out of charts, Targets and "last time".
+  // Warm-ups are left out of charts, the go-heavier hint and "last time".
   isWarmUp: integer('is_warm_up', { mode: 'boolean' }).notNull().default(false),
   loggedAt: integer('logged_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
-// A Set a Workout plans to do: pre-filled from the Target when it started from
-// a Template, or from what was logged when it repeats a finished Workout.
-// Confirming one logs a Set and deletes it; finishing the Workout deletes the
-// rest, so only logged Sets are ever recorded.
+// A Set a Workout plans to do, pre-filled from what was logged in the finished
+// Workout it repeats. Confirming one logs a Set and deletes it; finishing the
+// Workout deletes the rest, so only logged Sets are ever recorded.
 export const plannedSets = sqliteTable('planned_sets', {
   ...rowColumns,
   exerciseEntryId: text('exercise_entry_id')
     .notNull()
     .references(() => exerciseEntries.id),
   position: integer('position').notNull(),
-  // In its unit: the Target's, or the Set's it repeats. Empty for plain
-  // bodyweight.
+  // In the unit of the Set it repeats. Empty for plain bodyweight.
   weight: real('weight'),
   weightUnit: text('weight_unit', { enum: weightUnits }).notNull(),
   reps: integer('reps').notNull(),
-  // A repeated warm-up is planned as one. Never set from a Target.
+  // A repeated warm-up is planned as one.
   isWarmUp: integer('is_warm_up', { mode: 'boolean' }).notNull().default(false),
 });
 
@@ -265,29 +244,17 @@ export const weighIns = sqliteTable(
   table => [uniqueIndex('weigh_ins_local_date').on(table.localDate)],
 );
 
-export const templatesRelations = relations(templates, ({ many }) => ({
-  exercises: many(templateExercises),
-}));
-
-export const templateExercisesRelations = relations(templateExercises, ({ one }) => ({
-  template: one(templates, { fields: [templateExercises.templateId], references: [templates.id] }),
-  exercise: one(exercises, {
-    fields: [templateExercises.exerciseId],
-    references: [exercises.id],
-  }),
-}));
-
 export const rotationsRelations = relations(rotations, ({ many }) => ({
   entries: many(rotationEntries),
 }));
 
 export const rotationEntriesRelations = relations(rotationEntries, ({ one }) => ({
   rotation: one(rotations, { fields: [rotationEntries.rotationId], references: [rotations.id] }),
-  template: one(templates, { fields: [rotationEntries.templateId], references: [templates.id] }),
+  category: one(categories, { fields: [rotationEntries.categoryId], references: [categories.id] }),
 }));
 
 export const workoutsRelations = relations(workouts, ({ one, many }) => ({
-  template: one(templates, { fields: [workouts.templateId], references: [templates.id] }),
+  category: one(categories, { fields: [workouts.categoryId], references: [categories.id] }),
   entries: many(exerciseEntries),
 }));
 

@@ -2,7 +2,7 @@ import { createTestDatabase } from './test-database';
 import {
   clockAt,
   createRotationWith,
-  doTemplateWorkout,
+  doCategoryWorkout,
   doWorkout,
   entriesOf,
   findExerciseByName,
@@ -190,37 +190,62 @@ describe('Repeating a Workout', () => {
     );
   });
 
-  it('is refused onto a past date, or together with a Template', async () => {
+  it('is refused onto a past date, or together with a Category', async () => {
     const clock = clockAt('2026-11-16T18:00:00-05:00');
     const tracker = createTracker(createTestDatabase(), clock);
     const done = await pushDay(tracker);
-    const { templates } = await createRotationWith(tracker, 'PPL', ['Push']);
+    const push = await tracker.createCategory('Push');
 
     await expect(
       tracker.startWorkout({ repeatOf: done.id, localDate: '2026-11-10' }),
     ).rejects.toThrow('A Workout is repeated onto today, on its own');
     await expect(
-      tracker.startWorkout({ repeatOf: done.id, templateId: templates[0].id }),
+      tracker.startWorkout({ repeatOf: done.id, categoryId: push.id }),
     ).rejects.toThrow('A Workout is repeated onto today, on its own');
   });
 
-  it('is a Workout from the same Template, counting toward the Rotation as that one does', async () => {
+  it('stays in the Category of the Workout it repeats, counting toward the Rotation as that does', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { rotation, templates } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
+    const { rotation, categories } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
     await tracker.setActiveRotation(rotation.id);
-    const { workout: push } = await doTemplateWorkout(tracker, templates[0].id);
-    await doTemplateWorkout(tracker, templates[1].id);
+    const { workout: push } = await doCategoryWorkout(tracker, categories[0].id);
+    await doCategoryWorkout(tracker, categories[1].id);
     expect((await tracker.getNextUp())?.name).toBe('Push');
 
     const repeat = await tracker.startWorkout({ repeatOf: push.id });
 
     const started = await tracker.getWorkout(repeat.id);
-    expect(started).toMatchObject({ templateId: templates[0].id, templateName: 'Push' });
+    expect(started).toMatchObject({ categoryId: categories[0].id, categoryName: 'Push' });
     await tracker.confirmPlannedSet(started!.entries[0].plannedSets[0].id, {
       weight: 60,
       reps: 10,
     });
     await tracker.finishWorkout(repeat.id);
     expect((await tracker.getNextUp())?.name).toBe('Pull');
+  });
+
+  it('stays in that Category even when its Exercises are swapped on the day', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const push = await tracker.createCategory('Push');
+    const { workout: done } = await doCategoryWorkout(tracker, push.id);
+
+    const repeat = await tracker.startWorkout({ repeatOf: done.id });
+    const [bench] = await entriesOf(tracker, repeat.id);
+    const dip = await findExerciseByName(tracker, 'Dip');
+    await tracker.swapExercise(bench.id, dip.id);
+
+    expect(await tracker.getWorkout(repeat.id)).toMatchObject({ categoryName: 'Push' });
+  });
+
+  it('is in no Category when the Workout it repeats has none', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const done = await pushDay(tracker);
+
+    const repeat = await tracker.startWorkout({ repeatOf: done.id });
+
+    expect(await tracker.getWorkout(repeat.id)).toMatchObject({
+      categoryId: null,
+      categoryName: null,
+    });
   });
 });

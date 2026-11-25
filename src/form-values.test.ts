@@ -14,11 +14,9 @@ import {
   readPortion,
   readRepRange,
   readSet,
-  readTarget,
   readWeighIn,
   repRangeBoxesOf,
   setBoxesOf,
-  targetBoxesOf,
 } from './form-values';
 
 const foodItemRule = (values: FoodValues) =>
@@ -78,44 +76,6 @@ describe('Reading a Set', () => {
     expect(boxes).toEqual({ weight: '62.5', reps: '5' });
     expect(readSet('weighted', boxes, false, logged).values).toEqual({ ...logged, isWarmUp: false });
     expect(setBoxesOf({ weight: null, reps: 12 })).toEqual({ weight: '', reps: '12' });
-  });
-});
-
-describe('Reading a Target', () => {
-  const newTarget = { sets: '3', minReps: '8', maxReps: '12', weight: '' };
-
-  it('waits quietly for the weight of a new weighted Target', () => {
-    expect(readTarget('weighted', newTarget, 'kg')).toEqual({});
-  });
-
-  it('waits for the sets and both ends of the rep range', () => {
-    expect(readTarget('bodyweight', { ...newTarget, sets: '' }, 'kg')).toEqual({});
-    expect(readTarget('bodyweight', { ...newTarget, maxReps: '' }, 'kg')).toEqual({});
-  });
-
-  it('reads a bodyweight Target with no added weight', () => {
-    expect(readTarget('bodyweight', newTarget, 'lb')).toEqual({
-      values: { sets: 3, minReps: 8, maxReps: 12, weight: null, weightUnit: 'lb' },
-    });
-  });
-
-  it("says what the core says once they're filled", () => {
-    expect(readTarget('weighted', { ...newTarget, weight: '60', sets: '0' }, 'kg')).toEqual({
-      problem: 'A Target needs a whole number of sets, at least 1',
-    });
-    expect(readTarget('weighted', { ...newTarget, weight: '60', minReps: '15' }, 'kg')).toEqual({
-      problem: "A rep range's minimum can't be more than its maximum",
-    });
-  });
-
-  it('opens a Target as it was entered', () => {
-    const target = { sets: 3, minReps: 5, maxReps: 8, weight: 102.5 };
-
-    expect(targetBoxesOf(target)).toEqual({ sets: '3', minReps: '5', maxReps: '8', weight: '102.5' });
-    expect(readTarget('weighted', targetBoxesOf(target), 'kg', target).values).toEqual({
-      ...target,
-      weightUnit: 'kg',
-    });
   });
 });
 

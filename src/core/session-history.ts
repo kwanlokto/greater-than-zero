@@ -155,15 +155,15 @@ export function createSessionHistory(
       );
     },
 
-    // The Template of the most recent finished Workout that counted toward the
+    // The Category of the most recent finished Workout that counted toward the
     // Rotation. The Workout `alsoCounting` counts as finished already, so next
     // up can be worked out before finishing it. Undefined when there's none.
-    async lastTemplateInRotation(
+    async lastCategoryInRotation(
       rotationId: string,
       alsoCounting?: string,
     ): Promise<string | null | undefined> {
       const [last] = await db
-        .select({ templateId: workouts.templateId })
+        .select({ categoryId: workouts.categoryId })
         .from(workouts)
         .where(
           and(
@@ -173,18 +173,18 @@ export function createSessionHistory(
         )
         .orderBy(...latestWorkoutFirst)
         .limit(1);
-      return last?.templateId;
+      return last?.categoryId;
     },
 
-    // Every finished Workout, the latest first, with its Template and the
+    // Every finished Workout, the latest first, with its Category and the
     // Exercises still in it. For telling which Workouts are the same kind.
     async finishedWorkoutsLatestFirst(): Promise<
-      { id: string; templateId: string | null; exerciseIds: string[] }[]
+      { id: string; categoryId: string | null; exerciseIds: string[] }[]
     > {
       const rows = await db
         .select({
           id: workouts.id,
-          templateId: workouts.templateId,
+          categoryId: workouts.categoryId,
           exerciseId: exerciseEntries.exerciseId,
         })
         .from(workouts)
@@ -194,9 +194,9 @@ export function createSessionHistory(
         )
         .where(finished())
         .orderBy(...latestWorkoutFirst);
-      const found = new Map<string, { id: string; templateId: string | null; exerciseIds: string[] }>();
-      for (const { id, templateId, exerciseId } of rows) {
-        const workout = found.get(id) ?? { id, templateId, exerciseIds: [] };
+      const found = new Map<string, { id: string; categoryId: string | null; exerciseIds: string[] }>();
+      for (const { id, categoryId, exerciseId } of rows) {
+        const workout = found.get(id) ?? { id, categoryId, exerciseIds: [] };
         if (exerciseId) workout.exerciseIds.push(exerciseId);
         found.set(id, workout);
       }

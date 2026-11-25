@@ -1,10 +1,12 @@
+import { sql } from 'drizzle-orm';
+
 import journal from '../../drizzle/meta/_journal.json';
 import { backupFormatVersion } from './backup';
-import { createTestDatabase } from './test-database';
+import { backupFileOf, createTestDatabase, createTestDatabaseBefore } from './test-database';
 import {
   clockAt,
   createRotationWith,
-  doTemplateWorkout,
+  doCategoryWorkout,
   doWorkout,
   findExerciseByName,
   startWorkoutWith,
@@ -22,16 +24,11 @@ const beforeNotesDropped = journal.entries.findIndex(
   ({ tag }) => tag === '0018_drop_exercise_entries_notes',
 );
 
-// And before Exercises had a rep range.
-const beforeRepRanges = journal.entries.findIndex(
-  ({ tag }) => tag === '0020_add_exercises_rep_range',
-);
-
 // A format version only a newer app could have written.
 const newerFormat = backupFormatVersion + 1;
 
 // A phone with a little of everything on it: a display unit, a hidden custom
-// Exercise, a Rotation of Templates, finished Workouts and one in progress.
+// Exercise, a Rotation of Categories, finished Workouts and one in progress.
 async function phoneWithData() {
   const clock = clockAt('2026-09-28T18:00:00-04:00');
   const tracker = createTracker(createTestDatabase(), clock);
@@ -44,9 +41,9 @@ async function phoneWithData() {
     muscleGroup: 'shoulders',
   });
   await tracker.hideExercise(landmine.id);
-  const { rotation, templates } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
+  const { rotation, categories } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
   await tracker.setActiveRotation(rotation.id);
-  await doTemplateWorkout(tracker, templates[0].id);
+  await doCategoryWorkout(tracker, categories[0].id);
   clock.setTime('2026-09-29T18:00:00-04:00');
   await doWorkout(tracker, 'Squat', [{ weight: 225, reps: 5 }], 'lb');
   const { entry } = await startWorkoutWith(tracker, 'Deadlift');
@@ -219,30 +216,19 @@ describe('Backup import', () => {
   });
 
   it('takes a file from before Exercises had a rep range, giving each the range of its Target', async () => {
-    const backup = await backupWithData();
-    const bench = backup.tables.exercises.find(exercise => exercise.name === 'Bench Press')!;
-    // As an app from before then would have written it: format version 2, no
-    // rep ranges, and here a Target of 5–8 for Bench Press in each Template.
-    const fromBefore = {
-      ...backup,
-      formatVersion: 2,
-      schemaVersion: beforeRepRanges,
-      tables: {
-        ...backup.tables,
-        exercises: backup.tables.exercises.map(({ min_reps, max_reps, ...exercise }) => exercise),
-        template_exercises: backup.tables.template_exercises.map(target => ({
-          ...target,
-          min_reps: 5,
-          max_reps: 8,
-        })),
-      },
-    };
-    expect(backup.tables.template_exercises.map(target => target.exercise_id)).toContain(bench.id);
+    // As an app from before then held it: a Target of 5–8 for Bench Press.
+    const old = createTestDatabaseBefore('0020_add_exercises_rep_range');
+    old.run(sql`INSERT INTO templates (id, name) VALUES ('push', 'Push')`);
+    old.run(sql`INSERT INTO template_exercises
+                  (id, template_id, exercise_id, position, target_sets, min_reps, max_reps,
+                   target_weight, target_weight_unit)
+                SELECT 'target-1', 'push', id, 0, 3, 5, 8, 60, 'kg'
+                FROM exercises WHERE name = 'Bench Press'`);
     const phone = createTracker(createTestDatabase());
 
-    await phone.importBackup(JSON.stringify(fromBefore));
+    await phone.importBackup(backupFileOf(old, 2));
 
-    expect(await phone.getExercise(String(bench.id))).toMatchObject({ minReps: 5, maxReps: 8 });
+    expect(await findExerciseByName(phone, 'Bench Press')).toMatchObject({ minReps: 5, maxReps: 8 });
     expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
   });
 

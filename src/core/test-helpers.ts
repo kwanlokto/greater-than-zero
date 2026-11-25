@@ -2,7 +2,6 @@ import type {
   FoodItemValues,
   NewWorkout,
   SetValues,
-  TargetValues,
   Tracker,
   WeightUnit,
 } from './tracker';
@@ -87,61 +86,24 @@ export function weightsAndReps(loggedSets: { weight: number | null; reps: number
   return loggedSets.map(set => [set.weight, set.reps]);
 }
 
-export const threeByEightToTwelve: TargetValues = {
-  sets: 3,
-  minReps: 8,
-  maxReps: 12,
-  weight: 60,
-  weightUnit: 'kg',
-};
-
-// A Template holding these Exercises, in order, each with the same Target.
-export async function createTemplateWith(
-  tracker: Tracker,
-  name: string,
-  exerciseNames: string[],
-  target: TargetValues = threeByEightToTwelve,
-) {
-  const template = await tracker.createTemplate(name);
-  const exercises = [];
-  for (const exerciseName of exerciseNames) {
-    const exercise = await findExerciseByName(tracker, exerciseName);
-    exercises.push(await tracker.addExerciseToTemplate(template.id, exercise.id, target));
-  }
-  return { template, exercises };
-}
-
-// Each Exercise in the Template with its Target, as [name, sets, min, max, weight, unit].
-export async function targetsOf(tracker: Tracker, templateId: string) {
-  const template = await tracker.getTemplate(templateId);
-  return template?.exercises.map(({ exercise, target }) => [
-    exercise.name,
-    target.sets,
-    target.minReps,
-    target.maxReps,
-    target.weight,
-    target.weightUnit,
-  ]);
-}
-
-// A Rotation of new Templates with these names, in order, each holding one
-// Exercise with the same Target.
-export async function createRotationWith(tracker: Tracker, name: string, templateNames: string[]) {
+// A Rotation of new Categories with these names, in order.
+export async function createRotationWith(tracker: Tracker, name: string, categoryNames: string[]) {
   const rotation = await tracker.createRotation(name);
-  const templates = [];
+  const categories = [];
   const entries = [];
-  for (const templateName of templateNames) {
-    const { template } = await createTemplateWith(tracker, templateName, ['Bench Press']);
-    templates.push(template);
-    entries.push(await tracker.addTemplateToRotation(rotation.id, template.id));
+  for (const categoryName of categoryNames) {
+    const category = await tracker.createCategory(categoryName);
+    categories.push(category);
+    entries.push(await tracker.addCategoryToRotation(rotation.id, category.id));
   }
-  return { rotation, templates, entries };
+  return { rotation, categories, entries };
 }
 
-// Starts a Workout from the Template, logs a Set and finishes it.
-export async function doTemplateWorkout(tracker: Tracker, templateId: string, start?: NewWorkout) {
-  const workout = await tracker.startWorkout({ ...start, templateId });
-  const [entry] = await entriesOf(tracker, workout.id);
+// Starts a Workout in the Category, logs a Set of Bench Press and finishes it.
+export async function doCategoryWorkout(tracker: Tracker, categoryId: string, start?: NewWorkout) {
+  const workout = await tracker.startWorkout({ ...start, categoryId });
+  const bench = await findExerciseByName(tracker, 'Bench Press');
+  const entry = await tracker.addExerciseToWorkout(workout.id, bench.id);
   await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
   return { workout, summary: await tracker.finishWorkout(workout.id) };
 }

@@ -21,14 +21,12 @@ import {
   problemWithPortion,
   problemWithRepRange,
   problemWithSet,
-  problemWithTarget,
   problemWithWeighIn,
   type FoodValues,
   type MacroTargets,
   type RepRange,
   type SavedFood,
   type SetValues,
-  type TargetValues,
   type TrackingType,
   type WeightUnit,
 } from '@/core/tracker';
@@ -125,40 +123,6 @@ export function readRepRange(boxes: RepRangeBoxes): Reading<RepRange> {
     maxReps: filledNumberIn(boxes.maxReps, asTyped),
   };
   return judged(values, problemWithRepRange(values));
-}
-
-// Targets
-
-export type TargetBoxes = { sets: string; minReps: string; maxReps: string; weight: string };
-type StoredTarget = Omit<TargetValues, 'weightUnit'>;
-
-export function targetBoxesOf(target: StoredTarget): TargetBoxes {
-  return {
-    sets: textOf(target.sets, asTyped),
-    minReps: textOf(target.minReps, asTyped),
-    maxReps: textOf(target.maxReps, asTyped),
-    weight: textOf(target.weight, asTyped),
-  };
-}
-
-// Sets and both ends of the rep range must be filled, and so must the weight
-// for a weighted Exercise. The unit is picked, not typed.
-export function readTarget(
-  trackingType: TrackingType,
-  boxes: TargetBoxes,
-  weightUnit: WeightUnit,
-  opened?: StoredTarget,
-): Reading<TargetValues> {
-  if (isBlank(boxes.sets) || isBlank(boxes.minReps) || isBlank(boxes.maxReps)) return notReady;
-  if (trackingType === 'weighted' && isBlank(boxes.weight)) return notReady;
-  const values = {
-    sets: filledNumberIn(boxes.sets, asTyped, opened?.sets),
-    minReps: filledNumberIn(boxes.minReps, asTyped, opened?.minReps),
-    maxReps: filledNumberIn(boxes.maxReps, asTyped, opened?.maxReps),
-    weight: numberIn(boxes.weight, asTyped, opened?.weight),
-    weightUnit,
-  };
-  return judged(values, problemWithTarget(trackingType, values));
 }
 
 // Food items and Saved foods

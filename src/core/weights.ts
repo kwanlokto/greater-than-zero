@@ -19,11 +19,6 @@ export type EnteredWeight = {
 
 const kilogramsPerPound = 0.45359237;
 
-// Weights in different units closer than this, in kilograms, are the same
-// weight: a Set entered in kilograms against a Target in pounds rarely converts
-// exactly (135 lb is 61.235 kg, loaded as 61.25), and no plate is this small.
-const sameWeightTolerance = 0.05;
-
 // A weight in another unit, at full precision.
 export function convertWeight(weight: number, from: WeightUnit, to: WeightUnit): number {
   if (from === to) return weight;
@@ -52,7 +47,7 @@ export function displayWeightOf(
   return weight === null ? null : displayedWeight(weight, unit, displayUnit);
 }
 
-// A Set, Target or the like, with what to show for its weight.
+// A Set or the like, with what to show for its weight.
 export function withDisplayWeight<W extends EnteredWeight>(
   entered: W,
   displayUnit: WeightUnit,
@@ -63,35 +58,12 @@ export function withDisplayWeight<W extends EnteredWeight>(
   };
 }
 
-// For comparing weights entered in either unit. Plain bodyweight is no added
-// weight.
-export function kilogramsOf({ weight, weightUnit }: EnteredWeight): number {
-  return convertWeight(weight ?? 0, weightUnit, 'kg');
-}
-
-// Weights in one unit compare exactly; across units, allowing for conversion
-// (sameWeightTolerance). Plain bodyweight is no added weight.
-export function isHeavier(weight: EnteredWeight, than: EnteredWeight): boolean {
-  if (weight.weightUnit === than.weightUnit) return (weight.weight ?? 0) > (than.weight ?? 0);
-  return kilogramsOf(weight) - kilogramsOf(than) >= sameWeightTolerance;
-}
-
-export function isAtLeast(weight: EnteredWeight, than: EnteredWeight): boolean {
-  return !isHeavier(than, weight);
-}
-
-export function lightestOf<W extends EnteredWeight>(weighed: W[]): W {
-  return weighed.reduce((lightestSoFar, next) =>
-    kilogramsOf(next) < kilogramsOf(lightestSoFar) ? next : lightestSoFar,
-  );
-}
-
 // "82.4 kg", or "−20 kg" for help from an assisted machine.
 export function formatWeight({ value, unit }: Weight): string {
   return `${value < 0 ? '−' : ''}${Math.abs(value)} ${unit}`;
 }
 
-// The load of a Set or Target in words, in the display unit: "60 kg", or for a
+// The load of a Set in words, in the display unit: "60 kg", or for a
 // bodyweight Exercise "bodyweight", "bodyweight + 10 kg" or "bodyweight − 20 kg".
 // No added weight, whether left blank or entered as 0, is plain bodyweight:
 // judged on the weight as entered, not the rounded one shown.
@@ -114,19 +86,18 @@ export function describeSet(
   return `${load.charAt(0).toUpperCase()}${load.slice(1)} × ${set.reps}`;
 }
 
-// Sets and Targets take the same weights: a weighted Exercise needs one, and
-// only a bodyweight Exercise's added weight can be negative, for assistance.
+// The weights a Set can take: a weighted Exercise needs one, and only a
+// bodyweight Exercise's added weight can be negative, for assistance.
 export function problemWithWeight(
   trackingType: TrackingType,
   weight: number | null,
-  what: 'Set' | 'Target',
 ): string | undefined {
   if (weight === null) {
-    if (trackingType === 'weighted') return `A weighted ${what} needs a weight`;
+    if (trackingType === 'weighted') return 'A weighted Set needs a weight';
   } else if (!Number.isFinite(weight)) {
-    return `A ${what}'s weight must be a number`;
+    return "A Set's weight must be a number";
   } else if (weight < 0 && trackingType === 'weighted') {
-    return `Only bodyweight ${what}s can have a negative weight`;
+    return 'Only bodyweight Sets can have a negative weight';
   }
   return undefined;
 }

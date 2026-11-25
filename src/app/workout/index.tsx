@@ -6,6 +6,7 @@ import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-car
 import { IconButton } from '@/components/icon-button';
 import { RestTimer } from '@/components/rest-timer';
 import { Screen } from '@/components/screen';
+import { WorkoutTitle } from '@/components/workout-title';
 import { alertPrompter } from '@/alert-prompter';
 import { tracker } from '@/database';
 import { finishWorkout } from '@/finish-workout';
@@ -54,6 +55,13 @@ export default function WorkoutScreen() {
       <Stack.Screen
         options={{
           title: backfillTitle(workout) ?? workoutName(workout),
+          // Tapping the title chooses the Workout's Category.
+          headerTitle: () => (
+            <WorkoutTitle
+              workoutId={workout.id}
+              title={backfillTitle(workout) ?? workoutName(workout)}
+            />
+          ),
           // Hides the Workout without ending it; the Workout bar brings it back.
           headerLeft: () => (
             <IconButton

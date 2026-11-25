@@ -1,6 +1,6 @@
-// Reading Workouts: each with its entries, their Exercises, and the Sets
-// logged and still planned, as every area that shows or works from a Workout
-// sees it. Workouts, Template workouts and History's day all read here.
+// Reading Workouts: each with its Category, its entries, their Exercises, and
+// the Sets logged and still planned, as every area that shows or works from a
+// Workout sees it. Workouts and History's day both read here.
 
 import { and, asc, eq, type SQL } from 'drizzle-orm';
 
@@ -31,12 +31,11 @@ export function createWorkoutReads(
         finishedAt: true,
         isBackfilled: true,
         restEndsAt: true,
-        templateId: true,
+        categoryId: true,
         rotationId: true,
       },
       with: {
-        // Deleted ones too, so a past Workout keeps its Template's name.
-        template: { columns: { name: true } },
+        category: { columns: { name: true } },
         entries: {
           where: notDeleted(exerciseEntries),
           orderBy: asc(exerciseEntries.position),
@@ -65,9 +64,9 @@ export function createWorkoutReads(
       },
     });
     const displayUnit = await getDisplayUnit();
-    return found.map(({ template, ...workout }) => ({
+    return found.map(({ category, ...workout }) => ({
       ...workout,
-      templateName: template?.name ?? null,
+      categoryName: category?.name ?? null,
       entries: workout.entries.map(entry => ({
         ...entry,
         sets: entry.sets.map(set => withDisplayWeight(set, displayUnit)),

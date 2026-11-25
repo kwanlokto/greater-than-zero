@@ -2,10 +2,9 @@ import { createTestDatabase } from './test-database';
 import {
   clockAt,
   createRotationWith,
-  createTemplateWith,
-  doTemplateWorkout,
+  doCategoryWorkout,
   doWorkout,
-  entriesOf,
+  startWorkoutWith,
 } from './test-helpers';
 import { createTracker, type Tracker } from './tracker';
 
@@ -14,7 +13,7 @@ async function nextUpName(tracker: Tracker) {
 }
 
 describe('Next up', () => {
-  it("is the active Rotation's first Template before any Workout", async () => {
+  it("is the active Rotation's first Category before any Workout", async () => {
     const tracker = createTracker(createTestDatabase());
     const { rotation } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
 
@@ -22,36 +21,35 @@ describe('Next up', () => {
 
     const nextUp = await tracker.getNextUp();
     expect(nextUp?.name).toBe('Push');
-    expect(nextUp?.exercises.map(({ exercise }) => exercise.name)).toEqual(['Bench Press']);
   });
 
-  it('moves along to the Template after each one done, wrapping around at the end', async () => {
+  it('moves along to the Category after each one done, wrapping around at the end', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push, pull, legs],
+      categories: [push, pull, legs],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
 
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
     expect(await nextUpName(tracker)).toBe('Pull');
-    await doTemplateWorkout(tracker, pull.id);
+    await doCategoryWorkout(tracker, pull.id);
     expect(await nextUpName(tracker)).toBe('Legs');
-    await doTemplateWorkout(tracker, legs.id);
+    await doCategoryWorkout(tracker, legs.id);
     expect(await nextUpName(tracker)).toBe('Push');
   });
 
-  it('counts a Workout toward the active Rotation only when started from one of its Templates', async () => {
+  it('counts a Workout toward the active Rotation only when started from one of its Categories', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    const { template: arms } = await createTemplateWith(tracker, 'Arms', ['Barbell Curl']);
+    const arms = await tracker.createCategory('Arms');
     await tracker.setActiveRotation(rotation.id);
 
-    const fromRotation = await doTemplateWorkout(tracker, push.id);
-    const fromOutside = await doTemplateWorkout(tracker, arms.id);
+    const fromRotation = await doCategoryWorkout(tracker, push.id);
+    const fromOutside = await doCategoryWorkout(tracker, arms.id);
     const empty = await doWorkout(tracker, 'Bench Press', [{ weight: 60, reps: 10 }]);
 
     expect((await tracker.getWorkout(fromRotation.workout.id))?.rotationId).toBe(rotation.id);
@@ -63,73 +61,73 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push, , legs],
+      categories: [push, , legs],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
 
-    await doTemplateWorkout(tracker, legs.id);
+    await doCategoryWorkout(tracker, legs.id);
     expect(await nextUpName(tracker)).toBe('Push');
-    await doTemplateWorkout(tracker, push.id);
-    await doTemplateWorkout(tracker, legs.id);
+    await doCategoryWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, legs.id);
     expect(await nextUpName(tracker)).toBe('Push');
   });
 
-  it('stays put for Workouts started empty or from Templates outside the Rotation', async () => {
+  it('stays put for Workouts started empty or from Categories outside the Rotation', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    const { template: arms } = await createTemplateWith(tracker, 'Arms', ['Barbell Curl']);
+    const arms = await tracker.createCategory('Arms');
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
 
     await doWorkout(tracker, 'Squat', [{ weight: 100, reps: 5 }]);
-    await doTemplateWorkout(tracker, arms.id);
+    await doCategoryWorkout(tracker, arms.id);
 
     expect(await nextUpName(tracker)).toBe('Pull');
   });
 
-  it('goes back to the first Template when the last one done has left the Rotation', async () => {
+  it('goes back to the first Category when the last one done has left the Rotation', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [, pull],
+      categories: [, pull],
       entries: [, pullEntry],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, pull.id);
+    await doCategoryWorkout(tracker, pull.id);
 
-    await tracker.removeTemplateFromRotation(pullEntry.id);
+    await tracker.removeCategoryFromRotation(pullEntry.id);
 
     expect(await nextUpName(tracker)).toBe('Push');
   });
 
-  it('goes back to the first Template when the last one done has been deleted', async () => {
+  it('goes back to the first Category when the last one done has been deleted', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [, pull],
+      categories: [, pull],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, pull.id);
+    await doCategoryWorkout(tracker, pull.id);
 
-    await tracker.deleteTemplate(pull.id);
+    await tracker.deleteCategory(pull.id);
 
     expect(await nextUpName(tracker)).toBe('Push');
   });
 
-  it('follows the Templates in their current order', async () => {
+  it('follows the Categories in their current order', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push],
+      categories: [push],
       entries: [, , legsEntry],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
 
-    await tracker.moveTemplateInRotation(legsEntry.id, 1);
+    await tracker.moveCategoryInRotation(legsEntry.id, 1);
 
     expect(await nextUpName(tracker)).toBe('Legs');
   });
@@ -138,35 +136,35 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation: ppl,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     const {
       rotation: upperLower,
-      templates: [upper],
+      categories: [upper],
     } = await createRotationWith(tracker, 'Upper Lower', ['Upper', 'Lower']);
     await tracker.setActiveRotation(ppl.id);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
 
     await tracker.setActiveRotation(upperLower.id);
     expect(await nextUpName(tracker)).toBe('Upper');
-    await doTemplateWorkout(tracker, upper.id);
+    await doCategoryWorkout(tracker, upper.id);
     expect(await nextUpName(tracker)).toBe('Lower');
 
     await tracker.setActiveRotation(ppl.id);
     expect(await nextUpName(tracker)).toBe('Pull');
   });
 
-  it('counts only Workouts done under a Rotation toward it, even with a Template it shares', async () => {
+  it('counts only Workouts done under a Rotation toward it, even with a Category it shares', async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation: ppl,
-      templates: [push, , legs],
+      categories: [push, , legs],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     const pushLegs = await tracker.createRotation('Push Legs');
-    await tracker.addTemplateToRotation(pushLegs.id, push.id);
-    await tracker.addTemplateToRotation(pushLegs.id, legs.id);
+    await tracker.addCategoryToRotation(pushLegs.id, push.id);
+    await tracker.addCategoryToRotation(pushLegs.id, legs.id);
     await tracker.setActiveRotation(pushLegs.id);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
 
     await tracker.setActiveRotation(ppl.id);
 
@@ -177,15 +175,16 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation: ppl,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     const { rotation: upperLower } = await createRotationWith(tracker, 'Upper Lower', [
       'Upper',
       'Lower',
     ]);
     await tracker.setActiveRotation(ppl.id);
-    const workout = await tracker.startWorkout({ templateId: push.id });
-    const [entry] = await entriesOf(tracker, workout.id);
+    const { workout, entry } = await startWorkoutWith(tracker, 'Bench Press', {
+      categoryId: push.id,
+    });
     await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
 
     await tracker.setActiveRotation(upperLower.id);
@@ -196,13 +195,13 @@ describe('Next up', () => {
     expect(await nextUpName(tracker)).toBe('Pull');
   });
 
-  it("doesn't count Workouts done before their Template was in the active Rotation", async () => {
+  it("doesn't count Workouts done before their Category was in the active Rotation", async () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
 
     await tracker.setActiveRotation(rotation.id);
 
@@ -213,16 +212,16 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push, pull, legs],
+      categories: [push, pull, legs],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, push.id);
-    const { workout: deleted } = await doTemplateWorkout(tracker, pull.id);
-    const discarded = await tracker.startWorkout({ templateId: pull.id });
+    await doCategoryWorkout(tracker, push.id);
+    const { workout: deleted } = await doCategoryWorkout(tracker, pull.id);
+    const discarded = await tracker.startWorkout({ categoryId: pull.id });
     await tracker.discardWorkout(discarded.id);
 
     await tracker.deleteWorkout(deleted.id);
-    await tracker.startWorkout({ templateId: legs.id });
+    await tracker.startWorkout({ categoryId: legs.id });
 
     expect(await nextUpName(tracker)).toBe('Pull');
   });
@@ -232,18 +231,18 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase(), clock);
     const {
       rotation,
-      templates: [push, , legs],
+      categories: [push, , legs],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
     await tracker.setActiveRotation(rotation.id);
-    await doTemplateWorkout(tracker, push.id);
+    await doCategoryWorkout(tracker, push.id);
     clock.setTime('2026-09-29T20:00:00');
 
     // Onto an earlier date.
-    await doTemplateWorkout(tracker, legs.id, { localDate: '2026-09-27' });
+    await doCategoryWorkout(tracker, legs.id, { localDate: '2026-09-27' });
     expect(await nextUpName(tracker)).toBe('Pull');
 
     // Onto the same date, where backfilled Workouts come first.
-    await doTemplateWorkout(tracker, legs.id, { localDate: '2026-09-28' });
+    await doCategoryWorkout(tracker, legs.id, { localDate: '2026-09-28' });
     expect(await nextUpName(tracker)).toBe('Pull');
   });
 
@@ -251,15 +250,15 @@ describe('Next up', () => {
     const tracker = createTracker(createTestDatabase());
     const {
       rotation,
-      templates: [push],
+      categories: [push],
     } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    const { template: arms } = await createTemplateWith(tracker, 'Arms', ['Barbell Curl']);
+    const arms = await tracker.createCategory('Arms');
     await tracker.setActiveRotation(rotation.id);
 
-    const afterPush = await doTemplateWorkout(tracker, push.id);
-    const afterArms = await doTemplateWorkout(tracker, arms.id);
+    const afterPush = await doCategoryWorkout(tracker, push.id);
+    const afterArms = await doCategoryWorkout(tracker, arms.id);
     await tracker.setActiveRotation(null);
-    const afterNoRotation = await doTemplateWorkout(tracker, push.id);
+    const afterNoRotation = await doCategoryWorkout(tracker, push.id);
 
     expect(afterPush.summary.nextUp?.name).toBe('Pull');
     expect(afterArms.summary.nextUp?.name).toBe('Pull');
@@ -268,8 +267,8 @@ describe('Next up', () => {
 
   it('is nothing with no active Rotation', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { templates } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    await doTemplateWorkout(tracker, templates[0].id);
+    const { categories } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
+    await doCategoryWorkout(tracker, categories[0].id);
 
     expect(await nextUpName(tracker)).toBeNull();
   });
@@ -284,12 +283,12 @@ describe('Next up', () => {
     expect(await nextUpName(tracker)).toBeNull();
   });
 
-  it('is nothing when the active Rotation has no Templates', async () => {
+  it('is nothing when the active Rotation has no Categories', async () => {
     const tracker = createTracker(createTestDatabase());
     const { rotation, entries } = await createRotationWith(tracker, 'PPL', ['Push']);
     await tracker.setActiveRotation(rotation.id);
 
-    await tracker.removeTemplateFromRotation(entries[0].id);
+    await tracker.removeCategoryFromRotation(entries[0].id);
 
     expect(await nextUpName(tracker)).toBeNull();
   });

@@ -13,7 +13,7 @@ type Props = {
   onSubmit: (name: string) => Promise<void>;
 };
 
-// Asks for the name of something new, such as a Template.
+// Asks for the name of something new, such as a Rotation.
 export function NameForm({ placeholder, submitLabel, onSubmit }: Props) {
   const [name, setName] = useState('');
   const canSubmit = name.trim() !== '';

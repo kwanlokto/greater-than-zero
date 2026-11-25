@@ -1,9 +1,10 @@
-// Workouts and their Sets: starting one, empty, from a Template or by
-// repeating a finished one, logging, correcting and deleting Sets, the rest
-// between them, finishing, and backfilling or correcting past ones.
+// Workouts and their Sets: starting one, empty or by repeating a finished one,
+// logging, correcting and deleting Sets, the rest between them, finishing, and
+// backfilling or correcting past ones.
 
 import { and, asc, desc, eq, inArray, isNotNull, like, sql, type SQL } from 'drizzle-orm';
 
+import type { Categories, Category } from './categories';
 import type { Exercise } from './exercises';
 import { isLocalDate, localDateOf, relativeToToday } from './local-dates';
 import { notDeleted, positionAfterLast, softDelete } from './records';
@@ -18,8 +19,6 @@ import {
   type WeightUnit,
 } from './schema';
 import { finished, inProgress, setStillLogged, type SessionHistory } from './session-history';
-import type { TargetUpdateOffer, TemplateWorkouts } from './template-workouts';
-import type { Template } from './templates';
 import type { TrackerDatabase } from './tracker';
 import { problemWithWeight, type Weight } from './weights';
 import type { WorkoutReads } from './workout-reads';
@@ -48,13 +47,12 @@ export type WorkoutSet = {
 };
 
 // A Set a Workout plans to do, pre-filled for the lifter to confirm as they do
-// it: from the Target when the Workout started from a Template, or from what
-// was logged when it repeats a finished Workout. It isn't a logged Set until
-// then.
+// it, from what was logged in the finished Workout it repeats. It isn't a
+// logged Set until then.
 export type PlannedSet = {
   id: string;
-  // In weightUnit, which it's shown and confirmed in: the Target's unit, or
-  // the unit of the Set it repeats. Null for plain bodyweight.
+  // In weightUnit, which it's shown and confirmed in: the unit of the Set it
+  // repeats. Null for plain bodyweight.
   weight: number | null;
   weightUnit: WeightUnit;
   reps: number;
@@ -84,28 +82,26 @@ export type Workout = {
   isBackfilled: boolean;
   // When the current rest ends; the timer shows the time left until then.
   restEndsAt: Date | null;
-  // The Template it was started from, or null when started empty.
-  templateId: string | null;
-  // That Template's name as it is now, e.g. after a rename. Still there once
-  // the Template is deleted, as deleting only hides it. Null when started
-  // empty.
-  templateName: string | null;
-  // The Rotation it counted toward: the one active when it was started from
-  // one of its Templates. Null otherwise.
+  // The Category it's in, or null for none: one the lifter gave it, or the
+  // one of the Workout it repeats.
+  categoryId: string | null;
+  // That Category's name as it is now, e.g. after a rename. Null with none.
+  categoryName: string | null;
+  // The Rotation it counted toward: the one active when it was started in one
+  // of its Categories. Null otherwise.
   rotationId: string | null;
   entries: ExerciseEntry[];
 };
 
 // Where a new Workout goes: today, unless it's backfilling an earlier date.
-// Started from a Template, it's a copy of the Template's Exercises with their
-// Sets planned from the Targets. Repeating a finished Workout, it's a copy of
-// that Workout's Exercises with the Sets logged then planned as they were
-// done. Otherwise it starts empty.
+// Repeating a finished Workout, it's a copy of that Workout's Exercises, in
+// its Category, with the Sets logged then planned as they were done.
+// Otherwise it starts empty, in a Category if one is given.
 export type NewWorkout = {
   localDate?: string;
-  templateId?: string;
-  // The finished Workout to repeat. Not together with a Template, and only
-  // onto today.
+  // The Category to start an empty Workout in.
+  categoryId?: string;
+  // The finished Workout to repeat. On its own, and only onto today.
   repeatOf?: string;
 };
 
@@ -113,8 +109,7 @@ export type NewWorkout = {
 // planned for it.
 type WorkoutPlan = {
   exerciseId: string;
-  templateExerciseId: string | null;
-  sets: (Pick<PlannedSet, 'weight' | 'weightUnit' | 'reps'> & { isWarmUp?: boolean })[];
+  sets: Omit<PlannedSet, 'id'>[];
 }[];
 
 // An Exercise entry with what the lifter sees beside it while logging.
@@ -143,19 +138,11 @@ export type LastTime = {
   sets: WorkoutSet[];
 };
 
-// What finishing a Workout reports.
+// What finishing a Workout reports. Nothing in it needs an answer.
 export type FinishSummary = {
-  // The Template the Workout started from, when the Workout's Exercise list no
-  // longer matches it, so the lifter can be offered to update it with
-  // updateTemplateFromWorkout. Null when they match, or for a Workout started
-  // empty.
-  templateUpdateOffer: { templateId: string; templateName: string } | null;
-  // A higher Target for each Exercise whose session beat it, each accepted
-  // (acceptTargetUpdate) or declined on its own.
-  targetUpdateOffers: TargetUpdateOffer[];
-  // The Template to do next from the active Rotation, now this Workout is
+  // The Category to do next from the active Rotation, now this Workout is
   // done (see getNextUp).
-  nextUp: Template | null;
+  nextUp: Category | null;
 };
 
 // Why a Set can't be logged for an Exercise of this tracking type, or undefined
@@ -164,7 +151,7 @@ export function problemWithSet(
   trackingType: TrackingType,
   { weight, reps }: SetValues,
 ): string | undefined {
-  const weightProblem = problemWithWeight(trackingType, weight, 'Set');
+  const weightProblem = problemWithWeight(trackingType, weight);
   if (weightProblem) return weightProblem;
   if (!Number.isInteger(reps) || reps < 1) return 'A Set needs a whole number of reps, at least 1';
   return undefined;
@@ -226,7 +213,7 @@ type WorkoutDependencies = {
   history: SessionHistory;
   getDisplayUnit: () => Promise<WeightUnit>;
   getFallbackRestSeconds: () => Promise<number>;
-  templateWorkouts: Pick<TemplateWorkouts, 'plan' | 'finishing'>;
+  categories: Pick<Categories, 'requireCategory'>;
   rotations: Pick<Rotations, 'idOfActiveRotationWith' | 'findNextUp'>;
   reads: WorkoutReads;
 };
@@ -237,7 +224,7 @@ export function createWorkouts({
   history,
   getDisplayUnit,
   getFallbackRestSeconds,
-  templateWorkouts,
+  categories,
   rotations,
   reads,
 }: WorkoutDependencies) {
@@ -414,19 +401,13 @@ export function createWorkouts({
   // What repeating a finished Workout starts with: its Exercises in order, each
   // logged Set planned exactly as it was done, warm-ups and units included. The
   // numbers are that Workout's, not each Exercise's latest. An Exercise with
-  // nothing logged comes along with nothing planned. It keeps the Workout's
-  // Template, and each Exercise's place in it.
+  // nothing logged comes along with nothing planned. It stays in the Workout's
+  // Category.
   async function repeatPlanOf(workoutId: string) {
     const [source] = await reads.findWorkouts(and(eq(workouts.id, workoutId), finished()));
     if (!source) throw new Error('No such finished Workout');
-    const links = await db
-      .select({ id: exerciseEntries.id, templateExerciseId: exerciseEntries.templateExerciseId })
-      .from(exerciseEntries)
-      .where(eq(exerciseEntries.workoutId, workoutId));
-    const linkOf = new Map(links.map(link => [link.id, link.templateExerciseId]));
     const plan: WorkoutPlan = source.entries.map(entry => ({
       exerciseId: entry.exercise.id,
-      templateExerciseId: linkOf.get(entry.id) ?? null,
       sets: entry.sets.map(({ weight, weightUnit, reps, isWarmUp }) => ({
         weight,
         weightUnit,
@@ -434,7 +415,7 @@ export function createWorkouts({
         isWarmUp,
       })),
     }));
-    return { templateId: source.templateId, plan };
+    return { categoryId: source.categoryId, plan };
   }
 
   const commands = {
@@ -444,39 +425,37 @@ export function createWorkouts({
       const { localDate, repeatOf } = start;
       const startedAt = now();
       if (localDate !== undefined) requireBackfillDate(localDate, startedAt);
-      if (repeatOf !== undefined && (localDate !== undefined || start.templateId !== undefined)) {
+      if (repeatOf !== undefined && (localDate !== undefined || start.categoryId !== undefined)) {
         throw new Error('A Workout is repeated onto today, on its own');
       }
       const repeated = repeatOf === undefined ? undefined : await repeatPlanOf(repeatOf);
-      // A repeat is a Workout from the same Template as the one it repeats.
-      const templateId = repeated ? (repeated.templateId ?? undefined) : start.templateId;
-      const workout = {
-        startedAt,
-        localDate: localDate ?? localDateOf(startedAt),
-        isBackfilled: localDate !== undefined,
-        templateId,
-      };
-      // Worked out before anything is saved: pre-filling looks at the sessions
-      // before this one, which doesn't exist yet.
-      const plan: WorkoutPlan = repeated
-        ? repeated.plan
-        : templateId === undefined
-          ? []
-          : await templateWorkouts.plan(templateId, workout);
+      const plan = repeated?.plan ?? [];
       // Checked and inserted without awaiting in between, so two presses at the
       // same moment can't both start one.
       return db.transaction(tx => {
         if (idOfWorkoutInProgress(tx)) throw new Error('A Workout is already in progress');
-        const rotationId = templateId && idOfActiveRotationWith(templateId, tx);
+        // A repeat stays in the Category of the Workout it repeats.
+        const categoryId = repeated
+          ? repeated.categoryId
+          : start.categoryId === undefined
+            ? null
+            : categories.requireCategory(tx, start.categoryId).id;
+        const rotationId = categoryId && idOfActiveRotationWith(categoryId, tx);
         const started = tx
           .insert(workouts)
-          .values({ ...workout, rotationId })
+          .values({
+            startedAt,
+            localDate: localDate ?? localDateOf(startedAt),
+            isBackfilled: localDate !== undefined,
+            categoryId,
+            rotationId,
+          })
           .returning({ id: workouts.id })
           .get();
-        plan.forEach(({ exerciseId, templateExerciseId, sets: planned }, position) => {
+        plan.forEach(({ exerciseId, sets: planned }, position) => {
           const entry = tx
             .insert(exerciseEntries)
-            .values({ workoutId: started.id, exerciseId, templateExerciseId, position })
+            .values({ workoutId: started.id, exerciseId, position })
             .returning({ id: exerciseEntries.id })
             .get();
           // An Exercise repeated with nothing logged for it has none.
@@ -509,8 +488,7 @@ export function createWorkouts({
         if (logged) throw new Error("An Exercise with logged Sets can't be swapped");
         const swapped = tx
           .update(exerciseEntries)
-          // It's no longer the Template's Exercise.
-          .set({ exerciseId, templateExerciseId: null })
+          .set({ exerciseId })
           .where(and(eq(exerciseEntries.id, exerciseEntryId), notDeleted(exerciseEntries)))
           .returning({ id: exerciseEntries.id })
           .all();
@@ -657,8 +635,6 @@ export function createWorkouts({
     async finishWorkout(id: string): Promise<FinishSummary> {
       // Worked out first, so if it fails the Workout is left unfinished, rather
       // than finished with the lifter told it wasn't.
-      const workout = await findWorkout(id);
-      const finishing = workout && (await templateWorkouts.finishing(workout));
       const nextUp = await findNextUp(id);
       const finishedAt = now();
       db.transaction(tx => {
@@ -677,18 +653,13 @@ export function createWorkouts({
           inArray(plannedSets.exerciseEntryId, entryIdsOf(tx, id)),
           finishedAt,
         );
-        finishing?.recordPairing(tx);
         tx.update(workouts)
           // The rest belongs to the Workout in progress, so it ends here too.
           .set({ finishedAt, restEndsAt: null })
           .where(eq(workouts.id, id))
           .run();
       });
-      return {
-        templateUpdateOffer: finishing?.templateUpdateOffer ?? null,
-        targetUpdateOffers: finishing?.targetUpdateOffers ?? [],
-        nextUp,
-      };
+      return { nextUp };
     },
 
     // A Workout with each entry as it's logged (see WorkoutToLog).
@@ -707,15 +678,15 @@ export function createWorkouts({
     },
 
     // The Workouts to offer for repeating, the most recently done first: one
-    // for each kind of Workout, its latest finished one. Workouts from the same
-    // Template are one kind. Those from none are one kind when they hold the
+    // for each kind of Workout, its latest finished one. Workouts in the same
+    // Category are one kind. Those in none are one kind when they hold the
     // same Exercises, whatever the order, the weights or the reps.
     async getWorkoutsToRepeat(): Promise<Workout[]> {
       const kinds = new Set<string>();
       const latestOfEach: string[] = [];
-      for (const { id, templateId, exerciseIds } of await history.finishedWorkoutsLatestFirst()) {
-        const kind = templateId
-          ? `template ${templateId}`
+      for (const { id, categoryId, exerciseIds } of await history.finishedWorkoutsLatestFirst()) {
+        const kind = categoryId
+          ? `category ${categoryId}`
           : `exercises ${[...new Set(exerciseIds)].sort().join(' ')}`;
         if (kinds.has(kind)) continue;
         kinds.add(kind);

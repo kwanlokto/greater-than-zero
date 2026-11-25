@@ -18,27 +18,27 @@ function workoutWith(changes: Partial<Workout>): Workout {
     finishedAt: new Date(2026, 8, 12, 19, 5),
     isBackfilled: false,
     restEndsAt: null,
-    templateId: null,
-    templateName: null,
+    categoryId: null,
+    categoryName: null,
     rotationId: null,
     entries: [],
     ...changes,
   };
 }
 
-const push = { templateId: 't1', templateName: 'Push' };
+const push = { categoryId: 'c1', categoryName: 'Push' };
 
 describe('Workout labels', () => {
   // Dates leave off this year's year, so fix the clock.
   beforeEach(() => jest.useFakeTimers({ now: new Date(2026, 10, 16, 9, 0) }));
   afterEach(() => jest.useRealTimers());
 
-  it("calls a Workout by its Template's name, or plain Workout when it started empty", () => {
+  it('calls a Workout by its Category, or plain Workout when it has none', () => {
     expect(workoutName(workoutWith(push))).toBe('Push');
     expect(workoutName(workoutWith({}))).toBe('Workout');
   });
 
-  it("titles a finished Workout by its Template's name, with its date on the line under", () => {
+  it('titles a finished Workout by its Category, with its date on the line under', () => {
     const workout = workoutWith(push);
     const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
 
@@ -46,7 +46,7 @@ describe('Workout labels', () => {
     expect(finishedWorkoutWhen(workout)).toBe(`Saturday 12 Sep · ${times}`);
   });
 
-  it('titles a finished Workout started empty by its date, as before', () => {
+  it('titles a finished Workout in no Category by its date', () => {
     const workout = workoutWith({});
     const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
 

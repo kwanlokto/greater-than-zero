@@ -291,9 +291,8 @@ type PlannedSetRowProps = {
   isNext: boolean;
 };
 
-// A planned Set, pre-filled in its own unit: from the Template's Target, or
-// from the Set it repeats. Logging it confirms it, with any numbers changed on
-// the day.
+// A planned Set, pre-filled from the Set it repeats, in that Set's unit.
+// Logging it confirms it, with any numbers changed on the day.
 function PlannedSetRow({ planned, label, trackingType, isNext }: PlannedSetRowProps) {
   const fields = useSetFields(trackingType, planned.weightUnit, planned);
 
@@ -401,8 +400,8 @@ function LastTimeLine({ entry }: { entry: EntryToLog }) {
   );
 }
 
-// Shown when the Exercise hit the top of its Target's rep range on every Set
-// last session under this Workout's Template.
+// Shown when every working Set of the Exercise's last session reached the top
+// of its rep range.
 function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
   const { colors } = useAppTheme();
   if (!entry.readyToGoHeavier) return null;

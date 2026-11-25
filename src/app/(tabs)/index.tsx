@@ -12,7 +12,6 @@ import type { NewWorkout } from '@/core/tracker';
 import { tracker } from '@/database';
 import { hasMacroTargets } from '@/food-labels';
 import { runOrAlert } from '@/run-or-alert';
-import { exerciseList } from '@/template-labels';
 import { space } from '@/theme';
 import { useToday } from '@/use-today';
 import { useTrackerQuery } from '@/use-tracker-query';
@@ -41,9 +40,9 @@ export default function TodayScreen() {
     if (started) router.push('/workout');
   }
 
-  // Next up is started by repeating the latest Workout from it, which is also
-  // what its card shows; one never done yet starts from its Template.
-  const latestNextUp = nextUp ? toRepeat?.find(done => done.templateId === nextUp.id) : undefined;
+  // Next up is started by repeating the latest Workout in that Category, which
+  // is also what its card shows; one never done yet starts empty, in it.
+  const latestNextUp = nextUp ? toRepeat?.find(done => done.categoryId === nextUp.id) : undefined;
 
   return (
     <Screen onTab contentStyle={styles.content}>
@@ -67,11 +66,11 @@ export default function TodayScreen() {
                 latestNextUp
                   ? // When comes first, so a long list of Exercises is what gets cut short.
                     `${lastDone(latestNextUp.localDate, today)} · ${workoutExercises(latestNextUp)}`
-                  : exerciseList(nextUp)
+                  : 'Not done yet: starts empty'
               }
               // Guarded by the button: a double tap starts one Workout.
               onStart={() =>
-                start(latestNextUp ? { repeatOf: latestNextUp.id } : { templateId: nextUp.id })
+                start(latestNextUp ? { repeatOf: latestNextUp.id } : { categoryId: nextUp.id })
               }
             />
           )}

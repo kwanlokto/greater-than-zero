@@ -22,6 +22,7 @@ import m0017 from './0017_create_weigh_ins.sql';
 import m0018 from './0018_drop_exercise_entries_notes.sql';
 import m0019 from './0019_add_planned_sets_is_warm_up.sql';
 import m0020 from './0020_add_exercises_rep_range.sql';
+import m0021 from './0021_templates_become_categories.sql';
 
   export default {
     journal,
@@ -46,7 +47,8 @@ m0016,
 m0017,
 m0018,
 m0019,
-m0020
+m0020,
+m0021
     }
   }
   

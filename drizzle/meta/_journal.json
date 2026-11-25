@@ -148,6 +148,13 @@
       "when": 1795574554164,
       "tag": "0020_add_exercises_rep_range",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795575067676,
+      "tag": "0021_templates_become_categories",
+      "breakpoints": true
     }
   ]
 }

@@ -4,9 +4,6 @@ import {
   describeSet,
   displayWeightOf,
   formatWeight,
-  isAtLeast,
-  isHeavier,
-  lightestOf,
   roundedForDisplay,
 } from './weights';
 
@@ -26,36 +23,6 @@ describe('converting and rounding', () => {
   test('shows a weight in the display unit, and none for plain bodyweight', () => {
     expect(displayWeightOf(135, 'lb', 'kg')).toEqual({ value: 61.2, unit: 'kg' });
     expect(displayWeightOf(null, 'kg', 'lb')).toBeNull();
-  });
-});
-
-describe('comparing', () => {
-  test('compares exactly in one unit', () => {
-    const sixty = { weight: 60, weightUnit: 'kg' } as const;
-    expect(isHeavier({ weight: 60.5, weightUnit: 'kg' }, sixty)).toBe(true);
-    expect(isHeavier(sixty, sixty)).toBe(false);
-    expect(isAtLeast(sixty, sixty)).toBe(true);
-  });
-
-  test('treats weights within 0.05 kg across units as the same', () => {
-    const target = { weight: 135, weightUnit: 'lb' } as const;
-    // 61.25 kg is 0.015 kg over 135 lb: the same weight, loaded.
-    expect(isHeavier({ weight: 61.25, weightUnit: 'kg' }, target)).toBe(false);
-    expect(isAtLeast({ weight: 61.25, weightUnit: 'kg' }, target)).toBe(true);
-    expect(isHeavier({ weight: 62.5, weightUnit: 'kg' }, target)).toBe(true);
-  });
-
-  test('counts plain bodyweight as no added weight', () => {
-    expect(isHeavier({ weight: 5, weightUnit: 'kg' }, { weight: null, weightUnit: 'kg' })).toBe(
-      true,
-    );
-    expect(
-      lightestOf([
-        { weight: 10, weightUnit: 'kg' },
-        { weight: null, weightUnit: 'kg' },
-        { weight: -5, weightUnit: 'kg' },
-      ]),
-    ).toEqual({ weight: -5, weightUnit: 'kg' });
   });
 });
 

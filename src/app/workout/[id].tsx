@@ -6,6 +6,7 @@ import { Button } from '@/components/button';
 import { EmptyState } from '@/components/empty-state';
 import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-card';
 import { Screen } from '@/components/screen';
+import { WorkoutTitle } from '@/components/workout-title';
 import { tracker } from '@/database';
 import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { space } from '@/theme';
@@ -58,7 +59,15 @@ export default function PastWorkoutScreen() {
 
   return (
     <Screen contentStyle={styles.content}>
-      <Stack.Screen options={{ title: finishedWorkoutTitle(workout) }} />
+      <Stack.Screen
+        options={{
+          title: finishedWorkoutTitle(workout),
+          // Tapping the title chooses the Workout's Category.
+          headerTitle: () => (
+            <WorkoutTitle workoutId={workout.id} title={finishedWorkoutTitle(workout)} />
+          ),
+        }}
+      />
       <AppText tone="muted" style={styles.times}>
         {finishedWorkoutWhen(workout)}
       </AppText>
@@ -83,14 +92,6 @@ export default function PastWorkoutScreen() {
           Finish the workout in progress to repeat this one.
         </AppText>
       )}
-      <Button
-        variant="secondary"
-        icon="bookmark-outline"
-        label="Save as template"
-        onPress={() =>
-          router.push({ pathname: '/templates/new', params: { fromWorkoutId: workout.id } })
-        }
-      />
       <Button variant="ghost" destructive label="Delete workout" onPress={confirmDelete} />
     </Screen>
   );
