@@ -7,6 +7,8 @@ import type { Categories, Category } from './categories';
 import { rotationEntries, rotations } from './schema';
 import type { SessionHistory } from './session-history';
 import type { TrackerDatabase } from './tracker';
+import type { WorkoutReads } from './workout-reads';
+import type { NewWorkout, Workout } from './workouts';
 
 // Categories done in turn, e.g. Push → Pull → Legs. The active one decides
 // which Category is next up.
@@ -22,6 +24,17 @@ export type Rotation = {
 export type RotationEntry = {
   id: string;
   category: Category;
+};
+
+// The Category to do next from the active Rotation, with what starting it
+// takes, so a screen starts it without working that out.
+export type NextUp = Category & {
+  // Its latest finished Workout, which starting it repeats. Null when none in
+  // it has been finished.
+  latest: Workout | null;
+  // What to start it with (see startWorkout): a repeat of that Workout, or an
+  // empty Workout in the Category.
+  start: NewWorkout;
 };
 
 // A Category comes up once in a Rotation, so next up knows where it's at.
@@ -47,11 +60,18 @@ type RotationDependencies = {
   now: () => Date;
   history: SessionHistory;
   categories: Pick<Categories, 'requireCategory' | 'findOrCreate'>;
+  reads: Pick<WorkoutReads, 'findWorkout'>;
 };
 
 export type Rotations = ReturnType<typeof createRotations>;
 
-export function createRotations({ db, now, history, categories }: RotationDependencies) {
+export function createRotations({
+  db,
+  now,
+  history,
+  categories,
+  reads: { findWorkout },
+}: RotationDependencies) {
   // The Rotations matching `where`, by name, each with its Categories in order.
   // Deleted Rotations and removed Categories are left out.
   async function findRotations(where: SQL | undefined): Promise<Rotation[]> {
@@ -75,14 +95,22 @@ export function createRotations({ db, now, history, categories }: RotationDepend
   // from History: every finished Workout in one of its Categories counts,
   // whenever it was done and whichever Rotation was active then. The first one
   // when none of them has been done. Null with no active Rotation, or an empty
-  // one.
-  async function findNextUp(): Promise<Category | null> {
+  // one. Starting it repeats its latest finished Workout, or starts an empty
+  // one in it when there's none.
+  async function findNextUp(): Promise<NextUp | null> {
     const [active] = await findRotations(activeRotation());
     if (!active || active.entries.length === 0) return null;
     const lastDone = await history.lastDoneAmong(active.entries.map(({ category }) => category.id));
     // -1 when none has been done, so the first one.
     const lastIndex = active.entries.findIndex(({ category }) => category.id === lastDone);
-    return active.entries[(lastIndex + 1) % active.entries.length].category;
+    const { category } = active.entries[(lastIndex + 1) % active.entries.length];
+    const latestId = await history.latestFinishedIn(category.id);
+    const latest = latestId === undefined ? null : ((await findWorkout(latestId)) ?? null);
+    return {
+      ...category,
+      latest,
+      start: latest ? { repeatOf: latest.id } : { categoryId: category.id },
+    };
   }
 
   const commands = {
@@ -212,8 +240,9 @@ export function createRotations({ db, now, history, categories }: RotationDepend
       return rotation;
     },
 
-    // The Category to do next from the active Rotation (see findNextUp).
-    getNextUp(): Promise<Category | null> {
+    // The Category to do next from the active Rotation, with what starting it
+    // takes (see findNextUp).
+    getNextUp(): Promise<NextUp | null> {
       return findNextUp();
     },
   };

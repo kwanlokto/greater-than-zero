@@ -183,6 +183,18 @@ export function createSessionHistory(
       return last?.categoryId ?? undefined;
     },
 
+    // The latest finished Workout in a Category, by ID. Undefined when none in
+    // it has been finished.
+    async latestFinishedIn(categoryId: string): Promise<string | undefined> {
+      const [latest] = await db
+        .select({ id: workouts.id })
+        .from(workouts)
+        .where(and(eq(workouts.categoryId, categoryId), finished()))
+        .orderBy(...latestWorkoutFirst)
+        .limit(1);
+      return latest?.id;
+    },
+
     // Every finished Workout, the latest first, with its Category and the
     // Exercises still in it. For telling which Workouts are the same kind.
     async finishedWorkoutsLatestFirst(): Promise<

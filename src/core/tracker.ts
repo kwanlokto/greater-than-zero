@@ -75,7 +75,7 @@ export {
   type ProgressPoint,
   type ProgressSeries,
 } from './progress';
-export { canAddToRotation, type Rotation, type RotationEntry } from './rotations';
+export { canAddToRotation, type NextUp, type Rotation, type RotationEntry } from './rotations';
 export {
   muscleGroups,
   trackingTypes,
@@ -134,7 +134,7 @@ export function createTracker(
   const history = createSessionHistory(db, { getDisplayUnit });
   const reads = createWorkoutReads(db, { getDisplayUnit });
   const categoryArea = createCategories({ db, now });
-  const rotationArea = createRotations({ db, now, history, categories: categoryArea });
+  const rotationArea = createRotations({ db, now, history, categories: categoryArea, reads });
   const workoutArea = createWorkouts({
     db,
     now,
