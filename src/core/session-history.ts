@@ -1,14 +1,12 @@
 // Which past sessions count, and what was done in them. Last time, the "ready
-// to go heavier" hint, Target update offers, next up and progress charts all
+// to go heavier" hint, the Workouts to repeat, next up and progress charts all
 // look back at earlier Workouts; they ask here, so the order Workouts go in
-// and what a working Set is are each decided once. Which entry was done for
-// which Template exercise is decided in template-workouts.ts.
+// and what a working Set is are each decided once.
 
 import { and, asc, desc, eq, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import { notDeleted } from './records';
 import { exerciseEntries, exercises, sets, workouts, type WeightUnit } from './schema';
-import type { Template, TemplateExercise } from './templates';
 import type { TrackerDatabase } from './tracker';
 import { withDisplayWeight, type EnteredWeight } from './weights';
 import type { LastTime, Workout, WorkoutSet } from './workouts';
@@ -126,24 +124,17 @@ export function createSessionHistory(
       };
     },
 
-    // The working Sets of the most recent session before `before` done for one
-    // Exercise of a Template: in a Workout started from the Template, with the
-    // Exercise in it or, when the Template holds the Exercise more than once,
-    // with this copy of it (as finishing recorded). The most recent with any
-    // Set of it logged, warm-ups included: a session where it was only warmed
-    // up isn't one to go heavier from. Undefined when there's none.
-    async latestSessionFor(
-      template: Template,
-      templateExercise: TemplateExercise,
+    // The working Sets of an Exercise's most recent session before `before`:
+    // the latest finished Workout with any Set of it logged, warm-ups
+    // included. So a session where it was only warmed up counts, with no
+    // working Sets: it isn't one to go heavier from. Undefined when it's never
+    // been done.
+    async latestSessionOf(
+      exerciseId: string,
       before: WorkoutPlace,
     ): Promise<SessionSet[] | undefined> {
-      const { exercise } = templateExercise;
-      const copies = template.exercises.filter(held => held.exercise.id === exercise.id);
-      const doneForIt =
-        copies.length > 1
-          ? eq(exerciseEntries.templateExerciseId, templateExercise.id)
-          : and(eq(workouts.templateId, template.id), eq(exerciseEntries.exerciseId, exercise.id));
-      const setsForIt = () =>
+      const ofExercise = eq(exerciseEntries.exerciseId, exerciseId);
+      const setsOfIt = () =>
         db
           .select({
             workoutId: workouts.id,
@@ -154,13 +145,13 @@ export function createSessionHistory(
           .from(sets)
           .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
           .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id));
-      const [latest] = await setsForIt()
-        .where(and(doneForIt, setStillLogged(), finished(), cameBefore(before)))
+      const [latest] = await setsOfIt()
+        .where(and(ofExercise, setStillLogged(), finished(), cameBefore(before)))
         .orderBy(...latestWorkoutFirst)
         .limit(1);
       if (!latest) return undefined;
-      return setsForIt().where(
-        and(doneForIt, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
+      return setsOfIt().where(
+        and(ofExercise, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
       );
     },
 

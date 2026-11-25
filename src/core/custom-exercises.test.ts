@@ -20,6 +20,8 @@ describe('Custom Exercises', () => {
         muscleGroup: 'shoulders',
         isCustom: true,
         defaultRestSeconds: null,
+        minReps: 8,
+        maxReps: 12,
       },
     ]);
   });
@@ -74,6 +76,8 @@ describe('Custom Exercises', () => {
       muscleGroup: 'shoulders',
       isCustom: true,
       defaultRestSeconds: null,
+      minReps: 8,
+      maxReps: 12,
     });
   });
 

@@ -29,10 +29,12 @@ export {
   type WeighIn,
 } from './body-weight';
 export {
+  problemWithRepRange,
   type Exercise,
   type ExerciseChanges,
   type ExerciseSearch,
   type NewExercise,
+  type RepRange,
 } from './exercises';
 export {
   caloriesFromMacros,

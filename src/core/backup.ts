@@ -13,7 +13,7 @@ import type { TrackerDatabase } from './tracker';
 // (e.g. adding a built-in Exercise) or drops a column. Each bump adds a step to
 // formatUpgrades. An app refuses files from a newer version. The tables' shape
 // is versioned apart, by schemaVersion.
-export const backupFormatVersion = 2;
+export const backupFormatVersion = 3;
 
 export type BackupFile = {
   formatVersion: number;
@@ -67,7 +67,40 @@ const formatUpgrades: Record<number, (file: Record<string, unknown>) => Record<s
     // Exercise notes were dropped (migration 0018), so a version 1 file's
     // Exercise entries have a notes column the database no longer has.
     1: file => withoutColumn(file, 'exercise_entries', 'notes'),
+    // Exercises gained a rep range (migration 0020), taken from the Target
+    // changed most recently among those still in a Template. A version 2 file
+    // has the Targets but not the ranges.
+    2: withRepRangesFromTargets,
   };
+
+// `file` with each Exercise given the rep range of its Target: the one changed
+// most recently among those not deleted, a later row winning a tie, as the
+// migration has it. An Exercise without one is left to take the default.
+function withRepRangesFromTargets(file: Record<string, unknown>) {
+  const { tables } = file;
+  if (!isRecord(tables)) return file;
+  const { exercises, template_exercises: targets } = tables;
+  if (!Array.isArray(exercises) || !Array.isArray(targets)) return file;
+  const latestFor = new Map<unknown, Record<string, unknown>>();
+  for (const target of targets as unknown[]) {
+    if (!isRecord(target) || (target.deleted_at ?? null) !== null) continue;
+    const held = latestFor.get(target.exercise_id);
+    if (!held || Number(target.updated_at) >= Number(held.updated_at)) {
+      latestFor.set(target.exercise_id, target);
+    }
+  }
+  return {
+    ...file,
+    tables: {
+      ...tables,
+      exercises: exercises.map((row: unknown) => {
+        const target = isRecord(row) ? latestFor.get(row.id) : undefined;
+        if (!isRecord(row) || !target) return row;
+        return { ...row, min_reps: target.min_reps, max_reps: target.max_reps };
+      }),
+    },
+  };
+}
 
 // `file` with `column` taken out of every row of `table`. Anything not laid out
 // as a Backup file is left as it is, for checkTables to refuse.

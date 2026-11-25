@@ -74,6 +74,10 @@ export const exercises = sqliteTable('exercises', {
   isCustom: integer('is_custom', { mode: 'boolean' }).notNull().default(false),
   // The lifter's own rest after a Set of this Exercise; empty uses Settings'.
   defaultRestSeconds: integer('default_rest_seconds'),
+  // The rep range it's done in. Reaching its top on every working Set is the
+  // sign to go heavier.
+  minReps: integer('min_reps').notNull().default(8),
+  maxReps: integer('max_reps').notNull().default(12),
 });
 
 // A Workout to repeat: a name and an ordered list of Exercises with Targets.

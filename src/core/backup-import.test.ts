@@ -6,6 +6,7 @@ import {
   createRotationWith,
   doTemplateWorkout,
   doWorkout,
+  findExerciseByName,
   startWorkoutWith,
 } from './test-helpers';
 import { createTracker, type BackupFile, type Tracker } from './tracker';
@@ -19,6 +20,11 @@ const beforeRotations = journal.entries.findIndex(({ tag }) => tag === '0013_cre
 // And before Exercise notes were dropped.
 const beforeNotesDropped = journal.entries.findIndex(
   ({ tag }) => tag === '0018_drop_exercise_entries_notes',
+);
+
+// And before Exercises had a rep range.
+const beforeRepRanges = journal.entries.findIndex(
+  ({ tag }) => tag === '0020_add_exercises_rep_range',
 );
 
 // A format version only a newer app could have written.
@@ -210,6 +216,34 @@ describe('Backup import', () => {
     await phone.importBackup(JSON.stringify(withNotes));
 
     expect(await dataOn(phone)).toEqual(backup.tables);
+  });
+
+  it('takes a file from before Exercises had a rep range, giving each the range of its Target', async () => {
+    const backup = await backupWithData();
+    const bench = backup.tables.exercises.find(exercise => exercise.name === 'Bench Press')!;
+    // As an app from before then would have written it: format version 2, no
+    // rep ranges, and here a Target of 5–8 for Bench Press in each Template.
+    const fromBefore = {
+      ...backup,
+      formatVersion: 2,
+      schemaVersion: beforeRepRanges,
+      tables: {
+        ...backup.tables,
+        exercises: backup.tables.exercises.map(({ min_reps, max_reps, ...exercise }) => exercise),
+        template_exercises: backup.tables.template_exercises.map(target => ({
+          ...target,
+          min_reps: 5,
+          max_reps: 8,
+        })),
+      },
+    };
+    expect(backup.tables.template_exercises.map(target => target.exercise_id)).toContain(bench.id);
+    const phone = createTracker(createTestDatabase());
+
+    await phone.importBackup(JSON.stringify(fromBefore));
+
+    expect(await phone.getExercise(String(bench.id))).toMatchObject({ minReps: 5, maxReps: 8 });
+    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
   });
 
   it('can be checked first, to say when it was exported, changing nothing', async () => {

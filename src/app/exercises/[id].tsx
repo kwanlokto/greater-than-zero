@@ -4,6 +4,7 @@ import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ExerciseForm } from '@/components/exercise-form';
+import { RepRangePicker } from '@/components/rep-range-picker';
 import { RestLengthPicker } from '@/components/rest-length-picker';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
@@ -11,8 +12,8 @@ import { exerciseDetails } from '@/exercise-labels';
 import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// One Exercise in the library. Every Exercise has a rest length to choose;
-// only custom ones can be edited or hidden.
+// One Exercise in the library. Every Exercise has a rest length and a rep
+// range to choose; only custom ones can be edited or hidden.
 export default function ExerciseScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -56,10 +57,11 @@ export default function ExerciseScreen() {
       ) : (
         <Card>
           <AppText variant="bodyStrong">{exerciseDetails(exercise)}</AppText>
-          <AppText tone="muted">Built in, so only its rest can be changed.</AppText>
+          <AppText tone="muted">Built in, so only its rest and rep range can be changed.</AppText>
         </Card>
       )}
       <RestLengthPicker exercise={exercise} />
+      <RepRangePicker exercise={exercise} />
       {exercise.isCustom && (
         <Button variant="ghost" destructive label="Hide exercise" onPress={confirmHide} />
       )}

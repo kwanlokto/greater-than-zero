@@ -12,9 +12,11 @@ import {
   readFood,
   readMacroTargets,
   readPortion,
+  readRepRange,
   readSet,
   readTarget,
   readWeighIn,
+  repRangeBoxesOf,
   setBoxesOf,
   targetBoxesOf,
 } from './form-values';
@@ -114,6 +116,32 @@ describe('Reading a Target', () => {
       ...target,
       weightUnit: 'kg',
     });
+  });
+});
+
+describe('Reading a rep range', () => {
+  it('waits quietly for both ends', () => {
+    expect(readRepRange({ minReps: '8', maxReps: '' })).toEqual({});
+    expect(readRepRange({ minReps: ' ', maxReps: '12' })).toEqual({});
+  });
+
+  it('reads both ends', () => {
+    expect(readRepRange({ minReps: '5', maxReps: '5' })).toEqual({
+      values: { minReps: 5, maxReps: 5 },
+    });
+  });
+
+  it("says what the core says once they're filled", () => {
+    expect(readRepRange({ minReps: '12', maxReps: '8' })).toEqual({
+      problem: "A rep range's minimum can't be more than its maximum",
+    });
+    expect(readRepRange({ minReps: 'lots', maxReps: '8' })).toEqual({
+      problem: 'A rep range needs whole numbers of reps, at least 1',
+    });
+  });
+
+  it("opens an Exercise's range as it's stored", () => {
+    expect(repRangeBoxesOf({ minReps: 8, maxReps: 12 })).toEqual({ minReps: '8', maxReps: '12' });
   });
 });
 

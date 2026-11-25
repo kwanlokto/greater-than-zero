@@ -1,8 +1,8 @@
 // Template workouts: Workouts started from a Template, and everything that
 // passes between a Workout and a Template. Planning a new Workout's Sets from
-// the Targets, pairing its entries with the Template's Exercises, the hint to
-// go heavier, the offers made when it finishes, and the Template commands that
-// follow a finished Workout all live here, so the pairing never leaves.
+// the Targets, pairing its entries with the Template's Exercises, the offers
+// made when it finishes, and the Template commands that follow a finished
+// Workout all live here, so the pairing never leaves.
 
 import { and, eq, inArray, isNotNull, notInArray } from 'drizzle-orm';
 
@@ -27,7 +27,7 @@ import {
   type Templates,
 } from './templates';
 import type { TrackerDatabase } from './tracker';
-import { displayWeightOf, isAtLeast, isHeavier, lightestOf, type Weight } from './weights';
+import { displayWeightOf, isHeavier, lightestOf, type Weight } from './weights';
 import type { WorkoutReads } from './workout-reads';
 import type { ExerciseEntry, Workout, WorkoutSet } from './workouts';
 
@@ -80,8 +80,7 @@ type TemplateUpdate = {
 };
 
 // Whether a session's working Sets were at least the Target's number of sets,
-// every one meeting `rule`: the shape of both the Target update offer and the
-// "ready to go heavier" hint.
+// every one meeting `rule`.
 function setsMeetTarget<S>(workingSets: S[], target: TargetValues, rule: (set: S) => boolean) {
   return workingSets.length >= target.sets && workingSets.every(rule);
 }
@@ -262,24 +261,6 @@ export function createTemplateWorkouts({
     return newExercises;
   }
 
-  // See EntryToLog.readyToGoHeavier.
-  async function exerciseReadyToGoHeavier(
-    template: Template,
-    templateExercise: TemplateExercise,
-    workout: Workout,
-  ): Promise<boolean> {
-    const workingSets = await history.latestSessionFor(template, templateExercise, workout);
-    const { target } = templateExercise;
-    return (
-      workingSets !== undefined &&
-      setsMeetTarget(
-        workingSets,
-        target,
-        set => isAtLeast(set, target) && set.reps >= target.maxReps,
-      )
-    );
-  }
-
   const commands = {
     // Makes the Exercise list of the Template a finished Workout started from
     // match the Workout, when the lifter accepts. Exercises the Template already
@@ -401,25 +382,6 @@ export function createTemplateWorkouts({
         });
       }
       return plan;
-    },
-
-    // The entries of a Workout ready to go heavier (see
-    // EntryToLog.readyToGoHeavier), by ID. Only a Workout in progress gets
-    // the hint.
-    async readyToGoHeavier(workout: Workout): Promise<Set<string>> {
-      const ready = new Set<string>();
-      const pairing = workout.finishedAt === null ? await pairingOf(workout) : null;
-      if (!pairing) return ready;
-      for (const entry of workout.entries) {
-        const templateExercise = pairing.pairs.get(entry.id);
-        if (
-          templateExercise &&
-          (await exerciseReadyToGoHeavier(pairing.template, templateExercise, workout))
-        ) {
-          ready.add(entry.id);
-        }
-      }
-      return ready;
     },
 
     // What finishing a Workout brings from its Template (see Finishing),

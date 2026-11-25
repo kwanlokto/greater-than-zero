@@ -238,7 +238,7 @@ flowchart LR
   D16 -->|Hide| S35
 ```
 
-S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length, happen on the screen itself.
+S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
 
 ### Templates and Rotations
 

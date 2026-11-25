@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 
 import { createTestDatabaseBefore, migrateToLatest } from './test-database';
+import { findExerciseByName } from './test-helpers';
 import { createTracker } from './tracker';
 
 type OldDatabase = ReturnType<typeof createTestDatabaseBefore>;
@@ -63,5 +64,33 @@ describe('Migrations', () => {
     expect(inProgress?.entries[0].plannedSets).toEqual([
       { id: 'planned-1', weight: 60, weightUnit: 'kg', reps: 8, isWarmUp: false },
     ]);
+  });
+
+  it('give each Exercise a rep range, from its most recently changed Target', async () => {
+    const db = createTestDatabaseBefore('0020_add_exercises_rep_range');
+    db.run(sql`INSERT INTO templates (id, name) VALUES ('push', 'Push'), ('heavy', 'Heavy')`);
+    // Bench Press has two Targets, the one in Heavy changed later; Squat's only
+    // Target was removed from its Template; Dip never had one.
+    const target = (id: string, template: string, exercise: string, range: number[], at: number) =>
+      db.run(sql`INSERT INTO template_exercises
+                   (id, template_id, exercise_id, position, target_sets, min_reps, max_reps,
+                    target_weight, target_weight_unit, updated_at)
+                 SELECT ${id}, ${template}, id, 0, 3, ${range[0]}, ${range[1]}, 60, 'kg', ${at}
+                 FROM exercises WHERE name = ${exercise}`);
+    target('target-1', 'push', 'Bench Press', [10, 15], 1790000000000);
+    target('target-2', 'heavy', 'Bench Press', [4, 6], 1791000000000);
+    target('target-3', 'heavy', 'Squat', [3, 5], 1791000000000);
+    db.run(sql`UPDATE template_exercises SET deleted_at = 1792000000000 WHERE id = 'target-3'`);
+
+    migrateToLatest(db);
+
+    const tracker = createTracker(db);
+    const rangeOf = async (name: string) => {
+      const { minReps, maxReps } = await findExerciseByName(tracker, name);
+      return [minReps, maxReps];
+    };
+    expect(await rangeOf('Bench Press')).toEqual([4, 6]);
+    expect(await rangeOf('Squat')).toEqual([8, 12]);
+    expect(await rangeOf('Dip')).toEqual([8, 12]);
   });
 });

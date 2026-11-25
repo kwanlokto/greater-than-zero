@@ -19,11 +19,13 @@ import {
   caloriesFromMacros,
   problemWithMacroTargets,
   problemWithPortion,
+  problemWithRepRange,
   problemWithSet,
   problemWithTarget,
   problemWithWeighIn,
   type FoodValues,
   type MacroTargets,
+  type RepRange,
   type SavedFood,
   type SetValues,
   type TargetValues,
@@ -105,6 +107,24 @@ export function readSet(
     isWarmUp,
   };
   return judged(values, problemWithSet(trackingType, values));
+}
+
+// Rep ranges
+
+export type RepRangeBoxes = { minReps: string; maxReps: string };
+
+export function repRangeBoxesOf({ minReps, maxReps }: RepRange): RepRangeBoxes {
+  return { minReps: textOf(minReps, asTyped), maxReps: textOf(maxReps, asTyped) };
+}
+
+// Both ends must be filled.
+export function readRepRange(boxes: RepRangeBoxes): Reading<RepRange> {
+  if (isBlank(boxes.minReps) || isBlank(boxes.maxReps)) return notReady;
+  const values = {
+    minReps: filledNumberIn(boxes.minReps, asTyped),
+    maxReps: filledNumberIn(boxes.maxReps, asTyped),
+  };
+  return judged(values, problemWithRepRange(values));
 }
 
 // Targets

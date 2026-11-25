@@ -141,6 +141,13 @@
       "when": 1795574081017,
       "tag": "0019_add_planned_sets_is_warm_up",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795574554164,
+      "tag": "0020_add_exercises_rep_range",
+      "breakpoints": true
     }
   ]
 }

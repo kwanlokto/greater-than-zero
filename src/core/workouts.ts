@@ -124,11 +124,11 @@ export type EntryToLog = ExerciseEntry & {
   // backfilled Workout sees the session before it, and one where the Exercise
   // was only warmed up doesn't hide the one before that.
   lastTime: LastTime | null;
-  // "Ready to go heavier": in a Workout in progress started from a Template,
-  // the Exercise's most recent session under that Template had at least the
-  // Target's number of working Sets, all at the Target weight or heavier and
-  // all with reps at or above the rep-range maximum. Compared with the Target
-  // as it is now; worked out when asked, never stored. False otherwise.
+  // "Ready to go heavier": in a Workout in progress, every working Set of the
+  // Exercise's most recent session before it, in any Workout, reached the top
+  // of the Exercise's rep range as it is now. Worked out when asked, never
+  // stored. False otherwise: after a session with no working Set of it, or
+  // when it's never been done.
   readyToGoHeavier: boolean;
 };
 
@@ -226,7 +226,7 @@ type WorkoutDependencies = {
   history: SessionHistory;
   getDisplayUnit: () => Promise<WeightUnit>;
   getFallbackRestSeconds: () => Promise<number>;
-  templateWorkouts: Pick<TemplateWorkouts, 'plan' | 'readyToGoHeavier' | 'finishing'>;
+  templateWorkouts: Pick<TemplateWorkouts, 'plan' | 'finishing'>;
   rotations: Pick<Rotations, 'idOfActiveRotationWith' | 'findNextUp'>;
   reads: WorkoutReads;
 };
@@ -389,16 +389,26 @@ export function createWorkouts({
   // deleted Sets are left out.
   // Each entry with its Last time and hint.
   async function toLog(workout: Workout): Promise<WorkoutToLog> {
-    const readyToGoHeavier = await templateWorkouts.readyToGoHeavier(workout);
     const entries: EntryToLog[] = [];
     for (const entry of workout.entries) {
       entries.push({
         ...entry,
         lastTime: await history.lastTime(entry.exercise.id, workout),
-        readyToGoHeavier: readyToGoHeavier.has(entry.id),
+        readyToGoHeavier: await readyToGoHeavier(workout, entry),
       });
     }
     return { ...workout, entries };
+  }
+
+  // See EntryToLog.readyToGoHeavier.
+  async function readyToGoHeavier(workout: Workout, { exercise }: ExerciseEntry) {
+    if (workout.finishedAt !== null) return false;
+    const lastSession = await history.latestSessionOf(exercise.id, workout);
+    return (
+      lastSession !== undefined &&
+      lastSession.length > 0 &&
+      lastSession.every(set => set.reps >= exercise.maxReps)
+    );
   }
 
   // What repeating a finished Workout starts with: its Exercises in order, each

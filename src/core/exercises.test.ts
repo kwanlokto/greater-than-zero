@@ -70,6 +70,8 @@ describe('Exercise library', () => {
         muscleGroup: 'back',
         isCustom: false,
         defaultRestSeconds: null,
+        minReps: 8,
+        maxReps: 12,
       },
     ]);
   });
