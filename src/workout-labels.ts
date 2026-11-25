@@ -1,4 +1,4 @@
-import type { Workout } from '@/core/tracker';
+import { dayNumberOf, type Workout } from '@/core/tracker';
 import { formatLocalDate, formatLocalDateWithWeekday, formatTimeOfDay } from '@/dates';
 
 // When a Workout took place, e.g. "6:00 PM – 7:05 PM". A backfilled one's
@@ -17,23 +17,38 @@ export function backfillTitle(workout: Workout): string | undefined {
   return workout.isBackfilled ? `Workout for ${formatLocalDate(workout.localDate)}` : undefined;
 }
 
-// What a Workout is called: its Template's name, e.g. "Push", or "Workout" for
-// one started empty.
-export function workoutName(workout: Pick<Workout, 'templateName'>): string {
-  return workout.templateName ?? 'Workout';
+// What a Workout is called: its Category, e.g. "Push", or "Workout" when it
+// has none.
+export function workoutName(workout: Pick<Workout, 'categoryName'>): string {
+  return workout.categoryName ?? 'Workout';
 }
 
-// A finished Workout's title when it's opened to edit: its Template's name, or
-// its date, e.g. "Saturday 12 Sep", for one started empty.
+// "Bench Press, Dip": the Exercises in a Workout, in order, each once. Shown
+// wherever a Workout is offered to start from, so it's never started blind.
+export function workoutExercises(workout: Pick<Workout, 'entries'>): string {
+  return [...new Set(workout.entries.map(entry => entry.exercise.name))].join(', ');
+}
+
+// How long ago a Workout on `localDate` was done, against today: "today",
+// "yesterday", "9 days ago", then its date once two weeks have passed.
+export function lastDone(localDate: string, today: string): string {
+  const days = dayNumberOf(today) - dayNumberOf(localDate);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return days < 14 ? `${days} days ago` : formatLocalDate(localDate);
+}
+
+// A finished Workout's title when it's opened to edit: its Category, or its
+// date, e.g. "Saturday 12 Sep", when it has none.
 export function finishedWorkoutTitle(workout: Workout): string {
-  return workout.templateName ?? formatLocalDateWithWeekday(workout.localDate);
+  return workout.categoryName ?? formatLocalDateWithWeekday(workout.localDate);
 }
 
 // The line under that title: when it took place, after its date when the title
-// is the Template's name.
+// is the Category.
 export function finishedWorkoutWhen(workout: Workout): string {
   const times = workoutTimes(workout);
-  return workout.templateName === null
+  return workout.categoryName === null
     ? times
     : `${formatLocalDateWithWeekday(workout.localDate)} · ${times}`;
 }

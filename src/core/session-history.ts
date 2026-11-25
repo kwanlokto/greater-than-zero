@@ -1,14 +1,26 @@
 // Which past sessions count, and what was done in them. Last time, the "ready
-// to go heavier" hint, Target update offers, next up and progress charts all
+// to go heavier" hint, the Workouts to repeat, next up and progress charts all
 // look back at earlier Workouts; they ask here, so the order Workouts go in
-// and what a working Set is are each decided once. Which entry was done for
-// which Template exercise is decided in template-workouts.ts.
+// and what a working Set is are each decided once.
 
-import { and, asc, desc, eq, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import { notDeleted } from './records';
 import { exerciseEntries, exercises, sets, workouts, type WeightUnit } from './schema';
-import type { Template, TemplateExercise } from './templates';
 import type { TrackerDatabase } from './tracker';
 import { withDisplayWeight, type EnteredWeight } from './weights';
 import type { LastTime, Workout, WorkoutSet } from './workouts';
@@ -126,24 +138,17 @@ export function createSessionHistory(
       };
     },
 
-    // The working Sets of the most recent session before `before` done for one
-    // Exercise of a Template: in a Workout started from the Template, with the
-    // Exercise in it or, when the Template holds the Exercise more than once,
-    // with this copy of it (as finishing recorded). The most recent with any
-    // Set of it logged, warm-ups included: a session where it was only warmed
-    // up isn't one to go heavier from. Undefined when there's none.
-    async latestSessionFor(
-      template: Template,
-      templateExercise: TemplateExercise,
+    // The working Sets of an Exercise's most recent session before `before`:
+    // the latest finished Workout with any Set of it logged, warm-ups
+    // included. So a session where it was only warmed up counts, with no
+    // working Sets: it isn't one to go heavier from. Undefined when it's never
+    // been done.
+    async latestSessionOf(
+      exerciseId: string,
       before: WorkoutPlace,
     ): Promise<SessionSet[] | undefined> {
-      const { exercise } = templateExercise;
-      const copies = template.exercises.filter(held => held.exercise.id === exercise.id);
-      const doneForIt =
-        copies.length > 1
-          ? eq(exerciseEntries.templateExerciseId, templateExercise.id)
-          : and(eq(workouts.templateId, template.id), eq(exerciseEntries.exerciseId, exercise.id));
-      const setsForIt = () =>
+      const ofExercise = eq(exerciseEntries.exerciseId, exerciseId);
+      const setsOfIt = () =>
         db
           .select({
             workoutId: workouts.id,
@@ -154,35 +159,66 @@ export function createSessionHistory(
           .from(sets)
           .innerJoin(exerciseEntries, eq(sets.exerciseEntryId, exerciseEntries.id))
           .innerJoin(workouts, eq(exerciseEntries.workoutId, workouts.id));
-      const [latest] = await setsForIt()
-        .where(and(doneForIt, setStillLogged(), finished(), cameBefore(before)))
+      const [latest] = await setsOfIt()
+        .where(and(ofExercise, setStillLogged(), finished(), cameBefore(before)))
         .orderBy(...latestWorkoutFirst)
         .limit(1);
       if (!latest) return undefined;
-      return setsForIt().where(
-        and(doneForIt, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
+      return setsOfIt().where(
+        and(ofExercise, workingSetStillLogged(), eq(workouts.id, latest.workoutId)),
       );
     },
 
-    // The Template of the most recent finished Workout that counted toward the
-    // Rotation. The Workout `alsoCounting` counts as finished already, so next
-    // up can be worked out before finishing it. Undefined when there's none.
-    async lastTemplateInRotation(
-      rotationId: string,
-      alsoCounting?: string,
-    ): Promise<string | null | undefined> {
+    // Which of these Categories was done last: the Category of the most recent
+    // finished Workout in one of them. The Workout `alsoCounting` counts as
+    // finished already, so next up can be worked out before finishing it.
+    // Undefined when none of them has been done.
+    async lastDoneAmong(categoryIds: string[], alsoCounting?: string): Promise<string | undefined> {
+      if (categoryIds.length === 0) return undefined;
       const [last] = await db
-        .select({ templateId: workouts.templateId })
+        .select({ categoryId: workouts.categoryId })
         .from(workouts)
         .where(
           and(
-            eq(workouts.rotationId, rotationId),
-            or(finished(), alsoCounting === undefined ? undefined : eq(workouts.id, alsoCounting)),
+            inArray(workouts.categoryId, categoryIds),
+            or(
+              finished(),
+              alsoCounting === undefined
+                ? undefined
+                : and(eq(workouts.id, alsoCounting), notDeleted(workouts)),
+            ),
           ),
         )
         .orderBy(...latestWorkoutFirst)
         .limit(1);
-      return last?.templateId;
+      return last?.categoryId ?? undefined;
+    },
+
+    // Every finished Workout, the latest first, with its Category and the
+    // Exercises still in it. For telling which Workouts are the same kind.
+    async finishedWorkoutsLatestFirst(): Promise<
+      { id: string; categoryId: string | null; exerciseIds: string[] }[]
+    > {
+      const rows = await db
+        .select({
+          id: workouts.id,
+          categoryId: workouts.categoryId,
+          exerciseId: exerciseEntries.exerciseId,
+        })
+        .from(workouts)
+        .leftJoin(
+          exerciseEntries,
+          and(eq(exerciseEntries.workoutId, workouts.id), notDeleted(exerciseEntries)),
+        )
+        .where(finished())
+        .orderBy(...latestWorkoutFirst);
+      const found = new Map<string, { id: string; categoryId: string | null; exerciseIds: string[] }>();
+      for (const { id, categoryId, exerciseId } of rows) {
+        const workout = found.get(id) ?? { id, categoryId, exerciseIds: [] };
+        if (exerciseId) workout.exerciseIds.push(exerciseId);
+        found.set(id, workout);
+      }
+      return [...found.values()];
     },
 
     // The Exercises with a working Set in a finished Workout, by ID: the one

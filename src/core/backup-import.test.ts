@@ -1,11 +1,14 @@
+import { sql } from 'drizzle-orm';
+
 import journal from '../../drizzle/meta/_journal.json';
 import { backupFormatVersion } from './backup';
-import { createTestDatabase } from './test-database';
+import { backupFileOf, createTestDatabase, createTestDatabaseBefore } from './test-database';
 import {
   clockAt,
   createRotationWith,
-  doTemplateWorkout,
+  doCategoryWorkout,
   doWorkout,
+  findExerciseByName,
   startWorkoutWith,
 } from './test-helpers';
 import { createTracker, type BackupFile, type Tracker } from './tracker';
@@ -25,7 +28,7 @@ const beforeNotesDropped = journal.entries.findIndex(
 const newerFormat = backupFormatVersion + 1;
 
 // A phone with a little of everything on it: a display unit, a hidden custom
-// Exercise, a Rotation of Templates, finished Workouts and one in progress.
+// Exercise, a Rotation of Categories, finished Workouts and one in progress.
 async function phoneWithData() {
   const clock = clockAt('2026-09-28T18:00:00-04:00');
   const tracker = createTracker(createTestDatabase(), clock);
@@ -38,9 +41,9 @@ async function phoneWithData() {
     muscleGroup: 'shoulders',
   });
   await tracker.hideExercise(landmine.id);
-  const { rotation, templates } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
+  const { rotation, categories } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
   await tracker.setActiveRotation(rotation.id);
-  await doTemplateWorkout(tracker, templates[0].id);
+  await doCategoryWorkout(tracker, categories[0].id);
   clock.setTime('2026-09-29T18:00:00-04:00');
   await doWorkout(tracker, 'Squat', [{ weight: 225, reps: 5 }], 'lb');
   const { entry } = await startWorkoutWith(tracker, 'Deadlift');
@@ -170,13 +173,14 @@ describe('Backup import', () => {
       tables: { rotations, rotation_entries, ...tables },
       ...backup
     } = await backupWithData();
-    // As an app from before Rotations would have written it.
+    // As an app from before Rotations, and so before Exercises had a rep
+    // range, would have written it.
     const fromBeforeRotations = {
       ...backup,
       schemaVersion: beforeRotations,
       tables: {
         ...tables,
-        workouts: tables.workouts.map(({ rotation_id, ...workout }) => workout),
+        exercises: tables.exercises.map(({ min_reps, max_reps, ...exercise }) => exercise),
       },
     };
     const phone = createTracker(createTestDatabase());
@@ -184,8 +188,8 @@ describe('Backup import', () => {
     await phone.importBackup(JSON.stringify(fromBeforeRotations));
 
     expect(await phone.getRotations()).toEqual([]);
+    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
     const [workout] = (await phone.getDay('2026-09-28')).workouts;
-    expect(workout.rotationId).toBeNull();
     expect(workout.entries.map(entry => entry.exercise.name)).toEqual(['Bench Press']);
   });
 
@@ -210,6 +214,23 @@ describe('Backup import', () => {
     await phone.importBackup(JSON.stringify(withNotes));
 
     expect(await dataOn(phone)).toEqual(backup.tables);
+  });
+
+  it('takes a file from before Exercises had a rep range, giving each the range of its Target', async () => {
+    // As an app from before then held it: a Target of 5–8 for Bench Press.
+    const old = createTestDatabaseBefore('0020_add_exercises_rep_range');
+    old.run(sql`INSERT INTO templates (id, name) VALUES ('push', 'Push')`);
+    old.run(sql`INSERT INTO template_exercises
+                  (id, template_id, exercise_id, position, target_sets, min_reps, max_reps,
+                   target_weight, target_weight_unit)
+                SELECT 'target-1', 'push', id, 0, 3, 5, 8, 60, 'kg'
+                FROM exercises WHERE name = 'Bench Press'`);
+    const phone = createTracker(createTestDatabase());
+
+    await phone.importBackup(backupFileOf(old, 2));
+
+    expect(await findExerciseByName(phone, 'Bench Press')).toMatchObject({ minReps: 5, maxReps: 8 });
+    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
   });
 
   it('can be checked first, to say when it was exported, changing nothing', async () => {

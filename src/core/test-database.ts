@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import fs from 'node:fs';
@@ -41,6 +42,31 @@ export function createTestDatabaseBefore(tag: string) {
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }
+}
+
+// Everything in a database as a Backup file of `formatVersion` holds it: every
+// table's rows, as stored. For a database from before today's tables, which
+// the tracker can't export.
+export function backupFileOf(db: ReturnType<typeof createTestDatabase>, formatVersion: number) {
+  const tables = db.all<{ name: string }>(
+    sql`SELECT name FROM sqlite_master
+        WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '__drizzle_migrations'`,
+  );
+  const [{ count }] = db.all<{ count: number }>(
+    sql`SELECT count(*) AS count FROM __drizzle_migrations`,
+  );
+  return JSON.stringify({
+    formatVersion,
+    schemaVersion: count,
+    appVersion: '1.0.0',
+    exportedAt: '2026-11-16T12:00:00.000Z',
+    tables: Object.fromEntries(
+      tables.map(({ name }) => [
+        name,
+        db.all(sql`SELECT * FROM ${sql.identifier(name)} ORDER BY rowid`),
+      ]),
+    ),
+  });
 }
 
 // Applies every migration the database hasn't had yet.

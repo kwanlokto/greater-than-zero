@@ -4,7 +4,7 @@ import { NameForm } from '@/components/name-form';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
 
-// Names a new Rotation, then opens it to add Templates.
+// Names a new Rotation, then opens it to add Categories.
 export default function NewRotationScreen() {
   const router = useRouter();
 

@@ -16,7 +16,7 @@ import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// One Rotation: its name, whether it's the active one, and its Templates in
+// One Rotation: its name, whether it's the active one, and its Categories in
 // the order they come up. Every change is saved as it's made.
 export default function RotationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,7 +44,7 @@ export default function RotationScreen() {
     const done = await confirmThenRun(
       {
         title: `Delete ${rotation.name}?`,
-        message: 'Its templates stay, and past workouts are kept.',
+        message: 'Its categories stay, and past workouts are kept.',
         decline: 'Cancel',
         accept: 'Delete',
         destructive: true,
@@ -68,7 +68,7 @@ export default function RotationScreen() {
         <View style={styles.text}>
           <AppText variant="bodyStrong">Active</AppText>
           <AppText variant="caption" tone="muted">
-            Today shows its next-up template
+            Today shows what's next up in it
           </AppText>
         </View>
         <Toggle
@@ -77,12 +77,12 @@ export default function RotationScreen() {
           onValueChange={setActive}
         />
       </Card>
-      <Section title="Templates, in order">
+      <Section title="Categories, in order">
         {rotation.entries.length === 0 ? (
           <Card>
             <EmptyState
               icon="list"
-              title="No templates yet"
+              title="No categories yet"
               message="Add them in the order you do them."
             />
           </Card>
@@ -95,9 +95,9 @@ export default function RotationScreen() {
           variant={rotation.entries.length === 0 ? 'primary' : 'secondary'}
           size="large"
           icon="add"
-          label="Add template"
+          label="Add category"
           onPress={() =>
-            router.push({ pathname: '/rotations/choose-template', params: { rotationId: id } })
+            router.push({ pathname: '/rotations/choose-category', params: { rotationId: id } })
           }
         />
       </Section>
@@ -112,28 +112,28 @@ type RowProps = {
   index: number;
 };
 
-// A Template at its place in the Rotation.
+// A Category at its place in the Rotation.
 function RotationEntryRow({ rotation, entry, index }: RowProps) {
   const { colors } = useAppTheme();
-  const { name } = entry.template;
+  const { name } = entry.category;
   const isLast = index === rotation.entries.length - 1;
 
   const moveTo = (toIndex: number) =>
-    runOrAlert("Couldn't move the template", () =>
-      tracker.moveTemplateInRotation(entry.id, toIndex),
+    runOrAlert("Couldn't move the category", () =>
+      tracker.moveCategoryInRotation(entry.id, toIndex),
     );
 
   const confirmRemove = async () => {
     await confirmThenRun(
       {
         title: `Remove ${name} from ${rotation.name}?`,
-        message: 'The template itself stays.',
+        message: 'The category itself stays, with its workouts.',
         decline: 'Cancel',
         accept: 'Remove',
         destructive: true,
       },
-      "Couldn't remove the template",
-      () => tracker.removeTemplateFromRotation(entry.id),
+      "Couldn't remove the category",
+      () => tracker.removeCategoryFromRotation(entry.id),
     );
   };
 

@@ -7,7 +7,7 @@ import { Fab } from '@/components/fab';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
 import { tracker } from '@/database';
-import { describeTemplateOrder } from '@/rotation-labels';
+import { describeCategoryOrder } from '@/rotation-labels';
 import { radius, space, useAppTheme } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
@@ -21,7 +21,7 @@ export default function RotationsScreen() {
         <EmptyState
           icon="repeat"
           title="No rotations yet"
-          message="A rotation runs your templates in turn, e.g. Push → Pull → Legs, so Today knows what's next."
+          message="A rotation runs your categories in turn, e.g. Push → Pull → Legs, so Today knows what's next."
         />
       )}
       {rotations && rotations.length > 0 && (
@@ -32,7 +32,7 @@ export default function RotationsScreen() {
               <ListRow
                 key={rotation.id}
                 title={rotation.name}
-                subtitle={describeTemplateOrder(rotation)}
+                subtitle={describeCategoryOrder(rotation)}
                 trailing={rotation.isActive ? <ActiveBadge /> : undefined}
                 onPress={() =>
                   router.push({ pathname: '/rotations/[id]', params: { id: rotation.id } })

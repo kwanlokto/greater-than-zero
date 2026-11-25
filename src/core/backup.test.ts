@@ -30,7 +30,7 @@ describe('Backup export', () => {
     const backup = await exportedBackup(tracker);
 
     expect(backup).toMatchObject({
-      formatVersion: 2,
+      formatVersion: 5,
       appVersion: '1.2.3',
       exportedAt: '2026-09-29T22:30:00.000Z',
     });

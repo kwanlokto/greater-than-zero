@@ -7,6 +7,7 @@ import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 import { createBackup } from './backup';
 import { createBodyWeight, type WeighIn } from './body-weight';
+import { createCategories } from './categories';
 import { createExercises } from './exercises';
 import { createFood, type Meal } from './food';
 import { createProgress } from './progress';
@@ -15,8 +16,6 @@ import * as schema from './schema';
 import { workouts } from './schema';
 import { createSessionHistory, finished } from './session-history';
 import { createSettings } from './settings';
-import { createTemplateWorkouts } from './template-workouts';
-import { createTemplates } from './templates';
 import { createWorkoutReads } from './workout-reads';
 import { createWorkouts, type Workout } from './workouts';
 
@@ -28,11 +27,14 @@ export {
   type BodyWeightTrend,
   type WeighIn,
 } from './body-weight';
+export { type Category, type CategoryChoice } from './categories';
 export {
+  problemWithRepRange,
   type Exercise,
   type ExerciseChanges,
   type ExerciseSearch,
   type NewExercise,
+  type RepRange,
 } from './exercises';
 export {
   caloriesFromMacros,
@@ -82,14 +84,6 @@ export {
   type TrackingType,
   type WeightUnit,
 } from './schema';
-export { type TargetUpdateOffer } from './template-workouts';
-export {
-  problemWithTarget,
-  type Target,
-  type TargetValues,
-  type Template,
-  type TemplateExercise,
-} from './templates';
 export { describeLoad, describeSet, formatWeight, type Weight } from './weights';
 export {
   canAddWorkoutOn,
@@ -140,28 +134,15 @@ export function createTracker(
   // Each area is made after the ones it reads from.
   const history = createSessionHistory(db, { getDisplayUnit });
   const reads = createWorkoutReads(db, { getDisplayUnit });
-  const templateArea = createTemplates({ db, now, getDisplayUnit });
-  const templateWorkouts = createTemplateWorkouts({
-    db,
-    now,
-    getDisplayUnit,
-    history,
-    templates: templateArea,
-    reads,
-  });
-  const rotationArea = createRotations({
-    db,
-    now,
-    history,
-    findTemplates: templateArea.findTemplates,
-  });
+  const categoryArea = createCategories({ db, now });
+  const rotationArea = createRotations({ db, now, history, categories: categoryArea });
   const workoutArea = createWorkouts({
     db,
     now,
     history,
     getDisplayUnit,
     getFallbackRestSeconds: settings.getFallbackRestSeconds,
-    templateWorkouts,
+    categories: categoryArea,
     rotations: rotationArea,
     reads,
   });
@@ -175,8 +156,7 @@ export function createTracker(
     ...settings.commands,
     ...createExercises({ db, now }).commands,
     ...workoutArea.commands,
-    ...templateArea.commands,
-    ...templateWorkouts.commands,
+    ...categoryArea.commands,
     ...rotationArea.commands,
 
     // A day as History shows it, from three areas at once.

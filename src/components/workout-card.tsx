@@ -13,17 +13,17 @@ type Props = {
   onPress: () => void;
 };
 
-// A finished Workout as it was recorded: its Template's name, if it started
-// from one, and when it took place, then each Exercise with its Sets, weights
-// in the display unit. Pressing it opens it for editing.
+// A finished Workout as it was recorded: its Category, if it has one, and when
+// it took place, then each Exercise with its Sets, weights in the display
+// unit. Pressing it opens it for editing.
 export function WorkoutCard({ workout, onPress }: Props) {
   const { colors } = useAppTheme();
 
   return (
     <Card onPress={onPress} accessibilityHint="Opens this workout for editing" style={styles.card}>
       <View style={styles.heading}>
-        {workout.templateName !== null && (
-          <AppText variant="heading">{workout.templateName}</AppText>
+        {workout.categoryName !== null && (
+          <AppText variant="heading">{workout.categoryName}</AppText>
         )}
         <View style={styles.header}>
           <Ionicons name="time-outline" size={16} color={colors.textMuted} />

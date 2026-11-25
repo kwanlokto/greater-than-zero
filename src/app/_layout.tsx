@@ -65,20 +65,13 @@ export default function RootLayout() {
             <Stack.Screen name="exercises/index" options={{ title: 'Exercise library' }} />
             <Stack.Screen name="exercises/new" options={{ title: 'New exercise' }} />
             <Stack.Screen name="exercises/[id]" options={{ title: 'Edit exercise' }} />
-            <Stack.Screen name="templates/index" options={{ title: 'Templates' }} />
-            <Stack.Screen name="templates/new" options={{ title: 'New template' }} />
-            <Stack.Screen name="templates/[id]" options={{ title: 'Template' }} />
-            <Stack.Screen
-              name="templates/choose-exercise"
-              options={{ title: 'Add exercise', presentation: 'modal' }}
-            />
-            <Stack.Screen name="templates/target" options={{ title: 'Target' }} />
+            <Stack.Screen name="categories/index" options={{ title: 'Categories' }} />
             <Stack.Screen name="rotations/index" options={{ title: 'Rotations' }} />
             <Stack.Screen name="rotations/new" options={{ title: 'New rotation' }} />
             <Stack.Screen name="rotations/[id]" options={{ title: 'Rotation' }} />
             <Stack.Screen
-              name="rotations/choose-template"
-              options={{ title: 'Add template', presentation: 'modal' }}
+              name="rotations/choose-category"
+              options={{ title: 'Add category', presentation: 'modal' }}
             />
             <Stack.Screen name="day/[date]" options={{ title: 'Day' }} />
             <Stack.Screen name="progress/all" options={{ title: 'Exercises' }} />
@@ -106,6 +99,14 @@ export default function RootLayout() {
             <Stack.Screen name="workout/choose-exercise" options={{ presentation: 'modal' }} />
             {/* A finished Workout, opened from History to edit. */}
             <Stack.Screen name="workout/[id]" options={{ title: 'Workout' }} />
+            <Stack.Screen
+              name="workout/category"
+              options={{ title: 'Category', presentation: 'modal' }}
+            />
+            <Stack.Screen
+              name="workout/repeat"
+              options={{ title: 'Repeat a workout', presentation: 'modal' }}
+            />
           </Stack.Protected>
           <Stack.Protected guard={!onboarded}>
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />

@@ -19,7 +19,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const displayUnit = useTrackerQuery(() => tracker.getDisplayUnit(), []);
   const targets = useTrackerQuery(() => tracker.getMacroTargets(), []);
-  const templates = useTrackerQuery(() => tracker.getTemplates(), []);
+  const categories = useTrackerQuery(() => tracker.getCategories(), []);
   const rotations = useTrackerQuery(() => tracker.getRotations(), []);
   const activeRotation = rotations?.find(rotation => rotation.isActive);
 
@@ -56,12 +56,13 @@ export default function SettingsScreen() {
       <Section title="Training">
         <ListGroup>
           <ListRow
-            icon="list"
-            title="Templates"
+            icon="pricetag"
+            title="Categories"
             subtitle={
-              templates && (templates.length === 1 ? '1 template' : `${templates.length} templates`)
+              categories &&
+              (categories.length === 1 ? '1 category' : `${categories.length} categories`)
             }
-            onPress={() => router.navigate('/templates')}
+            onPress={() => router.navigate('/categories')}
           />
           <ListRow
             icon="repeat"

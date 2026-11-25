@@ -11,7 +11,7 @@ type Props = {
   rename: (name: string) => Promise<void>;
 };
 
-// A name, such as a Template's, saved when the lifter is done typing. A blank
+// A name, such as a Rotation's, saved when the lifter is done typing. A blank
 // name is refused and put back.
 export function NameField({ name: savedName, accessibilityLabel, failureTitle, rename }: Props) {
   const [name, setName] = useState(savedName);

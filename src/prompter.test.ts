@@ -19,7 +19,7 @@ describe('Running a command', () => {
     const { prompter, told } = scriptedPrompter();
     const command = jest.fn(async () => {});
 
-    expect(await runOrTell(prompter, "Couldn't delete the template", command)).toEqual({
+    expect(await runOrTell(prompter, "Couldn't delete the category", command)).toEqual({
       result: undefined,
     });
     expect(command).toHaveBeenCalledTimes(1);
@@ -30,7 +30,7 @@ describe('Running a command', () => {
     const { prompter } = scriptedPrompter();
 
     expect(
-      await runOrTell(prompter, "Couldn't create the template", async () => ({ id: 'push' })),
+      await runOrTell(prompter, "Couldn't create the category", async () => ({ id: 'push' })),
     ).toEqual({ result: { id: 'push' } });
   });
 
@@ -38,9 +38,9 @@ describe('Running a command', () => {
     const { prompter, told } = scriptedPrompter();
 
     expect(
-      await runOrTell(prompter, "Couldn't delete the template", refused('No such Template')),
+      await runOrTell(prompter, "Couldn't delete the category", refused('No such Category')),
     ).toBeUndefined();
-    expect(told).toEqual([{ title: "Couldn't delete the template", message: 'No such Template' }]);
+    expect(told).toEqual([{ title: "Couldn't delete the category", message: 'No such Category' }]);
   });
 });
 
@@ -50,7 +50,7 @@ describe('Confirming a command', () => {
     const command = jest.fn(async () => {});
 
     expect(
-      await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command),
+      await confirmAndRun(prompter, deletePush, "Couldn't delete the category", command),
     ).toBeUndefined();
     expect(asked).toEqual([deletePush]);
     expect(command).not.toHaveBeenCalled();
@@ -61,7 +61,7 @@ describe('Confirming a command', () => {
     const command = jest.fn(async () => {});
 
     expect(
-      await confirmAndRun(prompter, deletePush, "Couldn't delete the template", command),
+      await confirmAndRun(prompter, deletePush, "Couldn't delete the category", command),
     ).toEqual({ result: undefined });
     expect(command).toHaveBeenCalledTimes(1);
   });
@@ -73,10 +73,10 @@ describe('Confirming a command', () => {
       await confirmAndRun(
         prompter,
         deletePush,
-        "Couldn't delete the template",
-        refused('No such Template'),
+        "Couldn't delete the category",
+        refused('No such Category'),
       ),
     ).toBeUndefined();
-    expect(told).toEqual([{ title: "Couldn't delete the template", message: 'No such Template' }]);
+    expect(told).toEqual([{ title: "Couldn't delete the category", message: 'No such Category' }]);
   });
 });

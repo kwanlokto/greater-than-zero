@@ -1,10 +1,5 @@
 import { createTestDatabase } from '@/core/test-database';
-import {
-  createTemplateWith,
-  findExerciseByName,
-  startWorkoutWith,
-  targetsOf,
-} from '@/core/test-helpers';
+import { startWorkoutWith } from '@/core/test-helpers';
 import { createTracker, type Tracker } from '@/core/tracker';
 import { finishWorkout } from '@/finish-workout';
 import type { Prompter } from '@/prompter';
@@ -14,23 +9,6 @@ async function workoutInProgress(tracker: Tracker) {
   const workout = await tracker.getWorkoutInProgress();
   if (!workout) throw new Error('No Workout in progress');
   return workout;
-}
-
-// The Push Template's Bench Press done heavier than its Target (3 × 8–12 @
-// 60 kg), with Dip added: a Workout that offers both to update the Template
-// and to raise the Target.
-async function pushWorkoutWithOffers(tracker: Tracker) {
-  const { template } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
-  await tracker.startWorkout({ templateId: template.id });
-  const [bench] = (await workoutInProgress(tracker)).entries;
-  for (const planned of bench.plannedSets) {
-    await tracker.confirmPlannedSet(planned.id, { weight: 62.5, reps: 8 });
-  }
-  const dip = await findExerciseByName(tracker, 'Dip');
-  const workout = await workoutInProgress(tracker);
-  const added = await tracker.addExerciseToWorkout(workout.id, dip.id);
-  await tracker.logSet(added.id, { weight: null, reps: 10 }, 'kg');
-  return { template, workout: await workoutInProgress(tracker) };
 }
 
 // What happened, in order: each question asked, and the Workout closing.
@@ -90,37 +68,23 @@ describe('Finishing a Workout', () => {
     expect(await tracker.getWorkoutInProgress()).not.toBeNull();
   });
 
-  it('closes the Workout once finished, then asks about each offer in turn', async () => {
+  it('closes the Workout once finished, and asks nothing more', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template, workout } = await pushWorkoutWithOffers(tracker);
+    const { entry } = await startWorkoutWith(tracker, 'Squat');
+    await tracker.logSet(entry.id, { weight: 100, reps: 5 }, 'kg');
     const events: string[] = [];
-    const { prompter } = scriptedPrompter([true, true, true]);
+    const { prompter } = scriptedPrompter([true]);
 
-    const ended = await finishWorkout(tracker, recording(prompter, events), workout, () =>
-      events.push('closed'),
+    const ended = await finishWorkout(
+      tracker,
+      recording(prompter, events),
+      await workoutInProgress(tracker),
+      () => events.push('closed'),
     );
 
     expect(ended).toBe('finished');
-    expect(events).toEqual([
-      'Finish workout?',
-      'closed',
-      'Update Push?',
-      'Raise the Bench Press target?',
-    ]);
-    expect(await targetsOf(tracker, template.id)).toEqual([
-      ['Bench Press', 3, 8, 12, 62.5, 'kg'],
-      ['Dip', 1, 10, 10, null, 'kg'],
-    ]);
-  });
-
-  it('changes nothing for an offer the lifter declines', async () => {
-    const tracker = createTracker(createTestDatabase());
-    const { template, workout } = await pushWorkoutWithOffers(tracker);
-    const { prompter } = scriptedPrompter([true, false, false]);
-
-    await finishWorkout(tracker, prompter, workout, jest.fn());
-
-    expect(await targetsOf(tracker, template.id)).toEqual([['Bench Press', 3, 8, 12, 60, 'kg']]);
+    expect(events).toEqual(['Finish workout?', 'closed']);
+    expect(await tracker.getWorkoutInProgress()).toBeNull();
   });
 
   it("tells the lifter why it couldn't finish, and leaves the Workout open", async () => {

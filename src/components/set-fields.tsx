@@ -4,7 +4,7 @@ import { StyleSheet, type KeyboardTypeOptions } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Input } from '@/components/input';
 
-import type { TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
+import type { PlannedSet, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
 import { readSet, setBoxesOf, type SetBoxes } from '@/form-values';
 
 type SetPresentation = {
@@ -45,12 +45,15 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
 };
 
 // Warm-ups are marked W; working Sets are numbered among themselves. Labels
-// for any planned Sets follow, numbered on from the working Sets.
-export function setLabels(sets: WorkoutSet[], plannedCount = 0): string[] {
+// for any planned Sets follow, numbered on from the working Sets, a planned
+// warm-up marked W too.
+export function setLabels(
+  sets: WorkoutSet[],
+  planned: Pick<PlannedSet, 'isWarmUp'>[] = [],
+): string[] {
   let working = 0;
-  const logged = sets.map(set => (set.isWarmUp ? 'W' : String(++working)));
-  const planned = Array.from({ length: plannedCount }, () => String(++working));
-  return [...logged, ...planned];
+  const label = (set: { isWarmUp: boolean }) => (set.isWarmUp ? 'W' : String(++working));
+  return [...sets.map(label), ...planned.map(label)];
 }
 
 // A logged Set being corrected, or a planned Set being confirmed.

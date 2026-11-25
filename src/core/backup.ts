@@ -13,7 +13,7 @@ import type { TrackerDatabase } from './tracker';
 // (e.g. adding a built-in Exercise) or drops a column. Each bump adds a step to
 // formatUpgrades. An app refuses files from a newer version. The tables' shape
 // is versioned apart, by schemaVersion.
-export const backupFormatVersion = 2;
+export const backupFormatVersion = 5;
 
 export type BackupFile = {
   formatVersion: number;
@@ -67,7 +67,142 @@ const formatUpgrades: Record<number, (file: Record<string, unknown>) => Record<s
     // Exercise notes were dropped (migration 0018), so a version 1 file's
     // Exercise entries have a notes column the database no longer has.
     1: file => withoutColumn(file, 'exercise_entries', 'notes'),
+    // Exercises gained a rep range (migration 0020), taken from the Target
+    // changed most recently among those still in a Template. A version 2 file
+    // has the Targets but not the ranges.
+    2: withRepRangesFromTargets,
+    // Templates became Categories, and Template exercises with their Targets
+    // went (migration 0021).
+    3: file =>
+      withCategoriesFromTemplates(withoutColumn(file, 'exercise_entries', 'template_exercise_id')),
+    // Next up is read from History, so a Workout no longer records the
+    // Rotation it counted toward (migration 0022).
+    4: file => withoutColumn(file, 'workouts', 'rotation_id'),
   };
+
+// Whether a stored row has been soft-deleted.
+function isDeleted(row: Record<string, unknown>): boolean {
+  return (row.deleted_at ?? null) !== null;
+}
+
+// A name as the migration compares them: SQLite's trim() takes off spaces
+// only, and its lower() changes A to Z only.
+function nameAsSqliteCompares(name: unknown): string {
+  return String(name)
+    .replace(/^ +| +$/g, '')
+    .replace(/[A-Z]/g, letter => letter.toLowerCase());
+}
+
+// `file` with its Templates turned into Categories, as the migration does it.
+// Templates with the same name become one Category, the earliest made, which
+// takes the others' Workouts and their places in Rotations; a Rotation that
+// held more than one of them keeps the first. A Workout from a deleted
+// Template is in no Category. Template exercises go. A file with no Templates
+// table is left as it is.
+function withCategoriesFromTemplates(file: Record<string, unknown>) {
+  const { tables } = file;
+  if (!isRecord(tables) || !Array.isArray(tables.templates)) return file;
+  const templates: unknown[] = tables.templates;
+  // What the migration's "now" is to a file: when it was exported.
+  const deletedAt = Date.parse(String(file.exportedAt)) || 0;
+
+  const firstCalled = new Map<string, Record<string, unknown>>();
+  const deleted = new Set<unknown>();
+  for (const template of templates) {
+    if (!isRecord(template)) continue;
+    if (isDeleted(template)) {
+      deleted.add(template.id);
+      continue;
+    }
+    const name = nameAsSqliteCompares(template.name);
+    const first = firstCalled.get(name);
+    // Rows come in the order they were added, which settles a tie.
+    if (!first || Number(template.created_at) < Number(first.created_at)) {
+      firstCalled.set(name, template);
+    }
+  }
+  // The Category each Template still there becomes: itself, or the first one
+  // with its name.
+  const categoryOf = new Map<unknown, unknown>();
+  for (const template of templates) {
+    if (isRecord(template) && !isDeleted(template)) {
+      categoryOf.set(template.id, firstCalled.get(nameAsSqliteCompares(template.name))?.id);
+    }
+  }
+
+  const rowsOf = (table: string, change: (row: Record<string, unknown>) => unknown) => {
+    const rows: unknown = tables[table];
+    return Array.isArray(rows)
+      ? { [table]: rows.map((row: unknown) => (isRecord(row) ? change(row) : row)) }
+      : {};
+  };
+  // Each place in a Rotation, the first of each Category in it kept.
+  const places: unknown[] = Array.isArray(tables.rotation_entries) ? tables.rotation_entries : [];
+  const firstPlace = new Map<string, Record<string, unknown>>();
+  for (const place of places) {
+    if (!isRecord(place) || isDeleted(place)) continue;
+    const categoryId = categoryOf.get(place.template_id) ?? place.template_id;
+    const key = JSON.stringify([place.rotation_id, categoryId]);
+    const first = firstPlace.get(key);
+    if (!first || Number(place.position) < Number(first.position)) firstPlace.set(key, place);
+  }
+
+  const { templates: _templates, template_exercises: _targets, ...kept } = tables;
+  return {
+    ...file,
+    tables: {
+      ...kept,
+      categories: templates.map(template =>
+        isRecord(template) && !isDeleted(template) && categoryOf.get(template.id) !== template.id
+          ? { ...template, deleted_at: deletedAt }
+          : template,
+      ),
+      ...rowsOf('workouts', ({ template_id: templateId, ...workout }) => ({
+        ...workout,
+        category_id: deleted.has(templateId) ? null : (categoryOf.get(templateId) ?? templateId ?? null),
+      })),
+      ...rowsOf('rotation_entries', ({ template_id: templateId, ...place }) => {
+        const categoryId = categoryOf.get(templateId) ?? templateId;
+        const key = JSON.stringify([place.rotation_id, categoryId]);
+        const repeated = !isDeleted(place) && firstPlace.get(key)?.id !== place.id;
+        return {
+          ...place,
+          category_id: categoryId,
+          ...(repeated ? { deleted_at: deletedAt } : {}),
+        };
+      }),
+    },
+  };
+}
+
+// `file` with each Exercise given the rep range of its Target: the one changed
+// most recently among those not deleted, a later row winning a tie, as the
+// migration has it. An Exercise without one is left to take the default.
+function withRepRangesFromTargets(file: Record<string, unknown>) {
+  const { tables } = file;
+  if (!isRecord(tables)) return file;
+  const { exercises, template_exercises: targets } = tables;
+  if (!Array.isArray(exercises) || !Array.isArray(targets)) return file;
+  const latestFor = new Map<unknown, Record<string, unknown>>();
+  for (const target of targets as unknown[]) {
+    if (!isRecord(target) || (target.deleted_at ?? null) !== null) continue;
+    const held = latestFor.get(target.exercise_id);
+    if (!held || Number(target.updated_at) >= Number(held.updated_at)) {
+      latestFor.set(target.exercise_id, target);
+    }
+  }
+  return {
+    ...file,
+    tables: {
+      ...tables,
+      exercises: exercises.map((row: unknown) => {
+        const target = isRecord(row) ? latestFor.get(row.id) : undefined;
+        if (!isRecord(row) || !target) return row;
+        return { ...row, min_reps: target.min_reps, max_reps: target.max_reps };
+      }),
+    },
+  };
+}
 
 // `file` with `column` taken out of every row of `table`. Anything not laid out
 // as a Backup file is left as it is, for checkTables to refuse.

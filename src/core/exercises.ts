@@ -12,12 +12,29 @@ export type NewExercise = {
   muscleGroup: MuscleGroup;
 };
 
-export type Exercise = NewExercise & {
-  id: string;
-  isCustom: boolean;
-  // The lifter's own rest after a Set of it, in seconds; null uses the default.
-  defaultRestSeconds: number | null;
+// The reps an Exercise is done for, e.g. 8–12.
+export type RepRange = {
+  minReps: number;
+  maxReps: number;
 };
+
+export type Exercise = NewExercise &
+  RepRange & {
+    id: string;
+    isCustom: boolean;
+    // The lifter's own rest after a Set of it, in seconds; null uses the default.
+    defaultRestSeconds: number | null;
+  };
+
+// Why a rep range can't be saved, or undefined when it can.
+// setExerciseRepRange enforces it; screens use it to decide when to save.
+export function problemWithRepRange({ minReps, maxReps }: RepRange): string | undefined {
+  if (!Number.isInteger(minReps) || !Number.isInteger(maxReps) || minReps < 1) {
+    return 'A rep range needs whole numbers of reps, at least 1';
+  }
+  if (minReps > maxReps) return "A rep range's minimum can't be more than its maximum";
+  return undefined;
+}
 
 // The tracking type is fixed once an Exercise is created.
 export type ExerciseChanges = Omit<NewExercise, 'trackingType'>;
@@ -36,6 +53,8 @@ export const exerciseColumns = {
   muscleGroup: exercises.muscleGroup,
   isCustom: exercises.isCustom,
   defaultRestSeconds: exercises.defaultRestSeconds,
+  minReps: exercises.minReps,
+  maxReps: exercises.maxReps,
 };
 
 // The same, for relational queries.
@@ -46,6 +65,8 @@ export const exerciseQueryColumns = {
   muscleGroup: true,
   isCustom: true,
   defaultRestSeconds: true,
+  minReps: true,
+  maxReps: true,
 } as const;
 
 function requireExerciseName(typed: string): string {
@@ -115,6 +136,19 @@ export function createExercises({ db, now }: { db: TrackerDatabase; now: () => D
       const changed = await db
         .update(exercises)
         .set({ defaultRestSeconds: seconds })
+        .where(and(eq(exercises.id, exerciseId), notDeleted(exercises)))
+        .returning({ id: exercises.id });
+      if (changed.length === 0) throw new Error('No such Exercise in the library');
+    },
+
+    // Any Exercise in the library, built-in ones included: like its rest, the
+    // range an Exercise is done in is the lifter's own.
+    async setExerciseRepRange(exerciseId: string, repRange: RepRange): Promise<void> {
+      const problem = problemWithRepRange(repRange);
+      if (problem) throw new Error(problem);
+      const changed = await db
+        .update(exercises)
+        .set({ minReps: repRange.minReps, maxReps: repRange.maxReps })
         .where(and(eq(exercises.id, exerciseId), notDeleted(exercises)))
         .returning({ id: exercises.id });
       if (changed.length === 0) throw new Error('No such Exercise in the library');

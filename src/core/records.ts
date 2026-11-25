@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
 
 import {
+  categories,
   exerciseEntries,
   foodItems,
   meals,
@@ -13,8 +14,6 @@ import {
   rotationEntries,
   rotations,
   sets,
-  templateExercises,
-  templates,
   workouts,
 } from './schema';
 import type { TrackerDatabase } from './tracker';
@@ -36,8 +35,8 @@ export function stillThere(table: Record, id: string): SQL {
 
 // What's deleted along with a row: its children, by the column that names it.
 // A deleted Workout takes its Exercise entries, and an Exercise entry its Sets
-// and planned Sets; a Template its Exercises and its places in Rotations; a
-// Rotation its places; a Meal its Food items.
+// and planned Sets; a Category its places in Rotations; a Rotation its places;
+// a Meal its Food items.
 const deletedWith = new Map<SQLiteTable, { table: Record; parent: SQLiteColumn }[]>([
   [workouts, [{ table: exerciseEntries, parent: exerciseEntries.workoutId }]],
   [
@@ -47,13 +46,7 @@ const deletedWith = new Map<SQLiteTable, { table: Record; parent: SQLiteColumn }
       { table: plannedSets, parent: plannedSets.exerciseEntryId },
     ],
   ],
-  [
-    templates,
-    [
-      { table: templateExercises, parent: templateExercises.templateId },
-      { table: rotationEntries, parent: rotationEntries.templateId },
-    ],
-  ],
+  [categories, [{ table: rotationEntries, parent: rotationEntries.categoryId }]],
   [rotations, [{ table: rotationEntries, parent: rotationEntries.rotationId }]],
   [meals, [{ table: foodItems, parent: foodItems.mealId }]],
 ]);

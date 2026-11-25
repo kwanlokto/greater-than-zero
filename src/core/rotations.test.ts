@@ -1,9 +1,9 @@
 import { createTestDatabase } from './test-database';
-import { createRotationWith, createTemplateWith, names } from './test-helpers';
+import { createRotationWith, names } from './test-helpers';
 import { canAddToRotation, createTracker, type Rotation, type Tracker } from './tracker';
 
-function templateNamesOf(rotation: Rotation | undefined) {
-  return rotation?.entries.map(({ template }) => template.name);
+function categoryNamesOf(rotation: Rotation | undefined) {
+  return rotation?.entries.map(({ category }) => category.name);
 }
 
 async function activeRotationNames(tracker: Tracker) {
@@ -11,20 +11,20 @@ async function activeRotationNames(tracker: Tracker) {
 }
 
 describe('Rotations', () => {
-  it('hold a name and Templates, in the order they were added', async () => {
+  it('hold a name and Categories, in the order they were added', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
-    const { template: pull } = await createTemplateWith(tracker, 'Pull', ['Pull-up']);
-    const { template: legs } = await createTemplateWith(tracker, 'Legs', ['Squat']);
+    const push = await tracker.createCategory('Push');
+    const pull = await tracker.createCategory('Pull');
+    const legs = await tracker.createCategory('Legs');
 
     const rotation = await tracker.createRotation('PPL');
-    for (const template of [push, pull, legs]) {
-      await tracker.addTemplateToRotation(rotation.id, template.id);
+    for (const category of [push, pull, legs]) {
+      await tracker.addCategoryToRotation(rotation.id, { id: category.id });
     }
 
     const saved = await tracker.getRotation(rotation.id);
     expect(saved?.name).toBe('PPL');
-    expect(templateNamesOf(saved)).toEqual(['Push', 'Pull', 'Legs']);
+    expect(categoryNamesOf(saved)).toEqual(['Push', 'Pull', 'Legs']);
   });
 
   it('can be renamed, but not to a blank name', async () => {
@@ -39,7 +39,7 @@ describe('Rotations', () => {
     expect((await tracker.getRotation(rotation.id))?.name).toBe('Push Pull Legs');
   });
 
-  it('can have Templates removed, keeping the rest in order', async () => {
+  it('can have Categories removed, keeping the rest in order', async () => {
     const tracker = createTracker(createTestDatabase());
     const { rotation, entries } = await createRotationWith(tracker, 'PPL', [
       'Push',
@@ -47,15 +47,15 @@ describe('Rotations', () => {
       'Legs',
     ]);
 
-    await tracker.removeTemplateFromRotation(entries[1].id);
+    await tracker.removeCategoryFromRotation(entries[1].id);
 
-    expect(templateNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push', 'Legs']);
-    await expect(tracker.removeTemplateFromRotation(entries[1].id)).rejects.toThrow(
-      'No such Template in a Rotation',
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push', 'Legs']);
+    await expect(tracker.removeCategoryFromRotation(entries[1].id)).rejects.toThrow(
+      'No such Category in a Rotation',
     );
   });
 
-  it('can have a Template moved to another place, shifting the ones between', async () => {
+  it('can have a Category moved to another place, shifting the ones between', async () => {
     const tracker = createTracker(createTestDatabase());
     const { rotation, entries } = await createRotationWith(tracker, 'PPL', [
       'Push',
@@ -64,22 +64,22 @@ describe('Rotations', () => {
       'Arms',
     ]);
 
-    await tracker.moveTemplateInRotation(entries[3].id, 1);
-    expect(templateNamesOf(await tracker.getRotation(rotation.id))).toEqual([
+    await tracker.moveCategoryInRotation(entries[3].id, 1);
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual([
       'Push',
       'Arms',
       'Pull',
       'Legs',
     ]);
 
-    await tracker.moveTemplateInRotation(entries[0].id, 3);
-    expect(templateNamesOf(await tracker.getRotation(rotation.id))).toEqual([
+    await tracker.moveCategoryInRotation(entries[0].id, 3);
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual([
       'Arms',
       'Pull',
       'Legs',
       'Push',
     ]);
-    await expect(tracker.moveTemplateInRotation(entries[0].id, 4)).rejects.toThrow(
+    await expect(tracker.moveCategoryInRotation(entries[0].id, 4)).rejects.toThrow(
       'No such place in the Rotation',
     );
   });
@@ -97,20 +97,20 @@ describe('Rotations', () => {
     await expect(tracker.deleteRotation(ppl.id)).rejects.toThrow('No such Rotation');
   });
 
-  it('lose a Template when it is deleted', async () => {
+  it('lose a Category when it is deleted', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
-    const { template: pull } = await createTemplateWith(tracker, 'Pull', ['Pull-up']);
+    const push = await tracker.createCategory('Push');
+    const pull = await tracker.createCategory('Pull');
     const ppl = await tracker.createRotation('PPL');
     const pushPull = await tracker.createRotation('Push Pull');
     for (const rotation of [ppl, pushPull]) {
-      await tracker.addTemplateToRotation(rotation.id, push.id);
-      await tracker.addTemplateToRotation(rotation.id, pull.id);
+      await tracker.addCategoryToRotation(rotation.id, { id: push.id });
+      await tracker.addCategoryToRotation(rotation.id, { id: pull.id });
     }
 
-    await tracker.deleteTemplate(push.id);
+    await tracker.deleteCategory(push.id);
 
-    expect((await tracker.getRotations()).map(templateNamesOf)).toEqual([['Pull'], ['Pull']]);
+    expect((await tracker.getRotations()).map(categoryNamesOf)).toEqual([['Pull'], ['Pull']]);
   });
 
   it('have at most one active', async () => {
@@ -150,24 +150,24 @@ describe('Rotations', () => {
     expect(await tracker.getRotations()).toEqual([]);
   });
 
-  it('hold each Template once', async () => {
+  it('hold each Category once', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
+    const push = await tracker.createCategory('Push');
     const rotation = await tracker.createRotation('PPL');
-    await tracker.addTemplateToRotation(rotation.id, push.id);
+    await tracker.addCategoryToRotation(rotation.id, { id: push.id });
 
-    await expect(tracker.addTemplateToRotation(rotation.id, push.id)).rejects.toThrow(
+    await expect(tracker.addCategoryToRotation(rotation.id, { id: push.id })).rejects.toThrow(
       'Push is already in that Rotation',
     );
-    expect(templateNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push']);
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push']);
   });
 
-  it('tell screens which Templates can still be added', async () => {
+  it('tell screens which Categories can still be added', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
-    const { template: pull } = await createTemplateWith(tracker, 'Pull', ['Pull-up']);
+    const push = await tracker.createCategory('Push');
+    const pull = await tracker.createCategory('Pull');
     const rotation = await tracker.createRotation('PPL');
-    await tracker.addTemplateToRotation(rotation.id, push.id);
+    await tracker.addCategoryToRotation(rotation.id, { id: push.id });
 
     const saved = await tracker.getRotation(rotation.id);
 
@@ -175,19 +175,60 @@ describe('Rotations', () => {
     expect(saved && canAddToRotation(saved, pull.id)).toBe(true);
   });
 
-  it("can't take a deleted Template, or go in a deleted Rotation", async () => {
+  it('take a Category by a new name, making it, so a split can be laid out before training', async () => {
     const tracker = createTracker(createTestDatabase());
-    const { template: push } = await createTemplateWith(tracker, 'Push', ['Bench Press']);
-    const { template: pull } = await createTemplateWith(tracker, 'Pull', ['Pull-up']);
+    const rotation = await tracker.createRotation('PPL');
+
+    await tracker.addCategoryToRotation(rotation.id, { name: 'Push' });
+    await tracker.addCategoryToRotation(rotation.id, { name: ' Pull ' });
+
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push', 'Pull']);
+    expect(names(await tracker.getCategories())).toEqual(['Pull', 'Push']);
+    await tracker.setActiveRotation(rotation.id);
+    expect((await tracker.getNextUp())?.name).toBe('Push');
+  });
+
+  it('take the Category there already when a name is in use, whatever its capitals', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const legs = await tracker.createCategory('Legs');
+    const rotation = await tracker.createRotation('PPL');
+
+    await tracker.addCategoryToRotation(rotation.id, { name: 'legs' });
+
+    const [entry] = (await tracker.getRotation(rotation.id))?.entries ?? [];
+    expect(entry.category).toEqual({ id: legs.id, name: 'Legs' });
+    expect(names(await tracker.getCategories())).toEqual(['Legs']);
+    await expect(tracker.addCategoryToRotation(rotation.id, { name: 'LEGS' })).rejects.toThrow(
+      'Legs is already in that Rotation',
+    );
+  });
+
+  it("don't take a Category with no name, and none is made", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const rotation = await tracker.createRotation('PPL');
+
+    await expect(tracker.addCategoryToRotation(rotation.id, { name: '  ' })).rejects.toThrow(
+      'A Category needs a name',
+    );
+    await expect(tracker.addCategoryToRotation('no-such', { name: 'Push' })).rejects.toThrow(
+      'No such Rotation',
+    );
+    expect(await tracker.getCategories()).toEqual([]);
+  });
+
+  it("can't take a deleted Category, or go in a deleted Rotation", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const push = await tracker.createCategory('Push');
+    const pull = await tracker.createCategory('Pull');
     const rotation = await tracker.createRotation('PPL');
     const gone = await tracker.createRotation('Old');
-    await tracker.deleteTemplate(pull.id);
+    await tracker.deleteCategory(pull.id);
     await tracker.deleteRotation(gone.id);
 
-    await expect(tracker.addTemplateToRotation(rotation.id, pull.id)).rejects.toThrow(
-      'No such Template',
+    await expect(tracker.addCategoryToRotation(rotation.id, { id: pull.id })).rejects.toThrow(
+      'No such Category',
     );
-    await expect(tracker.addTemplateToRotation(gone.id, push.id)).rejects.toThrow(
+    await expect(tracker.addCategoryToRotation(gone.id, { id: push.id })).rejects.toThrow(
       'No such Rotation',
     );
   });

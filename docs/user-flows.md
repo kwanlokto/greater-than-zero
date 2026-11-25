@@ -1,8 +1,8 @@
 # User flows
 
-Every screen in Notch has an ID, `S01` to `S37`, and every dialog one from `D01` to `D21`. Use them to name a screen in an issue, a PR or a conversation: "S12's › button" says exactly where.
+Every screen in Notch has an ID, `S01` to `S40`, and every dialog one from `D01` to `D22`. Use them to name a screen in an issue, a PR or a conversation: "S12's › button" says exactly where.
 
-IDs are permanent. A new screen or dialog takes the next free number, and a removed one's ID is retired, never reused. When a change adds, removes or reconnects a screen or dialog, update this file in the same change.
+IDs are permanent. A new screen or dialog takes the next free number, and a removed one's ID is retired, never reused: the retired ones are listed under each table. When a change adds, removes or reconnects a screen or dialog, update this file in the same change.
 
 ## Screens
 
@@ -33,29 +33,27 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S23 | Weigh-ins | `/weigh-ins` | `src/app/weigh-ins.tsx` |
 | S24 | Settings | `/settings` | `src/app/settings.tsx` |
 | S25 | Macro targets | `/macro-targets` | `src/app/macro-targets.tsx` |
-| S26 | Templates | `/templates` | `src/app/templates/index.tsx` |
-| S27 | New Template, or Save as template | `/templates/new` | `src/app/templates/new.tsx` |
-| S28 | Template | `/templates/[id]` | `src/app/templates/[id].tsx` |
-| S29 | Choose exercise for a Template | `/templates/choose-exercise` | `src/app/templates/choose-exercise.tsx` |
-| S30 | Target | `/templates/target` | `src/app/templates/target.tsx` |
 | S31 | Rotations | `/rotations` | `src/app/rotations/index.tsx` |
 | S32 | New Rotation | `/rotations/new` | `src/app/rotations/new.tsx` |
 | S33 | Rotation | `/rotations/[id]` | `src/app/rotations/[id].tsx` |
-| S34 | Choose Template for a Rotation | `/rotations/choose-template` | `src/app/rotations/choose-template.tsx` |
+| S34 | Choose Category for a Rotation | `/rotations/choose-category` | `src/app/rotations/choose-category.tsx` |
 | S35 | Exercise library | `/exercises` | `src/app/exercises/index.tsx` |
 | S36 | New exercise | `/exercises/new` | `src/app/exercises/new.tsx` |
 | S37 | Edit exercise | `/exercises/[id]` | `src/app/exercises/[id].tsx` |
+| S38 | Repeat a workout | `/workout/repeat` | `src/app/workout/repeat.tsx` |
+| S39 | Categories | `/categories` | `src/app/categories/index.tsx` |
+| S40 | Choose Category for a Workout | `/workout/category` | `src/app/workout/category.tsx` |
 
-A screen opened for a record that's gone (a deleted Meal, Template, Rotation or Workout) shows that instead of its content, and S12 shows "No such date." for a date that isn't real. These are states of the screen, not screens of their own.
+Retired with Templates: S26 Templates, S27 New Template or Save as template, S28 Template, S29 Choose exercise for a Template, S30 Target.
+
+A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) shows that instead of its content, and S12 shows "No such date." for a date that isn't real. These are states of the screen, not screens of their own.
 
 ## Dialogs
 
 | ID | Dialog | Shown on | Choices |
 |---|---|---|---|
-| D01 | Finish workout? | S09, Finish workout | Finish: the Workout finishes and closes, back to the screen underneath, where D03 and D04 follow if they apply. Cancel: stays. |
+| D01 | Finish workout? | S09, Finish workout | Finish: the Workout finishes and closes, back to the screen underneath. Cancel: stays. |
 | D02 | No sets logged yet | S09, Finish workout with nothing logged | Discard: the Workout is discarded, back. Keep going: stays. |
-| D03 | Update *Template*? | after D01, over the screen underneath, when the Exercise list differs from its Template | Update or Keep template, then D04 if it applies. |
-| D04 | Raise the *Exercise* target? | after D01 or D03, once per Target the session beat | Raise or Keep, then the next one. |
 | D05 | Discard this workout? | S09, Discard workout | Discard: back. Keep it: stays. |
 | D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Remove exercise: D07, or removed at once with no Sets. |
 | D07 | Remove *Exercise* and its *n* sets? | D06, Remove exercise | Remove or Cancel; stays. |
@@ -63,16 +61,17 @@ A screen opened for a record that's gone (a deleted Meal, Template, Rotation or 
 | D09 | Delete *Meal*? | S13, Delete meal | Delete: back. |
 | D10 | Remove *food*? | S15, Remove food | Remove: back to S13. |
 | D11 | Delete *Saved food*? | S20, Delete | Delete: back. |
-| D12 | Delete *Template*? | S28, Delete template | Delete: back. |
-| D13 | Remove *Exercise* from *Template*? | S28, an Exercise's 🗑 | Remove; stays. |
 | D14 | Delete *Rotation*? | S33, Delete rotation | Delete: back. |
-| D15 | Remove *Template* from *Rotation*? | S33, a Template's 🗑 | Remove; stays. |
+| D15 | Remove *Category* from *Rotation*? | S33, a Category's 🗑 | Remove; stays. |
 | D16 | Hide *Exercise*? | S37, Hide exercise | Hide: back. |
 | D17 | Replace all your data? | S24, Import, after a file is picked | Replace: the Backup replaces everything. |
 | D18 | Notification permission (Android) | the first time a Workout starts | Allow or Don't allow; the in-app rest timer works either way. |
 | D19 | Share sheet (Android) | S24, Export | Save or send the Backup file. |
 | D20 | File picker (Android) | S24, Import | Pick a Backup file: D17. |
 | D21 | Time picker (Android) | S13, Eaten at | Moves the Meal within its day. |
+| D22 | Delete *Category*? | S39, a Category's 🗑 | Delete: its Workouts stay in History, in no Category; stays. |
+
+Retired with Templates: D03 Update Template?, D04 Raise the target?, D12 Delete Template?, D13 Remove from Template?
 
 Any command can be refused. A "Couldn't …" alert then says why, and the screen stays as it was.
 
@@ -106,10 +105,10 @@ Tapping the "Rest over" notification brings the app back where it was. If the ap
 
 ```mermaid
 flowchart LR
-  S05["S05 Today"] -->|Start next up, a Template, or Empty workout| S09["S09 Workout in progress"]
-  S05 -->|Templates| S26["S26 Templates"]
-  S05 -->|Create a template, when there are none| S27["S27 New Template"]
-  S05 -->|Set up a rotation| S31["S31 Rotations"]
+  S05["S05 Today"] -->|Start next up, or Empty workout| S09["S09 Workout in progress"]
+  S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
+  S38 -->|tap a Workout| S09
+  S05 -->|Set up a rotation, with none active| S31["S31 Rotations"]
   S05 -->|Meals, or the food card| S07["S07 Food"]
   S05 -->|Set daily targets, when none are set| S25["S25 Macro targets"]
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
@@ -127,19 +126,19 @@ flowchart LR
   D06 -->|Swap exercise| S10
   D06 -->|Remove exercise, with Sets| D07{{"D07 Remove and its sets?"}}
   S10 -->|pick an Exercise| S09
+  S09 -->|its title| S40["S40 Choose Category"]
+  S40 -->|pick one, add one, or No category| S09
   S09 -->|Finish workout| D01{{"D01 Finish workout?"}}
   S09 -->|Finish workout, nothing logged| D02{{"D02 No sets logged yet"}}
   S09 -->|Discard workout| D05{{"D05 Discard this workout?"}}
   D01 -->|Finish: the Workout closes| back(["back"])
-  back -.->|then, if it applies| D03{{"D03 Update Template?"}}
-  D03 -.->|then, for each Target beaten| D04{{"D04 Raise the target?"}}
   D02 -->|Discard| back
   D05 -->|Discard| back
   S09 -->|⌄ hide| back
   S09 -.->|the first time a Workout starts| D18{{"D18 Notification permission"}}
 ```
 
-S09 opens from S01, S05, S12 and the Workout bar on any tab, and "back" returns there. Dotted lines are questions that follow on their own: D03 only when the Workout's Exercise list differs from its Template, and D04 once for each Target the session beat.
+S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab, and "back" returns there, or to S05 after S38, whose place the Workout takes. The dotted line is a question that comes up on its own. Nothing is asked after a Workout finishes.
 
 ### History
 
@@ -156,8 +155,9 @@ flowchart TD
   S11 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   S10 -->|pick an Exercise| S11
-  S11 -->|Save as template| S27["S27 Save as template"]
-  S27 -->|Save template| S28["S28 Template"]
+  S11 -->|Repeat this workout| S09
+  S11 -->|its title| S40["S40 Choose Category"]
+  S40 -->|pick one, add one, or No category| S11
   S11 -->|Delete workout| D08{{"D08 Delete this workout?"}}
   D08 -->|Delete| S12
 ```
@@ -222,7 +222,7 @@ flowchart LR
   S24["S24 Settings"] -->|Macro targets| S25["S25 Macro targets"]
   S25 -->|Save targets| S24
   S24 -->|Saved foods| S18["S18 Saved foods"]
-  S24 -->|Templates| S26["S26 Templates"]
+  S24 -->|Categories| S39["S39 Categories"]
   S24 -->|Rotations| S31["S31 Rotations"]
   S24 -->|Export| D19{{"D19 Share sheet"}}
   S24 -->|Import| D20{{"D20 File picker"}}
@@ -236,31 +236,21 @@ flowchart LR
   D16 -->|Hide| S35
 ```
 
-S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length, happen on the screen itself.
+S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
 
-### Templates and Rotations
+### Categories and Rotations
 
 ```mermaid
 flowchart TD
-  S26["S26 Templates"] -->|New template| S27["S27 New Template"]
-  S26 -->|tap a Template| S28["S28 Template"]
-  S27 -->|Create template| S28
-  S28 -->|Add exercise| S29["S29 Choose exercise"]
-  S29 -->|pick an Exercise| S30["S30 Target"]
-  S28 -->|tap an Exercise: its Target| S30
-  S30 -->|Save, or Add to template| S28
-  S28 -->|an Exercise's 🗑| D13{{"D13 Remove from Template?"}}
-  S28 -->|Delete template| D12{{"D12 Delete Template?"}}
-  D12 -->|Delete| S26
+  S39["S39 Categories"] -->|a Category's 🗑| D22{{"D22 Delete Category?"}}
   S31["S31 Rotations"] -->|New rotation| S32["S32 New Rotation"]
   S31 -->|tap a Rotation| S33["S33 Rotation"]
   S32 -->|Create rotation| S33
-  S33 -->|Add template| S34["S34 Choose Template"]
-  S34 -->|pick a Template| S33
-  S34 -->|Create one, when there are no Templates| S27
-  S33 -->|a Template's 🗑| D15{{"D15 Remove from Rotation?"}}
+  S33 -->|Add category| S34["S34 Choose Category"]
+  S34 -->|pick a Category, or add one by a new name| S33
+  S33 -->|a Category's 🗑| D15{{"D15 Remove from Rotation?"}}
   S33 -->|Delete rotation| D14{{"D14 Delete Rotation?"}}
   D14 -->|Delete| S31
 ```
 
-S27 replaces itself with the new Template, so a Template returns to whatever was under S27: S26, S05, S11 or S33. Renaming a Template or Rotation, reordering and switching a Rotation on happen on the screen itself.
+A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself.
