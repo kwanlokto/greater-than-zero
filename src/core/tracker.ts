@@ -5,7 +5,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-import { createBackup } from './backup';
+import { createBackup, type OpenScratchDatabase } from './backup';
 import { createBodyWeight, type WeighIn } from './body-weight';
 import { createCategories } from './categories';
 import { createExercises } from './exercises';
@@ -20,7 +20,12 @@ import { createWorkoutReads } from './workout-reads';
 import { createWorkouts, type Workout } from './workouts';
 
 export { schema };
-export type { BackupFile, BackupSummary } from './backup';
+export type {
+  BackupFile,
+  BackupSummary,
+  OpenScratchDatabase,
+  ScratchDatabase,
+} from './backup';
 export {
   problemWithWeighIn,
   type BodyWeightPoint,
@@ -123,11 +128,15 @@ export type Day = {
 export type TrackerOptions = {
   // The clock; tests pass their own.
   now?: () => Date;
+  // Where a Backup file is brought up to date before it's imported: the app
+  // opens these in memory, and tests that import pass their own. Without it,
+  // importing refuses.
+  openScratchDatabase?: OpenScratchDatabase;
 };
 
 export function createTracker(
   db: TrackerDatabase,
-  { now = () => new Date() }: TrackerOptions = {},
+  { now = () => new Date(), openScratchDatabase }: TrackerOptions = {},
 ) {
   const settings = createSettings(db);
   const { getDisplayUnit } = settings;
@@ -169,7 +178,7 @@ export function createTracker(
       };
     },
 
-    ...createBackup({ db, now }).commands,
+    ...createBackup({ db, now, openScratchDatabase }).commands,
     ...foodArea.commands,
     ...createProgress({ db, history, getDisplayUnit }).commands,
     ...bodyWeightArea.commands,

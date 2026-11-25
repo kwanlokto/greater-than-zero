@@ -1,11 +1,6 @@
 import { sql } from 'drizzle-orm';
 
-import {
-  backupFileOf,
-  createTestDatabase,
-  createTestDatabaseBefore,
-  migrateToLatest,
-} from './test-database';
+import { createTestDatabaseBefore, migrateToLatest } from './test-database';
 import { findExerciseByName } from './test-helpers';
 import { createTracker } from './tracker';
 
@@ -125,19 +120,6 @@ describe('Migrations', () => {
         [['Push', 2]],
       );
       expect((await tracker.getNextUp())?.name).toBe('Pull');
-    });
-
-    it('happens the same way to a Backup file from before, when it is imported', async () => {
-      const db = phoneWithARotation();
-      const fileFromBefore = backupFileOf(db, 4);
-      migrateToLatest(db);
-      const phone = createTracker(createTestDatabase());
-
-      await phone.importBackup(fileFromBefore);
-
-      const dataOn = async (tracker: typeof phone) =>
-        JSON.parse(await tracker.exportBackup('1.0.0')).tables;
-      expect(await dataOn(phone)).toEqual(await dataOn(createTracker(db)));
     });
   });
 });

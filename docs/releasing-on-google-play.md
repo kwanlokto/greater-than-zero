@@ -160,7 +160,7 @@ New personal accounts need this before production access.
 3. Run `eas build --platform android --profile production --auto-submit`. The build lands on internal testing as a draft.
 4. Roll it out to internal testing and try it on your phone. Then, in Play Console, promote it to the closed track or production.
 
-Migrations run at launch, so every update must open any older database. A migration that changes rows already there, or drops a column, must also bump `backupFormatVersion` in `src/core/backup.ts` and add a matching upgrade step, or importing an older Backup file undoes it.
+Migrations run at launch, so every update must open any older database. Importing an older Backup file runs the same migrations over its rows (ADR 0002), so a migration needs nothing more for Backups. Bump `backupFormatVersion` in `src/core/backup.ts` only when the layout of the Backup file itself changes.
 
 ## Later
 

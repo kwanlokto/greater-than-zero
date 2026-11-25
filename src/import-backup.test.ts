@@ -1,4 +1,4 @@
-import { createTestDatabase } from '@/core/test-database';
+import { createTestDatabase, openScratchDatabase } from '@/core/test-database';
 import { doWorkout } from '@/core/test-helpers';
 import { createTracker, type Tracker } from '@/core/tracker';
 import { importBackup } from '@/import-backup';
@@ -6,7 +6,7 @@ import { scriptedPrompter } from '@/scripted-prompter';
 
 // A phone where the lifter has done one Workout of this Exercise.
 async function phoneWith(exerciseName: string) {
-  const tracker = createTracker(createTestDatabase());
+  const tracker = createTracker(createTestDatabase(), { openScratchDatabase });
   await doWorkout(tracker, exerciseName, [{ weight: 100, reps: 5 }]);
   return tracker;
 }

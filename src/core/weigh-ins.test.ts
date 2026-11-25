@@ -1,4 +1,4 @@
-import { createTestDatabase } from './test-database';
+import { createTestDatabase, openScratchDatabase } from './test-database';
 import { clockAt } from './test-helpers';
 import { createTracker, problemWithWeighIn } from './tracker';
 
@@ -51,7 +51,7 @@ describe('Weigh-ins', () => {
 
   it('come back on a date whose Weigh-in a Backup file had deleted', async () => {
     const clock = clockAt('2026-09-29T07:30:00');
-    const tracker = createTracker(createTestDatabase(), clock);
+    const tracker = createTracker(createTestDatabase(), { ...clock, openScratchDatabase });
     await tracker.setWeighIn(82.1, 'kg');
     const backup = JSON.parse(await tracker.exportBackup('1.2.3'));
     backup.tables.weigh_ins[0].deleted_at = clock.now().getTime();
