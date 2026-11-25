@@ -19,7 +19,7 @@ describe('Rotations', () => {
 
     const rotation = await tracker.createRotation('PPL');
     for (const category of [push, pull, legs]) {
-      await tracker.addCategoryToRotation(rotation.id, category.id);
+      await tracker.addCategoryToRotation(rotation.id, { id: category.id });
     }
 
     const saved = await tracker.getRotation(rotation.id);
@@ -104,8 +104,8 @@ describe('Rotations', () => {
     const ppl = await tracker.createRotation('PPL');
     const pushPull = await tracker.createRotation('Push Pull');
     for (const rotation of [ppl, pushPull]) {
-      await tracker.addCategoryToRotation(rotation.id, push.id);
-      await tracker.addCategoryToRotation(rotation.id, pull.id);
+      await tracker.addCategoryToRotation(rotation.id, { id: push.id });
+      await tracker.addCategoryToRotation(rotation.id, { id: pull.id });
     }
 
     await tracker.deleteCategory(push.id);
@@ -154,9 +154,9 @@ describe('Rotations', () => {
     const tracker = createTracker(createTestDatabase());
     const push = await tracker.createCategory('Push');
     const rotation = await tracker.createRotation('PPL');
-    await tracker.addCategoryToRotation(rotation.id, push.id);
+    await tracker.addCategoryToRotation(rotation.id, { id: push.id });
 
-    await expect(tracker.addCategoryToRotation(rotation.id, push.id)).rejects.toThrow(
+    await expect(tracker.addCategoryToRotation(rotation.id, { id: push.id })).rejects.toThrow(
       'Push is already in that Rotation',
     );
     expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push']);
@@ -167,12 +167,53 @@ describe('Rotations', () => {
     const push = await tracker.createCategory('Push');
     const pull = await tracker.createCategory('Pull');
     const rotation = await tracker.createRotation('PPL');
-    await tracker.addCategoryToRotation(rotation.id, push.id);
+    await tracker.addCategoryToRotation(rotation.id, { id: push.id });
 
     const saved = await tracker.getRotation(rotation.id);
 
     expect(saved && canAddToRotation(saved, push.id)).toBe(false);
     expect(saved && canAddToRotation(saved, pull.id)).toBe(true);
+  });
+
+  it('take a Category by a new name, making it, so a split can be laid out before training', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const rotation = await tracker.createRotation('PPL');
+
+    await tracker.addCategoryToRotation(rotation.id, { name: 'Push' });
+    await tracker.addCategoryToRotation(rotation.id, { name: ' Pull ' });
+
+    expect(categoryNamesOf(await tracker.getRotation(rotation.id))).toEqual(['Push', 'Pull']);
+    expect(names(await tracker.getCategories())).toEqual(['Pull', 'Push']);
+    await tracker.setActiveRotation(rotation.id);
+    expect((await tracker.getNextUp())?.name).toBe('Push');
+  });
+
+  it('take the Category there already when a name is in use, whatever its capitals', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const legs = await tracker.createCategory('Legs');
+    const rotation = await tracker.createRotation('PPL');
+
+    await tracker.addCategoryToRotation(rotation.id, { name: 'legs' });
+
+    const [entry] = (await tracker.getRotation(rotation.id))?.entries ?? [];
+    expect(entry.category).toEqual({ id: legs.id, name: 'Legs' });
+    expect(names(await tracker.getCategories())).toEqual(['Legs']);
+    await expect(tracker.addCategoryToRotation(rotation.id, { name: 'LEGS' })).rejects.toThrow(
+      'Legs is already in that Rotation',
+    );
+  });
+
+  it("don't take a Category with no name, and none is made", async () => {
+    const tracker = createTracker(createTestDatabase());
+    const rotation = await tracker.createRotation('PPL');
+
+    await expect(tracker.addCategoryToRotation(rotation.id, { name: '  ' })).rejects.toThrow(
+      'A Category needs a name',
+    );
+    await expect(tracker.addCategoryToRotation('no-such', { name: 'Push' })).rejects.toThrow(
+      'No such Rotation',
+    );
+    expect(await tracker.getCategories()).toEqual([]);
   });
 
   it("can't take a deleted Category, or go in a deleted Rotation", async () => {
@@ -184,10 +225,10 @@ describe('Rotations', () => {
     await tracker.deleteCategory(pull.id);
     await tracker.deleteRotation(gone.id);
 
-    await expect(tracker.addCategoryToRotation(rotation.id, pull.id)).rejects.toThrow(
+    await expect(tracker.addCategoryToRotation(rotation.id, { id: pull.id })).rejects.toThrow(
       'No such Category',
     );
-    await expect(tracker.addCategoryToRotation(gone.id, push.id)).rejects.toThrow(
+    await expect(tracker.addCategoryToRotation(gone.id, { id: push.id })).rejects.toThrow(
       'No such Rotation',
     );
   });

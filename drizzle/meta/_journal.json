@@ -155,6 +155,13 @@
       "when": 1795575067676,
       "tag": "0021_templates_become_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1795575677545,
+      "tag": "0022_drop_workouts_rotation_id",
+      "breakpoints": true
     }
   ]
 }

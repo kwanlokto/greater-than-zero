@@ -3,7 +3,21 @@
 // look back at earlier Workouts; they ask here, so the order Workouts go in
 // and what a working Set is are each decided once.
 
-import { and, asc, desc, eq, isNotNull, isNull, lt, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import { notDeleted } from './records';
 import { exerciseEntries, exercises, sets, workouts, type WeightUnit } from './schema';
@@ -155,25 +169,29 @@ export function createSessionHistory(
       );
     },
 
-    // The Category of the most recent finished Workout that counted toward the
-    // Rotation. The Workout `alsoCounting` counts as finished already, so next
-    // up can be worked out before finishing it. Undefined when there's none.
-    async lastCategoryInRotation(
-      rotationId: string,
-      alsoCounting?: string,
-    ): Promise<string | null | undefined> {
+    // Which of these Categories was done last: the Category of the most recent
+    // finished Workout in one of them. The Workout `alsoCounting` counts as
+    // finished already, so next up can be worked out before finishing it.
+    // Undefined when none of them has been done.
+    async lastDoneAmong(categoryIds: string[], alsoCounting?: string): Promise<string | undefined> {
+      if (categoryIds.length === 0) return undefined;
       const [last] = await db
         .select({ categoryId: workouts.categoryId })
         .from(workouts)
         .where(
           and(
-            eq(workouts.rotationId, rotationId),
-            or(finished(), alsoCounting === undefined ? undefined : eq(workouts.id, alsoCounting)),
+            inArray(workouts.categoryId, categoryIds),
+            or(
+              finished(),
+              alsoCounting === undefined
+                ? undefined
+                : and(eq(workouts.id, alsoCounting), notDeleted(workouts)),
+            ),
           ),
         )
         .orderBy(...latestWorkoutFirst)
         .limit(1);
-      return last?.categoryId;
+      return last?.categoryId ?? undefined;
     },
 
     // Every finished Workout, the latest first, with its Category and the

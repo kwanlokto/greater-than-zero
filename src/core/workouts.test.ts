@@ -27,7 +27,6 @@ describe('Workouts', () => {
       restEndsAt: null,
       categoryId: null,
       categoryName: null,
-      rotationId: null,
       entries: [],
     });
   });

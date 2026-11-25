@@ -13,7 +13,7 @@ import type { TrackerDatabase } from './tracker';
 // (e.g. adding a built-in Exercise) or drops a column. Each bump adds a step to
 // formatUpgrades. An app refuses files from a newer version. The tables' shape
 // is versioned apart, by schemaVersion.
-export const backupFormatVersion = 4;
+export const backupFormatVersion = 5;
 
 export type BackupFile = {
   formatVersion: number;
@@ -75,6 +75,9 @@ const formatUpgrades: Record<number, (file: Record<string, unknown>) => Record<s
     // went (migration 0021).
     3: file =>
       withCategoriesFromTemplates(withoutColumn(file, 'exercise_entries', 'template_exercise_id')),
+    // Next up is read from History, so a Workout no longer records the
+    // Rotation it counted toward (migration 0022).
+    4: file => withoutColumn(file, 'workouts', 'rotation_id'),
   };
 
 // Whether a stored row has been soft-deleted.

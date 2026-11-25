@@ -87,9 +87,6 @@ export type Workout = {
   categoryId: string | null;
   // That Category's name as it is now, e.g. after a rename. Null with none.
   categoryName: string | null;
-  // The Rotation it counted toward: the one active when it was started in one
-  // of its Categories. Null otherwise.
-  rotationId: string | null;
   entries: ExerciseEntry[];
 };
 
@@ -214,7 +211,7 @@ type WorkoutDependencies = {
   getDisplayUnit: () => Promise<WeightUnit>;
   getFallbackRestSeconds: () => Promise<number>;
   categories: Pick<Categories, 'requireCategory'>;
-  rotations: Pick<Rotations, 'idOfActiveRotationWith' | 'findNextUp'>;
+  rotations: Pick<Rotations, 'findNextUp'>;
   reads: WorkoutReads;
 };
 
@@ -228,7 +225,7 @@ export function createWorkouts({
   rotations,
   reads,
 }: WorkoutDependencies) {
-  const { idOfActiveRotationWith, findNextUp } = rotations;
+  const { findNextUp } = rotations;
   const { findWorkout } = reads;
 
   // Positions aren't renumbered when a Set is deleted, so new Sets always go
@@ -440,7 +437,6 @@ export function createWorkouts({
           : start.categoryId === undefined
             ? null
             : categories.requireCategory(tx, start.categoryId).id;
-        const rotationId = categoryId && idOfActiveRotationWith(categoryId, tx);
         const started = tx
           .insert(workouts)
           .values({
@@ -448,7 +444,6 @@ export function createWorkouts({
             localDate: localDate ?? localDateOf(startedAt),
             isBackfilled: localDate !== undefined,
             categoryId,
-            rotationId,
           })
           .returning({ id: workouts.id })
           .get();

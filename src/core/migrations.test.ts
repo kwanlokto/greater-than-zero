@@ -1,6 +1,11 @@
 import { sql } from 'drizzle-orm';
 
-import { createTestDatabaseBefore, migrateToLatest } from './test-database';
+import {
+  backupFileOf,
+  createTestDatabase,
+  createTestDatabaseBefore,
+  migrateToLatest,
+} from './test-database';
 import { findExerciseByName } from './test-helpers';
 import { createTracker } from './tracker';
 
@@ -92,5 +97,47 @@ describe('Migrations', () => {
     expect(await rangeOf('Bench Press')).toEqual([4, 6]);
     expect(await rangeOf('Squat')).toEqual([8, 12]);
     expect(await rangeOf('Dip')).toEqual([8, 12]);
+  });
+
+  describe('dropping the Rotation a Workout counted toward', () => {
+    // A phone from before then: a Workout in Push, recorded against PPL.
+    function phoneWithARotation() {
+      const db = createTestDatabaseBefore('0022_drop_workouts_rotation_id');
+      db.run(sql`INSERT INTO categories (id, name) VALUES ('push', 'Push'), ('pull', 'Pull')`);
+      db.run(sql`INSERT INTO rotations (id, name, is_active) VALUES ('ppl', 'PPL', 1)`);
+      db.run(sql`INSERT INTO rotation_entries (id, rotation_id, category_id, position)
+                 VALUES ('place-1', 'ppl', 'push', 0), ('place-2', 'ppl', 'pull', 1)`);
+      addBenchWorkout(db);
+      db.run(sql`UPDATE workouts SET category_id = 'push', rotation_id = 'ppl'`);
+      return db;
+    }
+
+    it('keeps every Workout, and next up where History puts it', async () => {
+      const db = phoneWithARotation();
+
+      migrateToLatest(db);
+
+      expect(columnsOf(db, 'workouts')).not.toContain('rotation_id');
+      expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
+      const tracker = createTracker(db);
+      const { workouts } = await tracker.getDay('2026-09-28');
+      expect(workouts.map(workout => [workout.categoryName, workout.entries[0].sets.length])).toEqual(
+        [['Push', 2]],
+      );
+      expect((await tracker.getNextUp())?.name).toBe('Pull');
+    });
+
+    it('happens the same way to a Backup file from before, when it is imported', async () => {
+      const db = phoneWithARotation();
+      const fileFromBefore = backupFileOf(db, 4);
+      migrateToLatest(db);
+      const phone = createTracker(createTestDatabase());
+
+      await phone.importBackup(fileFromBefore);
+
+      const dataOn = async (tracker: typeof phone) =>
+        JSON.parse(await tracker.exportBackup('1.0.0')).tables;
+      expect(await dataOn(phone)).toEqual(await dataOn(createTracker(db)));
+    });
   });
 });

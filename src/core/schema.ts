@@ -127,9 +127,6 @@ export const workouts = sqliteTable('workouts', {
   // The Category it's in, if the lifter gave it one: its own, or the one of the
   // Workout it repeats.
   categoryId: text('category_id').references(() => categories.id),
-  // The Rotation it counted toward: the active one, when it was started in
-  // one of its Categories. Empty otherwise.
-  rotationId: text('rotation_id').references(() => rotations.id),
 });
 
 // An Exercise within a Workout.

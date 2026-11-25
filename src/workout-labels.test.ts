@@ -20,7 +20,6 @@ function workoutWith(changes: Partial<Workout>): Workout {
     restEndsAt: null,
     categoryId: null,
     categoryName: null,
-    rotationId: null,
     entries: [],
     ...changes,
   };

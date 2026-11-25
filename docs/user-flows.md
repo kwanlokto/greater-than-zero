@@ -247,10 +247,10 @@ flowchart TD
   S31 -->|tap a Rotation| S33["S33 Rotation"]
   S32 -->|Create rotation| S33
   S33 -->|Add category| S34["S34 Choose Category"]
-  S34 -->|pick a Category| S33
+  S34 -->|pick a Category, or add one by a new name| S33
   S33 -->|a Category's 🗑| D15{{"D15 Remove from Rotation?"}}
   S33 -->|Delete rotation| D14{{"D14 Delete Rotation?"}}
   D14 -->|Delete| S31
 ```
 
-A Category is made where it's used, by naming a Workout on S40, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself.
+A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself.

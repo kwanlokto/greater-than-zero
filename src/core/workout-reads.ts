@@ -32,7 +32,6 @@ export function createWorkoutReads(
         isBackfilled: true,
         restEndsAt: true,
         categoryId: true,
-        rotationId: true,
       },
       with: {
         category: { columns: { name: true } },

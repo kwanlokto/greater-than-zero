@@ -94,7 +94,7 @@ export async function createRotationWith(tracker: Tracker, name: string, categor
   for (const categoryName of categoryNames) {
     const category = await tracker.createCategory(categoryName);
     categories.push(category);
-    entries.push(await tracker.addCategoryToRotation(rotation.id, category.id));
+    entries.push(await tracker.addCategoryToRotation(rotation.id, { id: category.id }));
   }
   return { rotation, categories, entries };
 }

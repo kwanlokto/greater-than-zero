@@ -46,30 +46,12 @@ type RotationDependencies = {
   db: TrackerDatabase;
   now: () => Date;
   history: SessionHistory;
-  categories: Pick<Categories, 'requireCategory'>;
+  categories: Pick<Categories, 'requireCategory' | 'findOrCreate'>;
 };
 
 export type Rotations = ReturnType<typeof createRotations>;
 
 export function createRotations({ db, now, history, categories }: RotationDependencies) {
-  // The active Rotation, when the Category is in it: the one a Workout started
-  // from the Category counts toward. Synchronous, so it can run inside a
-  // transaction.
-  function idOfActiveRotationWith(categoryId: string, tx: TrackerDatabase = db) {
-    return tx
-      .select({ id: rotations.id })
-      .from(rotations)
-      .innerJoin(rotationEntries, eq(rotationEntries.rotationId, rotations.id))
-      .where(
-        and(
-          activeRotation(),
-          eq(rotationEntries.categoryId, categoryId),
-          notDeleted(rotationEntries),
-        ),
-      )
-      .get()?.id;
-  }
-
   // The Rotations matching `where`, by name, each with its Categories in order.
   // Deleted Rotations and removed Categories are left out.
   async function findRotations(where: SQL | undefined): Promise<Rotation[]> {
@@ -89,17 +71,21 @@ export function createRotations({ db, now, history, categories }: RotationDepend
   }
 
   // The Category to do next from the active Rotation: the one after the
-  // Category of the last finished Workout that counted toward it, wrapping
-  // around. The first one when there's no such Workout, or its Category has
-  // since left the Rotation. Null with no active Rotation, or an empty one.
-  // The Workout finishingWorkoutId counts as finished already, so
+  // Category, among those in it, that was done last, wrapping around. It's read
+  // from History: every finished Workout in one of its Categories counts,
+  // whenever it was done and whichever Rotation was active then. The first one
+  // when none of them has been done. Null with no active Rotation, or an empty
+  // one. The Workout finishingWorkoutId counts as finished already, so
   // finishWorkout can work it out before finishing it.
   async function findNextUp(finishingWorkoutId?: string): Promise<Category | null> {
     const [active] = await findRotations(activeRotation());
     if (!active || active.entries.length === 0) return null;
-    const lastCategoryId = await history.lastCategoryInRotation(active.id, finishingWorkoutId);
-    // -1 when it's not there, so the first one.
-    const lastIndex = active.entries.findIndex(({ category }) => category.id === lastCategoryId);
+    const lastDone = await history.lastDoneAmong(
+      active.entries.map(({ category }) => category.id),
+      finishingWorkoutId,
+    );
+    // -1 when none has been done, so the first one.
+    const lastIndex = active.entries.findIndex(({ category }) => category.id === lastDone);
     return active.entries[(lastIndex + 1) % active.entries.length].category;
   }
 
@@ -112,9 +98,14 @@ export function createRotations({ db, now, history, categories }: RotationDepend
         .get();
     },
 
-    // Appends the Category after the ones already in the Rotation. Enforces
+    // Appends the Category after the ones already in the Rotation: one there
+    // already, or one by its name, made if there's none called that yet, so a
+    // split can be laid out before any of it is trained. Enforces
     // canAddToRotation's rule against the saved Rotation.
-    async addCategoryToRotation(rotationId: string, categoryId: string): Promise<{ id: string }> {
+    async addCategoryToRotation(
+      rotationId: string,
+      choice: { id: string } | { name: string },
+    ): Promise<{ id: string }> {
       // Checked and inserted together, so a double tap adds it once.
       return db.transaction(tx => {
         const rotation = tx
@@ -123,7 +114,11 @@ export function createRotations({ db, now, history, categories }: RotationDepend
           .where(stillThere(rotations, rotationId))
           .get();
         if (!rotation) throw new Error('No such Rotation');
-        const category = categories.requireCategory(tx, categoryId);
+        const category =
+          'id' in choice
+            ? categories.requireCategory(tx, choice.id)
+            : categories.findOrCreate(tx, choice.name);
+        const categoryId = category.id;
         const already = tx
           .select({ id: rotationEntries.id })
           .from(rotationEntries)
@@ -186,8 +181,7 @@ export function createRotations({ db, now, history, categories }: RotationDepend
       });
     },
 
-    // Soft-deletes the Rotation with its entries, together. Workouts that
-    // counted toward it keep saying so.
+    // Soft-deletes the Rotation with its entries, together.
     async deleteRotation(id: string): Promise<void> {
       db.transaction(tx => {
         const deleted = softDelete(tx, rotations, eq(rotations.id, id), now(), { isActive: false });
@@ -228,5 +222,5 @@ export function createRotations({ db, now, history, categories }: RotationDepend
     },
   };
 
-  return { commands, idOfActiveRotationWith, findNextUp };
+  return { commands, findNextUp };
 }

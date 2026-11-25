@@ -1,42 +1,65 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
-import { EmptyState } from '@/components/empty-state';
+import { AppText } from '@/components/app-text';
+import { Button } from '@/components/button';
+import { Input } from '@/components/input';
 import { ListGroup, ListRow } from '@/components/list-row';
 import { Screen } from '@/components/screen';
-import { canAddToRotation, type Category } from '@/core/tracker';
+import { canAddToRotation } from '@/core/tracker';
 import { tracker } from '@/database';
 import { runOrAlert } from '@/run-or-alert';
+import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 
-// Picks a Category to add to the end of a Rotation, from those it can take.
+// Picks a Category to add to the end of a Rotation: one it can still take, or
+// a new one by name, so a split can be laid out before any of it is trained.
 export default function ChooseRotationCategoryScreen() {
   const { rotationId } = useLocalSearchParams<{ rotationId: string }>();
   const router = useRouter();
-  const categories = useTrackerQuery(async () => {
+  const addable = useTrackerQuery(async () => {
     const [all, rotation] = await Promise.all([
       tracker.getCategories(),
       tracker.getRotation(rotationId),
     ]);
-    return {
-      hasCategories: all.length > 0,
-      addable: rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [],
-    };
+    return rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [];
   }, [rotationId]);
+  const [newName, setNewName] = useState('');
 
-  async function add(category: Category) {
+  async function add(choice: { id: string } | { name: string }) {
     const added = await runOrAlert("Couldn't add the category", () =>
-      tracker.addCategoryToRotation(rotationId, category.id),
+      tracker.addCategoryToRotation(rotationId, choice),
     );
     if (added) router.back();
   }
 
-  if (!categories) return null;
+  if (!addable) return null;
 
   return (
-    <Screen>
-      {categories.addable.length > 0 && (
+    <Screen contentStyle={{ gap: space.lg }}>
+      <View style={styles.newCategory}>
+        <Input
+          value={newName}
+          onChangeText={setNewName}
+          placeholder="New category, e.g. Push"
+          accessibilityLabel="New category name"
+          autoCapitalize="words"
+          returnKeyType="done"
+          onSubmitEditing={() => newName.trim() && add({ name: newName })}
+          style={styles.name}
+        />
+        <Button
+          label="Add"
+          icon="add"
+          disabled={!newName.trim()}
+          // Guarded by the button: a double tap adds it once.
+          onPress={() => add({ name: newName })}
+        />
+      </View>
+      {addable.length > 0 ? (
         <ListGroup>
-          {categories.addable.map(category => (
+          {addable.map(category => (
             <ListRow
               key={category.id}
               title={category.name}
@@ -44,24 +67,27 @@ export default function ChooseRotationCategoryScreen() {
               trailingIcon="add-circle"
               trailingIconTone="primary"
               // Guarded by the row: a double tap adds it once.
-              onPress={() => add(category)}
+              onPress={() => add({ id: category.id })}
             />
           ))}
         </ListGroup>
+      ) : (
+        <AppText tone="muted">
+          Every category you have is in this rotation. Type a name to add a new one: starting it
+          from Today begins an empty workout in it.
+        </AppText>
       )}
-      {categories.addable.length === 0 &&
-        (categories.hasCategories ? (
-          <EmptyState
-            icon="checkmark-circle-outline"
-            title="Every category is already in this rotation."
-          />
-        ) : (
-          <EmptyState
-            icon="pricetag-outline"
-            title="No categories yet"
-            message="Give a workout a category, such as Push, by tapping its title. Then add it here."
-          />
-        ))}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  newCategory: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  name: {
+    flex: 1,
+  },
+});

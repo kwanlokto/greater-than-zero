@@ -173,13 +173,14 @@ describe('Backup import', () => {
       tables: { rotations, rotation_entries, ...tables },
       ...backup
     } = await backupWithData();
-    // As an app from before Rotations would have written it.
+    // As an app from before Rotations, and so before Exercises had a rep
+    // range, would have written it.
     const fromBeforeRotations = {
       ...backup,
       schemaVersion: beforeRotations,
       tables: {
         ...tables,
-        workouts: tables.workouts.map(({ rotation_id, ...workout }) => workout),
+        exercises: tables.exercises.map(({ min_reps, max_reps, ...exercise }) => exercise),
       },
     };
     const phone = createTracker(createTestDatabase());
@@ -187,8 +188,8 @@ describe('Backup import', () => {
     await phone.importBackup(JSON.stringify(fromBeforeRotations));
 
     expect(await phone.getRotations()).toEqual([]);
+    expect(await findExerciseByName(phone, 'Squat')).toMatchObject({ minReps: 8, maxReps: 12 });
     const [workout] = (await phone.getDay('2026-09-28')).workouts;
-    expect(workout.rotationId).toBeNull();
     expect(workout.entries.map(entry => entry.exercise.name)).toEqual(['Bench Press']);
   });
 
