@@ -27,12 +27,13 @@ export default function RepeatWorkoutScreen() {
   const router = useRouter();
   const today = useToday();
   const workouts = useTrackerQuery(() => tracker.getWorkoutsToRepeat(), []);
-  // How many earlier Workouts are shown: none until they're asked for, so the
-  // short list is what opens. One is still read, to know whether to offer them.
-  const [earlierShown, setEarlierShown] = useState(0);
+  // How many earlier Workouts to show. Undefined until they're asked for, so
+  // the short list is what opens; one is read meanwhile, to know whether
+  // there are any to offer.
+  const [earlierLimit, setEarlierLimit] = useState<number>();
   const earlier = useTrackerQuery(
-    () => tracker.getEarlierWorkouts(Math.max(earlierShown, 1)),
-    [earlierShown],
+    () => tracker.getEarlierWorkouts(earlierLimit ?? 1),
+    [earlierLimit],
   );
   // One tap starts one Workout, even if the lifter taps again while leaving.
   const starting = useRef(false);
@@ -63,22 +64,22 @@ export default function RepeatWorkoutScreen() {
             Tap a workout to start it again today, with the sets you logged then filled in.
           </AppText>
           <WorkoutRows workouts={workouts} today={today} onRepeat={repeat} />
-          {earlierShown === 0 && earlier && earlier.workouts.length > 0 && (
+          {earlierLimit === undefined && earlier && earlier.workouts.length > 0 && (
             <Button
               variant="ghost"
               icon="time-outline"
               label="Show earlier workouts"
-              onPress={() => setEarlierShown(earlierPage)}
+              onPress={() => setEarlierLimit(earlierPage)}
             />
           )}
-          {earlierShown > 0 && earlier && (
+          {earlierLimit !== undefined && earlier && (
             <Section title="Earlier workouts">
               <WorkoutRows workouts={earlier.workouts} today={today} onRepeat={repeat} />
               {earlier.more && (
                 <Button
                   variant="ghost"
                   label="Show more"
-                  onPress={() => setEarlierShown(shown => shown + earlierPage)}
+                  onPress={() => setEarlierLimit(earlierLimit + earlierPage)}
                 />
               )}
             </Section>

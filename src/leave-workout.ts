@@ -1,5 +1,5 @@
 import type { Tracker, Workout } from '@/core/tracker';
-import { confirmAndRun, runOrTell, type Prompter } from '@/prompter';
+import { confirmAndRun, type Prompter } from '@/prompter';
 import { plannedSetsDropped } from '@/workout-labels';
 
 // Where the lifter lands once a Workout closes: Today, or for a backfilled
@@ -20,16 +20,17 @@ export async function finishWorkout(
   workout: Pick<Workout, 'id' | 'entries' | 'isBackfilled' | 'localDate'>,
   closeWorkout: (landing: Landing) => void,
 ): Promise<'finished' | 'kept'> {
-  const finish = await prompter.ask({
-    title: 'Finish workout?',
-    // Planned Sets never logged go with it, so say so first.
-    message: plannedSetsDropped(workout),
-    decline: 'Cancel',
-    accept: 'Finish',
-  });
-  if (!finish) return 'kept';
-  const finished = await runOrTell(prompter, "Couldn't finish the workout", () =>
-    tracker.finishWorkout(workout.id),
+  const finished = await confirmAndRun(
+    prompter,
+    {
+      title: 'Finish workout?',
+      // Planned Sets never logged go with it, so say so first.
+      message: plannedSetsDropped(workout),
+      decline: 'Cancel',
+      accept: 'Finish',
+    },
+    "Couldn't finish the workout",
+    () => tracker.finishWorkout(workout.id),
   );
   if (!finished) return 'kept';
   closeWorkout(landingAfter(workout));

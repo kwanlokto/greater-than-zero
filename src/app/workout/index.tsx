@@ -11,6 +11,7 @@ import { alertPrompter } from '@/alert-prompter';
 import { canFinishWorkout } from '@/core/tracker';
 import { tracker } from '@/database';
 import { discardWorkout, finishWorkout, type Landing } from '@/leave-workout';
+import { showToday } from '@/show-today';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -37,8 +38,7 @@ export default function WorkoutScreen() {
       router.dismissTo({ pathname: '/day/[date]', params: { date: landing.localDate } });
       return;
     }
-    router.dismissAll();
-    router.navigate('/');
+    showToday(router);
   };
 
   const confirmFinish = async () => {

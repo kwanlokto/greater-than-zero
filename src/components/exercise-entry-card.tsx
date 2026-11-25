@@ -59,7 +59,7 @@ export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Prop
   const labels = setLabels(entry.sets, entry.plannedSets);
   const { hint } = setPresentationFor[trackingType];
   const hasPlanned = entry.plannedSets.length > 0;
-  const rowWaits = (hasPlanned || finished) && !addingAnother;
+  const addRowFolded = (hasPlanned || finished) && !addingAnother;
 
   async function logSet() {
     const { values } = next;
@@ -181,7 +181,7 @@ export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Prop
           ))}
         </View>
       )}
-      {rowWaits ? (
+      {addRowFolded ? (
         <Button
           variant="ghost"
           size="small"

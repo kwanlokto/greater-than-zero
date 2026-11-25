@@ -100,6 +100,14 @@ describe('Workout labels', () => {
     const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
 
     expect(doneWorkoutSummary(workout)).toBe(`${times} · 2 exercises · 4 sets`);
+    // The card's first line is the Workout's name, and the summary is the same
+    // under either.
+    expect(workoutName(workout)).toBe('Workout');
+    const inPush = workoutWith({ ...push, entries: workout.entries });
+    expect([workoutName(inPush), doneWorkoutSummary(inPush)]).toEqual([
+      'Push',
+      `${times} · 2 exercises · 4 sets`,
+    ]);
     // One of each reads as one, and an Exercise done twice counts once.
     expect(doneWorkoutSummary(workoutWith({ entries: [entryOf('bench', 1)] }))).toBe(
       `${times} · 1 exercise · 1 set`,

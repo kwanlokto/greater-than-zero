@@ -247,7 +247,7 @@ flowchart LR
   D16 -->|Hide| S35
 ```
 
-S25 returns to whichever screen opened it: S05 or S24. S36 opened from S10, while choosing an Exercise for a Workout, puts the new one in that Workout and returns there instead of to S35. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
+S25 returns to whichever screen opened it: S05 or S24. S36 opened from S10, while choosing an Exercise for a Workout, puts the new one in that Workout and returns there instead of to S35. If the new Exercise is made but can't be put in the Workout, S36 closes onto S10 after the alert, where it's now listed to pick. S37 opened from a Workout, by D06 or the "Ready to go heavier" pill, returns to that Workout on Save and after D16's Hide, instead of to S35. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
 
 ### Categories and Rotations
 

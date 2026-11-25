@@ -23,13 +23,13 @@ export default function ChooseRotationCategoryScreen() {
   const router = useRouter();
   // The Rotation as it stands, and the Categories it can still take. Each one
   // added leaves the list.
-  const choosing = useTrackerQuery(async () => {
+  const categories = useTrackerQuery(async () => {
     const [all, rotation] = await Promise.all([
       tracker.getCategories(),
       tracker.getRotation(rotationId),
     ]);
     return {
-      order: rotation && rotation.entries.length > 0 ? describeCategoryOrder(rotation) : undefined,
+      added: rotation && rotation.entries.length > 0 ? describeCategoryOrder(rotation) : undefined,
       addable: rotation ? all.filter(({ id }) => canAddToRotation(rotation, id)) : [],
     };
   }, [rotationId]);
@@ -43,8 +43,8 @@ export default function ChooseRotationCategoryScreen() {
     if (added && 'name' in choice) setNewName('');
   }
 
-  if (!choosing) return null;
-  const { order, addable } = choosing;
+  if (!categories) return null;
+  const { added, addable } = categories;
 
   return (
     <Screen contentStyle={{ gap: space.lg }}>
@@ -56,7 +56,7 @@ export default function ChooseRotationCategoryScreen() {
         }}
       />
       {/* What's in it so far, so each tap is seen to land, in order. */}
-      {order && <AppText variant="bodyStrong">{order}</AppText>}
+      {added && <AppText variant="bodyStrong">{added}</AppText>}
       <View style={styles.newCategory}>
         <Input
           value={newName}

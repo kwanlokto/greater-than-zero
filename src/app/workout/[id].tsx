@@ -10,6 +10,7 @@ import { Screen } from '@/components/screen';
 import { WorkoutTitle } from '@/components/workout-title';
 import { tracker } from '@/database';
 import { confirmThenRun, runOrAlert } from '@/run-or-alert';
+import { showToday } from '@/show-today';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -59,8 +60,7 @@ export default function PastWorkoutScreen() {
     if (!started) return;
     // The new Workout sits on Today, not on this old one: History's screens
     // close first, so hiding it never lands back here.
-    router.dismissAll();
-    router.navigate('/');
+    showToday(router);
     router.push('/workout');
   };
 
