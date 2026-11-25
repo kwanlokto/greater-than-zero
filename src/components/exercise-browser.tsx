@@ -4,6 +4,7 @@ import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import type { IconName } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { EmptyState } from '@/components/empty-state';
+import { Fab, fabClearance } from '@/components/fab';
 import { Input } from '@/components/input';
 import { Divider, ListRow } from '@/components/list-row';
 import { useBottomInset } from '@/components/screen';
@@ -17,10 +18,13 @@ type Props = {
   renderExercise: (exercise: Exercise) => ReactElement;
   // Room to leave under the last row, e.g. for a floating button.
   bottomSpace?: number;
+  // Offers a new Exercise, from a floating button and when nothing matches,
+  // handing over what's typed in the search box as its name.
+  onNewExercise?: (typedName: string) => void;
 };
 
 // The Exercise library with search by name and a muscle-group filter.
-export function ExerciseBrowser({ renderExercise, bottomSpace = 0 }: Props) {
+export function ExerciseBrowser({ renderExercise, bottomSpace = 0, onNewExercise }: Props) {
   const { colors } = useAppTheme();
   const bottomInset = useBottomInset();
   const [query, setQuery] = useState('');
@@ -29,6 +33,8 @@ export function ExerciseBrowser({ renderExercise, bottomSpace = 0 }: Props) {
     () => tracker.searchExercises({ query, muscleGroup }),
     [query, muscleGroup],
   );
+  const typedName = query.trim();
+  const newExercise = onNewExercise && (() => onNewExercise(typedName));
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -71,9 +77,27 @@ export function ExerciseBrowser({ renderExercise, bottomSpace = 0 }: Props) {
         keyboardDismissMode="on-drag"
         renderItem={({ item }) => renderExercise(item)}
         ItemSeparatorComponent={Divider}
-        contentContainerStyle={{ paddingBottom: bottomInset + bottomSpace }}
-        ListEmptyComponent={exercises && <EmptyState icon="search" title="No exercises match." />}
+        contentContainerStyle={{
+          paddingBottom: bottomInset + bottomSpace + (newExercise ? fabClearance : 0),
+        }}
+        ListEmptyComponent={
+          exercises && (
+            <EmptyState
+              icon="search"
+              title="No exercises match."
+              // The way on from a search that found nothing: make it.
+              action={
+                newExercise && {
+                  label: typedName ? `New exercise “${typedName}”` : 'New exercise',
+                  icon: 'add',
+                  onPress: newExercise,
+                }
+              }
+            />
+          )
+        }
       />
+      {newExercise && <Fab label="New exercise" onPress={newExercise} />}
     </View>
   );
 }

@@ -8,9 +8,10 @@ import { RestTimer } from '@/components/rest-timer';
 import { Screen } from '@/components/screen';
 import { WorkoutTitle } from '@/components/workout-title';
 import { alertPrompter } from '@/alert-prompter';
+import { canFinishWorkout } from '@/core/tracker';
 import { tracker } from '@/database';
-import { finishWorkout } from '@/finish-workout';
-import { confirmThenRun } from '@/run-or-alert';
+import { discardWorkout, finishWorkout, type Landing } from '@/leave-workout';
+import { showToday } from '@/show-today';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
@@ -30,25 +31,26 @@ export default function WorkoutScreen() {
     );
   }
 
-  const confirmFinish = async () => {
-    await finishWorkout(tracker, alertPrompter, workout, () => router.back());
+  // A Workout ends on Today, whatever was underneath it. A backfilled one
+  // goes back to the Day it was added to, opening it if it isn't underneath.
+  const close = (landing: Landing) => {
+    if (landing.on === 'day') {
+      router.dismissTo({ pathname: '/day/[date]', params: { date: landing.localDate } });
+      return;
+    }
+    showToday(router);
   };
 
-  // A discarded Workout is never recorded, so it won't appear in History.
-  const confirmDiscard = async () => {
-    const discarded = await confirmThenRun(
-      {
-        title: 'Discard this workout?',
-        message: 'Its exercises and sets will not be saved.',
-        decline: 'Keep it',
-        accept: 'Discard',
-        destructive: true,
-      },
-      "Couldn't discard the workout",
-      () => tracker.discardWorkout(workout.id),
-    );
-    if (discarded) router.back();
+  const confirmFinish = async () => {
+    await finishWorkout(tracker, alertPrompter, workout, close);
   };
+
+  const confirmDiscard = async () => {
+    await discardWorkout(tracker, alertPrompter, workout, close);
+  };
+
+  // Nothing to record until a Set is logged, so the way out is discarding.
+  const canFinish = canFinishWorkout(workout);
 
   return (
     <>
@@ -71,14 +73,28 @@ export default function WorkoutScreen() {
               style={{ marginLeft: -space.sm, marginRight: space.xs }}
             />
           ),
-          headerRight: () => (
-            <Button
-              size="small"
-              label="Finish"
-              onPress={confirmFinish}
-              style={{ marginRight: space.sm }}
-            />
-          ),
+          // The exit that works now: one started by mistake is discarded from
+          // here, and once a Set is logged it's finished from here.
+          headerRight: () =>
+            canFinish ? (
+              <Button
+                size="small"
+                label="Finish"
+                accessibilityLabel="Finish workout"
+                onPress={confirmFinish}
+                style={{ marginRight: space.sm }}
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                destructive
+                size="small"
+                label="Discard"
+                accessibilityLabel="Discard workout"
+                onPress={confirmDiscard}
+                style={{ marginRight: space.sm }}
+              />
+            ),
         }}
       />
       <Screen
@@ -109,7 +125,7 @@ export default function WorkoutScreen() {
             router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
           }
         />
-        {workout.entries.length > 0 && (
+        {canFinish && (
           <Button size="large" icon="checkmark" label="Finish workout" onPress={confirmFinish} />
         )}
         <Button variant="ghost" destructive label="Discard workout" onPress={confirmDiscard} />

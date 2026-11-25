@@ -4,7 +4,9 @@ import { formatTimeOfDay } from '@/dates';
 import {
   backfillTitle,
   finishedWorkoutWhen,
+  doneWorkoutSummary,
   lastDone,
+  plannedSetsDropped,
   setLabels,
   workoutExercises,
   workoutName,
@@ -75,6 +77,44 @@ describe('Workout labels', () => {
     expect(setLabels([], [warmUp, working, working])).toEqual(['W', '1', '2']);
     expect(setLabels([working], [warmUp, working])).toEqual(['1', 'W', '2']);
     expect(setLabels([])).toEqual([]);
+  });
+
+  it('says how many planned Sets finishing drops, and nothing when none are left', () => {
+    const entryWith = (planned: number) =>
+      ({ plannedSets: Array(planned).fill({}) }) as Workout['entries'][number];
+    const workoutOf = (...planned: number[]) => workoutWith({ entries: planned.map(entryWith) });
+
+    expect(plannedSetsDropped(workoutOf(0, 0))).toBeUndefined();
+    expect(plannedSetsDropped(workoutOf(1, 0))).toBe(
+      "1 planned set wasn't logged and will be dropped.",
+    );
+    expect(plannedSetsDropped(workoutOf(1, 2))).toBe(
+      "3 planned sets weren't logged and will be dropped.",
+    );
+  });
+
+  it("sums up a finished Workout for Today's card: when it took place, its Exercises and its Sets", () => {
+    const entryOf = (id: string, sets: number) =>
+      ({ exercise: { id }, sets: Array(sets).fill({}) }) as Workout['entries'][number];
+    const workout = workoutWith({ entries: [entryOf('bench', 3), entryOf('dip', 1)] });
+    const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
+
+    expect(doneWorkoutSummary(workout)).toBe(`${times} · 2 exercises · 4 sets`);
+    // The card's first line is the Workout's name, and the summary is the same
+    // under either.
+    expect(workoutName(workout)).toBe('Workout');
+    const inPush = workoutWith({ ...push, entries: workout.entries });
+    expect([workoutName(inPush), doneWorkoutSummary(inPush)]).toEqual([
+      'Push',
+      `${times} · 2 exercises · 4 sets`,
+    ]);
+    // One of each reads as one, and an Exercise done twice counts once.
+    expect(doneWorkoutSummary(workoutWith({ entries: [entryOf('bench', 1)] }))).toBe(
+      `${times} · 1 exercise · 1 set`,
+    );
+    expect(
+      doneWorkoutSummary(workoutWith({ entries: [entryOf('bench', 2), entryOf('bench', 1)] })),
+    ).toBe(`${times} · 1 exercise · 3 sets`);
   });
 
   it('names the day a backfilled Workout is for', () => {

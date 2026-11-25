@@ -114,12 +114,18 @@ export function createRotations({
   }
 
   const commands = {
+    // A Rotation made while none is active is the active one at once, so next
+    // up shows without the lifter finding a switch.
     async createRotation(name: string): Promise<{ id: string }> {
-      return db
-        .insert(rotations)
-        .values({ name: requireRotationName(name) })
-        .returning({ id: rotations.id })
-        .get();
+      // Checked and inserted together, so there's never more than one active.
+      return db.transaction(tx => {
+        const active = tx.select({ id: rotations.id }).from(rotations).where(activeRotation()).get();
+        return tx
+          .insert(rotations)
+          .values({ name: requireRotationName(name), isActive: !active })
+          .returning({ id: rotations.id })
+          .get();
+      });
     },
 
     // Appends the Category after the ones already in the Rotation: one there

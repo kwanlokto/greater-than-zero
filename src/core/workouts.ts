@@ -404,6 +404,31 @@ export function createWorkouts({
     return { categoryId: source.categoryId, plan };
   }
 
+  // Every finished Workout by ID, the most recently done first, told apart by
+  // whether it's the latest of its kind. Workouts in the same Category are one
+  // kind. Those in none are one kind when they hold the same Exercises,
+  // whatever the order, the weights or the reps.
+  async function finishedByKind(): Promise<{ latestOfEach: string[]; earlier: string[] }> {
+    const kinds = new Set<string>();
+    const latestOfEach: string[] = [];
+    const earlier: string[] = [];
+    for (const { id, categoryId, exerciseIds } of await history.finishedWorkoutsLatestFirst()) {
+      const kind = categoryId
+        ? `category ${categoryId}`
+        : `exercises ${[...new Set(exerciseIds)].sort().join(' ')}`;
+      (kinds.has(kind) ? earlier : latestOfEach).push(id);
+      kinds.add(kind);
+    }
+    return { latestOfEach, earlier };
+  }
+
+  // These Workouts, the most recently done first.
+  async function latestFirst(ids: string[]): Promise<Workout[]> {
+    const found = await reads.findWorkouts(inArray(workouts.id, ids));
+    // They come in the order Workouts go in, the earliest first.
+    return found.reverse();
+  }
+
   const commands = {
     // Starts a Workout now, recorded on today's date, or on an earlier
     // `localDate` to backfill a session that wasn't logged at the time.
@@ -660,23 +685,22 @@ export function createWorkouts({
     },
 
     // The Workouts to offer for repeating, the most recently done first: one
-    // for each kind of Workout, its latest finished one. Workouts in the same
-    // Category are one kind. Those in none are one kind when they hold the
-    // same Exercises, whatever the order, the weights or the reps.
+    // for each kind of Workout, its latest finished one (see finishedByKind).
     async getWorkoutsToRepeat(): Promise<Workout[]> {
-      const kinds = new Set<string>();
-      const latestOfEach: string[] = [];
-      for (const { id, categoryId, exerciseIds } of await history.finishedWorkoutsLatestFirst()) {
-        const kind = categoryId
-          ? `category ${categoryId}`
-          : `exercises ${[...new Set(exerciseIds)].sort().join(' ')}`;
-        if (kinds.has(kind)) continue;
-        kinds.add(kind);
-        latestOfEach.push(id);
-      }
-      const found = await reads.findWorkouts(inArray(workouts.id, latestOfEach));
-      // They come in the order Workouts go in, the earliest first.
-      return found.reverse();
+      const { latestOfEach } = await finishedByKind();
+      return latestFirst(latestOfEach);
+    },
+
+    // The finished Workouts that list leaves out, the most recently done
+    // first: for repeating one that isn't the latest of its kind. As many as
+    // `limit`, so a long History is read a page at a time, and whether there
+    // are more: asking for more hands back the same ones, then the next.
+    async getEarlierWorkouts(limit: number): Promise<{ workouts: Workout[]; more: boolean }> {
+      const { earlier } = await finishedByKind();
+      return {
+        workouts: await latestFirst(earlier.slice(0, limit)),
+        more: earlier.length > limit,
+      };
     },
 
     // The local dates in a month, given as YYYY-MM, with at least one finished

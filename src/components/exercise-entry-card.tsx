@@ -29,6 +29,9 @@ import { setLabels } from '@/workout-labels';
 type Props = {
   entry: EntryToLog;
   displayUnit: WeightUnit;
+  // In a finished Workout, opened from History: there it's mostly read, so
+  // the row for another Set waits behind a button.
+  finished?: boolean;
 };
 
 // The key to give each card. Swapping the Exercise starts its card afresh, so
@@ -40,14 +43,15 @@ export function entryCardKey(entry: Pick<EntryToLog, 'id' | 'exercise'>): string
 
 // One Exercise in a Workout: its Sets, each open to correction, the Sets still
 // planned, and a row to log another one.
-export function ExerciseEntryCard({ entry, displayUnit }: Props) {
+export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Props) {
   const router = useRouter();
   const { colors } = useAppTheme();
   const { trackingType } = entry.exercise;
   const [editingSetId, setEditingSetId] = useState<string>();
   const [menuOpen, setMenuOpen] = useState(false);
   // While Sets are still planned, the row for another one waits behind a
-  // button, so a long Workout is less to scroll through.
+  // button, so a long Workout is less to scroll through. In a finished
+  // Workout it waits there too, so a stray tap can't add a Set to History.
   const [addingAnother, setAddingAnother] = useState(false);
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
@@ -55,6 +59,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const labels = setLabels(entry.sets, entry.plannedSets);
   const { hint } = setPresentationFor[trackingType];
   const hasPlanned = entry.plannedSets.length > 0;
+  const addRowFolded = (hasPlanned || finished) && !addingAnother;
 
   async function logSet() {
     const { values } = next;
@@ -94,10 +99,22 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const swap = () =>
     router.navigate({ pathname: '/workout/choose-exercise', params: { swapEntryId: entry.id } });
 
+  // The Exercise's own screens, a tap from its card: where its rest length and
+  // rep range are kept, and how it has progressed. Back returns here.
+  const openSettings = () =>
+    router.navigate({ pathname: '/exercises/[id]', params: { id: entry.exercise.id } });
+  const openProgress = () =>
+    router.navigate({
+      pathname: '/progress/[exerciseId]',
+      params: { exerciseId: entry.exercise.id },
+    });
+
   const actions: SheetAction[] = [
     ...(canSwap
       ? [{ label: 'Swap exercise', icon: 'swap-horizontal' as const, onPress: swap }]
       : []),
+    { label: 'Rest and rep range', icon: 'timer-outline', onPress: openSettings },
+    { label: 'Progress', icon: 'stats-chart-outline', onPress: openProgress },
     { label: 'Remove exercise', icon: 'trash-outline', destructive: true, onPress: confirmRemove },
   ];
 
@@ -131,7 +148,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
         />
       </View>
       <LastTimeLine entry={entry} />
-      <ReadyToGoHeavierLine entry={entry} />
+      <ReadyToGoHeavierLine entry={entry} onPress={openSettings} />
       {(entry.sets.length > 0 || hasPlanned) && (
         <View style={styles.sets}>
           {entry.sets.map((set, index) =>
@@ -164,7 +181,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           ))}
         </View>
       )}
-      {hasPlanned && !addingAnother ? (
+      {addRowFolded ? (
         <Button
           variant="ghost"
           size="small"
@@ -402,18 +419,31 @@ function LastTimeLine({ entry }: { entry: EntryToLog }) {
 }
 
 // Shown when every working Set of the Exercise's last session reached the top
-// of its rep range.
-function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
+// of its rep range. Tapping it opens the Exercise, where that range is kept
+// and the rule is spelled out, so the hint explains itself.
+function ReadyToGoHeavierLine({ entry, onPress }: { entry: EntryToLog; onPress: () => void }) {
   const { colors } = useAppTheme();
   if (!entry.readyToGoHeavier) return null;
 
   return (
-    <View style={[styles.ready, { backgroundColor: colors.primarySoft }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="Opens this exercise's rep range, which the hint goes by"
+      // Drawn as a pill; touched like a button 48 high.
+      hitSlop={10}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.ready,
+        { backgroundColor: colors.primarySoft },
+        pressed && styles.pressed,
+      ]}
+    >
       <Ionicons name="trending-up" size={16} color={colors.onPrimarySoft} />
       <AppText variant="label" style={{ color: colors.onPrimarySoft }}>
         Ready to go heavier
       </AppText>
-    </View>
+      <Ionicons name="chevron-forward" size={14} color={colors.onPrimarySoft} />
+    </Pressable>
   );
 }
 

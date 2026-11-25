@@ -18,7 +18,7 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S08 | Progress tab | `/progress` | `src/app/(tabs)/progress.tsx` |
 | S09 | Workout in progress | `/workout` | `src/app/workout/index.tsx` |
 | S10 | Choose exercise: add to or swap in a Workout | `/workout/choose-exercise` | `src/app/workout/choose-exercise.tsx` |
-| S11 | Past Workout | `/workout/[id]` | `src/app/workout/[id].tsx` |
+| S11 | Past Workout: repeat it, or correct it | `/workout/[id]` | `src/app/workout/[id].tsx` |
 | S12 | Day | `/day/[date]` | `src/app/day/[date].tsx` |
 | S13 | Meal | `/meals/[id]` | `src/app/meals/[id].tsx` |
 | S14 | Add food: choose how | `/meals/choose-food` | `src/app/meals/choose-food.tsx` |
@@ -38,7 +38,7 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S33 | Rotation | `/rotations/[id]` | `src/app/rotations/[id].tsx` |
 | S34 | Choose Category for a Rotation | `/rotations/choose-category` | `src/app/rotations/choose-category.tsx` |
 | S35 | Exercise library | `/exercises` | `src/app/exercises/index.tsx` |
-| S36 | New exercise | `/exercises/new` | `src/app/exercises/new.tsx` |
+| S36 | New exercise: in the library, or straight into a Workout | `/exercises/new` | `src/app/exercises/new.tsx` |
 | S37 | Edit exercise | `/exercises/[id]` | `src/app/exercises/[id].tsx` |
 | S38 | Repeat a workout | `/workout/repeat` | `src/app/workout/repeat.tsx` |
 | S39 | Categories | `/categories` | `src/app/categories/index.tsx` |
@@ -52,10 +52,9 @@ A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) s
 
 | ID | Dialog | Shown on | Choices |
 |---|---|---|---|
-| D01 | Finish workout? | S09, Finish workout | Finish: the Workout finishes and closes, back to the screen underneath. Cancel: stays. |
-| D02 | No sets logged yet | S09, Finish workout with nothing logged | Discard: the Workout is discarded, back. Keep going: stays. |
-| D05 | Discard this workout? | S09, Discard workout | Discard: back. Keep it: stays. |
-| D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Remove exercise: D07, or removed at once with no Sets. |
+| D01 | Finish workout? | S09, Finish, once a Set is logged | Finish: the Workout finishes and closes onto S05, or a backfilled one onto its S12. Cancel: stays. It says first how many planned Sets were never logged. |
+| D05 | Discard this workout? | S09, Discard | Discard: closes onto S05, or a backfilled one onto its S12. Keep it: stays. |
+| D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Rest and rep range: S37. Progress: S22. Remove exercise: D07, or removed at once with no Sets. |
 | D07 | Remove *Exercise* and its *n* sets? | D06, Remove exercise | Remove or Cancel; stays. |
 | D08 | Delete this workout? | S11, Delete workout | Delete: back. |
 | D09 | Delete *Meal*? | S13, Delete meal | Delete: back. |
@@ -72,6 +71,8 @@ A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) s
 | D22 | Delete *Category*? | S39, a Category's 🗑 | Delete: its Workouts stay in History, in no Category; stays. |
 
 Retired with Templates: D03 Update Template?, D04 Raise the target?, D12 Delete Template?, D13 Remove from Template?
+
+Retired when Finish stopped being offered before a Set is logged: D02 No sets logged yet.
 
 Any command can be refused. A "Couldn't …" alert then says why, and the screen stays as it was.
 
@@ -107,14 +108,16 @@ Tapping the "Rest over" notification brings the app back where it was. If the ap
 flowchart LR
   S05["S05 Today"] -->|Start next up, or Empty workout| S09["S09 Workout in progress"]
   S05 -->|Repeat a workout| S38["S38 Repeat a workout"]
-  S38 -->|tap a Workout| S09
-  S05 -->|Set up a rotation, with none active| S31["S31 Rotations"]
+  S38 -->|tap a Workout, or an earlier one| S09
+  S05 -->|the Done card, once a Workout is finished today| S11["S11 Past Workout"]
+  S05 -->|Set up a rotation, with no Rotations yet| S32["S32 New Rotation"]
+  S05 -->|Set up a rotation, with some but none active| S31["S31 Rotations"]
   S05 -->|Meals, or the food card| S07["S07 Food"]
   S05 -->|Set daily targets, when none are set| S25["S25 Macro targets"]
   S05 -->|All weigh-ins| S23["S23 Weigh-ins"]
 ```
 
-Today's Weigh-in is entered on S05 itself.
+S38 lists the latest Workout of each kind, and "Show earlier workouts" lists every other finished one on S38 itself. Once a Workout is finished today, the Done card for the latest takes the Start section's place, and "Start another" brings the Start section back on S05 itself, until a Workout starts. Today's Weigh-in is entered on S05 itself.
 
 ### Working out
 
@@ -124,21 +127,26 @@ flowchart LR
   S09 -->|an Exercise's name, before any Set| S10
   S09 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
+  D06 -->|Rest and rep range| S37["S37 Edit exercise"]
+  S09 -->|the Ready to go heavier pill| S37
+  D06 -->|Progress| S22["S22 Exercise progress"]
   D06 -->|Remove exercise, with Sets| D07{{"D07 Remove and its sets?"}}
   S10 -->|pick an Exercise| S09
+  S10 -->|New exercise, or after a search that found nothing| S36["S36 New exercise"]
+  S36 -->|Add exercise: added, or swapped in| S09
   S09 -->|its title| S40["S40 Choose Category"]
   S40 -->|pick one, add one, or No category| S09
-  S09 -->|Finish workout| D01{{"D01 Finish workout?"}}
-  S09 -->|Finish workout, nothing logged| D02{{"D02 No sets logged yet"}}
-  S09 -->|Discard workout| D05{{"D05 Discard this workout?"}}
-  D01 -->|Finish: the Workout closes| back(["back"])
-  D02 -->|Discard| back
-  D05 -->|Discard| back
-  S09 -->|⌄ hide| back
+  S09 -->|Finish, once a Set is logged| D01{{"D01 Finish workout?"}}
+  S09 -->|Discard| D05{{"D05 Discard this workout?"}}
+  D01 -->|Finish| S05["S05 Today"]
+  D05 -->|Discard| S05
+  D01 -.->|a backfill| S12["S12 Day"]
+  D05 -.->|a backfill| S12
+  S09 -->|⌄ hide| back(["back"])
   S09 -.->|the first time a Workout starts| D18{{"D18 Notification permission"}}
 ```
 
-S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab, and "back" returns there, or to S05 after S38, whose place the Workout takes. The dotted line is a question that comes up on its own. Nothing is asked after a Workout finishes.
+S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab. Hiding it goes "back" to where it was opened, or to S05 after S38 or S11: the Workout takes S38's place, and a repeat from S11 closes History's screens before it opens. Finishing or discarding it closes everything above the tabs and shows S05. A backfilled Workout goes to the S12 it was added to instead, opening it if it isn't underneath. The header's button is Discard until a Set is logged and Finish after. The dotted line to D18 is a question that comes up on its own. Nothing is asked after a Workout finishes.
 
 ### History
 
@@ -155,12 +163,15 @@ flowchart TD
   S11 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   S10 -->|pick an Exercise| S11
-  S11 -->|Repeat this workout| S09
+  S11 -->|Repeat this workout: opens over S05| S09
+  S11 -->|Go to the workout in progress| S09
   S11 -->|its title| S40["S40 Choose Category"]
   S40 -->|pick one, add one, or No category| S11
   S11 -->|Delete workout| D08{{"D08 Delete this workout?"}}
   D08 -->|Delete| S12
 ```
+
+S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05. S10 opened from S11 offers S36 as it does from S09, and S36 then returns to S11. D06 opens S37 and S22 from S11 as it does from S09, and "back" from either returns to the Workout it was opened from. The "Ready to go heavier" pill only shows in a Workout in progress.
 
 ### Meals
 
@@ -236,7 +247,7 @@ flowchart LR
   D16 -->|Hide| S35
 ```
 
-S25 returns to whichever screen opened it: S05 or S24. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
+S25 returns to whichever screen opened it: S05 or S24. S36 opened from S10, while choosing an Exercise for a Workout, puts the new one in that Workout and returns there instead of to S35. If the new Exercise is made but can't be put in the Workout, S36 closes onto S10 after the alert, where it's now listed to pick. S37 opened from a Workout, by D06 or the "Ready to go heavier" pill, returns to that Workout on Save and after D16's Hide, instead of to S35. Changing the weight unit, and an Exercise's rest length and rep range, happen on the screen itself.
 
 ### Categories and Rotations
 
@@ -245,12 +256,12 @@ flowchart TD
   S39["S39 Categories"] -->|a Category's 🗑| D22{{"D22 Delete Category?"}}
   S31["S31 Rotations"] -->|New rotation| S32["S32 New Rotation"]
   S31 -->|tap a Rotation| S33["S33 Rotation"]
-  S32 -->|Create rotation| S33
+  S32 -->|Create rotation: active when no other is| S33
   S33 -->|Add category| S34["S34 Choose Category"]
-  S34 -->|pick a Category, or add one by a new name| S33
+  S34 -->|pick Categories, or add them by new names, then Done| S33
   S33 -->|a Category's 🗑| D15{{"D15 Remove from Rotation?"}}
   S33 -->|Delete rotation| D14{{"D14 Delete Rotation?"}}
   D14 -->|Delete| S31
 ```
 
-A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself.
+A Category is made where it's used, by naming a Workout on S40 or adding a new name to a Rotation on S34, so S39 only renames and deletes. Renaming a Category or Rotation, reordering and switching a Rotation on happen on the screen itself. A Rotation made while none is active is active at once. S34 stays open while Categories are added, each leaving its list, until Done. S32 opened from S05 leads to S33 as it does from S31, and "back" from there returns to S05.
