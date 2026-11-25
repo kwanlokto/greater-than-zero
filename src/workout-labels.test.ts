@@ -3,9 +3,9 @@ import { formatTimeOfDay } from '@/dates';
 
 import {
   backfillTitle,
-  finishedWorkoutTitle,
   finishedWorkoutWhen,
   lastDone,
+  setLabels,
   workoutExercises,
   workoutName,
 } from './workout-labels';
@@ -37,20 +37,12 @@ describe('Workout labels', () => {
     expect(workoutName(workoutWith({}))).toBe('Workout');
   });
 
-  it('titles a finished Workout by its Category, with its date on the line under', () => {
-    const workout = workoutWith(push);
-    const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
-
-    expect(finishedWorkoutTitle(workout)).toBe('Push');
-    expect(finishedWorkoutWhen(workout)).toBe(`Saturday 12 Sep · ${times}`);
-  });
-
-  it('titles a finished Workout in no Category by its date', () => {
+  it("puts a finished Workout's date on the line under its name, whatever its Category", () => {
     const workout = workoutWith({});
     const times = `${formatTimeOfDay(workout.startedAt)} – ${formatTimeOfDay(workout.finishedAt!)}`;
 
-    expect(finishedWorkoutTitle(workout)).toBe('Saturday 12 Sep');
-    expect(finishedWorkoutWhen(workout)).toBe(times);
+    expect(finishedWorkoutWhen(workout)).toBe(`Saturday 12 Sep · ${times}`);
+    expect(finishedWorkoutWhen(workoutWith(push))).toBe(`Saturday 12 Sep · ${times}`);
   });
 
   it("lists a Workout's Exercises in order, each once", () => {
@@ -71,6 +63,18 @@ describe('Workout labels', () => {
     expect(lastDone('2026-11-02', '2026-11-16')).toBe('2 Nov');
     // Across a change of the clocks, and a month's end.
     expect(lastDone('2026-10-29', '2026-11-04')).toBe('6 days ago');
+  });
+
+  it('marks warm-ups W and numbers working Sets among themselves, planned ones following', () => {
+    const warmUp = { isWarmUp: true };
+    const working = { isWarmUp: false };
+
+    expect(setLabels([warmUp, working, warmUp, working])).toEqual(['W', '1', 'W', '2']);
+    expect(setLabels([warmUp, working], [working, working])).toEqual(['W', '1', '2', '3']);
+    // A repeat brings its warm-ups along as planned Sets.
+    expect(setLabels([], [warmUp, working, working])).toEqual(['W', '1', '2']);
+    expect(setLabels([working], [warmUp, working])).toEqual(['1', 'W', '2']);
+    expect(setLabels([])).toEqual([]);
   });
 
   it('names the day a backfilled Workout is for', () => {

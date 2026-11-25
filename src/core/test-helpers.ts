@@ -105,7 +105,8 @@ export async function doCategoryWorkout(tracker: Tracker, categoryId: string, st
   const bench = await findExerciseByName(tracker, 'Bench Press');
   const entry = await tracker.addExerciseToWorkout(workout.id, bench.id);
   await tracker.logSet(entry.id, { weight: 60, reps: 10 }, 'kg');
-  return { workout, summary: await tracker.finishWorkout(workout.id) };
+  await tracker.finishWorkout(workout.id);
+  return { workout };
 }
 
 // A Food item whose 101 kcal are worked out from its macros (4/4/9).

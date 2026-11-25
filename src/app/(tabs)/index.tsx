@@ -40,10 +40,6 @@ export default function TodayScreen() {
     if (started) router.push('/workout');
   }
 
-  // Next up is started by repeating the latest Workout in that Category, which
-  // is also what its card shows; one never done yet starts empty, in it.
-  const latestNextUp = nextUp ? toRepeat?.find(done => done.categoryId === nextUp.id) : undefined;
-
   return (
     <Screen onTab contentStyle={styles.content}>
       {/* Only one Workout can be in progress; while one is, the Workout bar
@@ -63,15 +59,14 @@ export default function TodayScreen() {
             <NextUp
               name={nextUp.name}
               detail={
-                latestNextUp
+                nextUp.latest
                   ? // When comes first, so a long list of Exercises is what gets cut short.
-                    `${lastDone(latestNextUp.localDate, today)} · ${workoutExercises(latestNextUp)}`
+                    `${lastDone(nextUp.latest.localDate, today)} · ${workoutExercises(nextUp.latest)}`
                   : 'Not done yet: starts empty'
               }
-              // Guarded by the button: a double tap starts one Workout.
-              onStart={() =>
-                start(latestNextUp ? { repeatOf: latestNextUp.id } : { categoryId: nextUp.id })
-              }
+              // Repeats its latest Workout, or starts one empty in it. Guarded
+              // by the button: a double tap starts one Workout.
+              onStart={() => start(nextUp.start)}
             />
           )}
           <View style={styles.ways}>

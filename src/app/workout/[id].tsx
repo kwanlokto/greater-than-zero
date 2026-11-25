@@ -12,7 +12,7 @@ import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { space } from '@/theme';
 import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
-import { finishedWorkoutTitle, finishedWorkoutWhen } from '@/workout-labels';
+import { finishedWorkoutWhen, workoutName } from '@/workout-labels';
 
 // A finished Workout opened from History, corrected with the same tools as
 // during a Workout. It keeps its date and stays finished; there's no rest. It
@@ -61,11 +61,9 @@ export default function PastWorkoutScreen() {
     <Screen contentStyle={styles.content}>
       <Stack.Screen
         options={{
-          title: finishedWorkoutTitle(workout),
+          title: workoutName(workout),
           // Tapping the title chooses the Workout's Category.
-          headerTitle: () => (
-            <WorkoutTitle workoutId={workout.id} title={finishedWorkoutTitle(workout)} />
-          ),
+          headerTitle: () => <WorkoutTitle workoutId={workout.id} title={workoutName(workout)} />,
         }}
       />
       <AppText tone="muted" style={styles.times}>

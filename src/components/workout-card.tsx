@@ -3,28 +3,25 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
-import { setLabels } from '@/components/set-fields';
 import { describeSet, type ExerciseEntry, type Workout } from '@/core/tracker';
 import { radius, space, useAppTheme } from '@/theme';
-import { workoutTimes } from '@/workout-labels';
+import { setLabels, workoutName, workoutTimes } from '@/workout-labels';
 
 type Props = {
   workout: Workout;
   onPress: () => void;
 };
 
-// A finished Workout as it was recorded: its Category, if it has one, and when
-// it took place, then each Exercise with its Sets, weights in the display
-// unit. Pressing it opens it for editing.
+// A finished Workout as it was recorded: its name and when it took place, then
+// each Exercise with its Sets, weights in the display unit. Pressing it opens
+// it for editing.
 export function WorkoutCard({ workout, onPress }: Props) {
   const { colors } = useAppTheme();
 
   return (
     <Card onPress={onPress} accessibilityHint="Opens this workout for editing" style={styles.card}>
       <View style={styles.heading}>
-        {workout.categoryName !== null && (
-          <AppText variant="heading">{workout.categoryName}</AppText>
-        )}
+        <AppText variant="heading">{workoutName(workout)}</AppText>
         <View style={styles.header}>
           <Ionicons name="time-outline" size={16} color={colors.textMuted} />
           <AppText variant="label" tone="muted" style={styles.time}>

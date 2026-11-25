@@ -4,7 +4,7 @@ import { StyleSheet, type KeyboardTypeOptions } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { Input } from '@/components/input';
 
-import type { PlannedSet, TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
+import type { TrackingType, WeightUnit, WorkoutSet } from '@/core/tracker';
 import { readSet, setBoxesOf, type SetBoxes } from '@/form-values';
 
 type SetPresentation = {
@@ -43,18 +43,6 @@ export const setPresentationFor: Record<TrackingType, SetPresentation> = {
     hint: 'Leave blank for bodyweight. Use a negative number for an assisted machine.',
   },
 };
-
-// Warm-ups are marked W; working Sets are numbered among themselves. Labels
-// for any planned Sets follow, numbered on from the working Sets, a planned
-// warm-up marked W too.
-export function setLabels(
-  sets: WorkoutSet[],
-  planned: Pick<PlannedSet, 'isWarmUp'>[] = [],
-): string[] {
-  let working = 0;
-  const label = (set: { isWarmUp: boolean }) => (set.isWarmUp ? 'W' : String(++working));
-  return [...sets.map(label), ...planned.map(label)];
-}
 
 // A logged Set being corrected, or a planned Set being confirmed.
 type OpenedSet = Pick<WorkoutSet, 'weight' | 'reps'> & { isWarmUp?: boolean };

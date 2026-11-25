@@ -237,25 +237,6 @@ describe('Next up', () => {
     expect(await nextUpName(tracker)).toBe('Pull');
   });
 
-  it('is reported on finishing a Workout, counting it already', async () => {
-    const tracker = createTracker(createTestDatabase());
-    const {
-      rotation,
-      categories: [push],
-    } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull', 'Legs']);
-    const arms = await tracker.createCategory('Arms');
-    await tracker.setActiveRotation(rotation.id);
-
-    const afterPush = await doCategoryWorkout(tracker, push.id);
-    const afterArms = await doCategoryWorkout(tracker, arms.id);
-    await tracker.setActiveRotation(null);
-    const afterNoRotation = await doCategoryWorkout(tracker, push.id);
-
-    expect(afterPush.summary.nextUp?.name).toBe('Pull');
-    expect(afterArms.summary.nextUp?.name).toBe('Pull');
-    expect(afterNoRotation.summary.nextUp).toBeNull();
-  });
-
   it("doesn't count a Workout still in progress", async () => {
     const tracker = createTracker(createTestDatabase());
     const {
@@ -296,5 +277,54 @@ describe('Next up', () => {
     await tracker.removeCategoryFromRotation(entries[0].id);
 
     expect(await nextUpName(tracker)).toBeNull();
+  });
+
+  it('comes with its latest finished Workout, and starts by repeating it', async () => {
+    const clock = clockAt('2026-09-27T18:00:00-04:00');
+    const tracker = createTracker(createTestDatabase(), clock);
+    const {
+      rotation,
+      categories: [push, pull],
+    } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
+    await tracker.setActiveRotation(rotation.id);
+    await doCategoryWorkout(tracker, pull.id);
+    clock.setTime('2026-09-28T18:00:00-04:00');
+    const { workout: latestPull } = await doCategoryWorkout(tracker, pull.id);
+    clock.setTime('2026-09-29T18:00:00-04:00');
+    await doCategoryWorkout(tracker, push.id);
+
+    const nextUp = await tracker.getNextUp();
+
+    expect(nextUp).toMatchObject({
+      id: pull.id,
+      name: 'Pull',
+      latest: { id: latestPull.id, localDate: '2026-09-28' },
+      start: { repeatOf: latestPull.id },
+    });
+    const started = await tracker.startWorkout(nextUp?.start);
+    const workout = await tracker.getWorkout(started.id);
+    expect(workout?.categoryName).toBe('Pull');
+    expect(workout?.entries[0].plannedSets).toHaveLength(1);
+  });
+
+  it('starts empty, in its Category, when none in it has been finished', async () => {
+    const tracker = createTracker(createTestDatabase());
+    const {
+      rotation,
+      categories: [push],
+    } = await createRotationWith(tracker, 'PPL', ['Push', 'Pull']);
+    await tracker.setActiveRotation(rotation.id);
+    // A discarded Workout in it was never finished.
+    const discarded = await tracker.startWorkout({ categoryId: push.id });
+    await tracker.discardWorkout(discarded.id);
+
+    const nextUp = await tracker.getNextUp();
+
+    expect(nextUp).toMatchObject({ id: push.id, latest: null, start: { categoryId: push.id } });
+    const started = await tracker.startWorkout(nextUp?.start);
+    expect(await tracker.getWorkout(started.id)).toMatchObject({
+      categoryName: 'Push',
+      entries: [],
+    });
   });
 });

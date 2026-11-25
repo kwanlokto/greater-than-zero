@@ -170,28 +170,29 @@ export function createSessionHistory(
     },
 
     // Which of these Categories was done last: the Category of the most recent
-    // finished Workout in one of them. The Workout `alsoCounting` counts as
-    // finished already, so next up can be worked out before finishing it.
-    // Undefined when none of them has been done.
-    async lastDoneAmong(categoryIds: string[], alsoCounting?: string): Promise<string | undefined> {
+    // finished Workout in one of them. Undefined when none of them has been
+    // done.
+    async lastDoneAmong(categoryIds: string[]): Promise<string | undefined> {
       if (categoryIds.length === 0) return undefined;
       const [last] = await db
         .select({ categoryId: workouts.categoryId })
         .from(workouts)
-        .where(
-          and(
-            inArray(workouts.categoryId, categoryIds),
-            or(
-              finished(),
-              alsoCounting === undefined
-                ? undefined
-                : and(eq(workouts.id, alsoCounting), notDeleted(workouts)),
-            ),
-          ),
-        )
+        .where(and(inArray(workouts.categoryId, categoryIds), finished()))
         .orderBy(...latestWorkoutFirst)
         .limit(1);
       return last?.categoryId ?? undefined;
+    },
+
+    // The latest finished Workout in a Category, by ID. Undefined when none in
+    // it has been finished.
+    async latestFinishedIn(categoryId: string): Promise<string | undefined> {
+      const [latest] = await db
+        .select({ id: workouts.id })
+        .from(workouts)
+        .where(and(eq(workouts.categoryId, categoryId), finished()))
+        .orderBy(...latestWorkoutFirst)
+        .limit(1);
+      return latest?.id;
     },
 
     // Every finished Workout, the latest first, with its Category and the
