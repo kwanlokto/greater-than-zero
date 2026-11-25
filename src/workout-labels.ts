@@ -41,6 +41,16 @@ export function workoutExercises(workout: Pick<Workout, 'entries'>): string {
   return [...new Set(workout.entries.map(entry => entry.exercise.name))].join(', ');
 }
 
+// What finishing a Workout drops, for the lifter to hear first: the planned
+// Sets never logged. Undefined when none are left.
+export function plannedSetsDropped(workout: Pick<Workout, 'entries'>): string | undefined {
+  const left = workout.entries.reduce((count, entry) => count + entry.plannedSets.length, 0);
+  if (left === 0) return undefined;
+  return left === 1
+    ? "1 planned set wasn't logged and will be dropped."
+    : `${left} planned sets weren't logged and will be dropped.`;
+}
+
 // How long ago a Workout on `localDate` was done, against today: "today",
 // "yesterday", "9 days ago", then its date once two weeks have passed.
 export function lastDone(localDate: string, today: string): string {

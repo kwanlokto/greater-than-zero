@@ -5,6 +5,7 @@ import {
   backfillTitle,
   finishedWorkoutWhen,
   lastDone,
+  plannedSetsDropped,
   setLabels,
   workoutExercises,
   workoutName,
@@ -75,6 +76,20 @@ describe('Workout labels', () => {
     expect(setLabels([], [warmUp, working, working])).toEqual(['W', '1', '2']);
     expect(setLabels([working], [warmUp, working])).toEqual(['1', 'W', '2']);
     expect(setLabels([])).toEqual([]);
+  });
+
+  it('says how many planned Sets finishing drops, and nothing when none are left', () => {
+    const entryWith = (planned: number) =>
+      ({ plannedSets: Array(planned).fill({}) }) as Workout['entries'][number];
+    const workoutOf = (...planned: number[]) => workoutWith({ entries: planned.map(entryWith) });
+
+    expect(plannedSetsDropped(workoutOf(0, 0))).toBeUndefined();
+    expect(plannedSetsDropped(workoutOf(1, 0))).toBe(
+      "1 planned set wasn't logged and will be dropped.",
+    );
+    expect(plannedSetsDropped(workoutOf(1, 2))).toBe(
+      "3 planned sets weren't logged and will be dropped.",
+    );
   });
 
   it('names the day a backfilled Workout is for', () => {

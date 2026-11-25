@@ -52,9 +52,8 @@ A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) s
 
 | ID | Dialog | Shown on | Choices |
 |---|---|---|---|
-| D01 | Finish workout? | S09, Finish workout | Finish: the Workout finishes and closes, back to the screen underneath. Cancel: stays. |
-| D02 | No sets logged yet | S09, Finish workout with nothing logged | Discard: the Workout is discarded, back. Keep going: stays. |
-| D05 | Discard this workout? | S09, Discard workout | Discard: back. Keep it: stays. |
+| D01 | Finish workout? | S09, Finish, once a Set is logged | Finish: the Workout finishes and closes onto S05, or a backfilled one onto its S12. Cancel: stays. It says first how many planned Sets were never logged. |
+| D05 | Discard this workout? | S09, Discard | Discard: closes onto S05, or a backfilled one onto its S12. Keep it: stays. |
 | D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Remove exercise: D07, or removed at once with no Sets. |
 | D07 | Remove *Exercise* and its *n* sets? | D06, Remove exercise | Remove or Cancel; stays. |
 | D08 | Delete this workout? | S11, Delete workout | Delete: back. |
@@ -72,6 +71,8 @@ A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) s
 | D22 | Delete *Category*? | S39, a Category's 🗑 | Delete: its Workouts stay in History, in no Category; stays. |
 
 Retired with Templates: D03 Update Template?, D04 Raise the target?, D12 Delete Template?, D13 Remove from Template?
+
+Retired when Finish stopped being offered before a Set is logged: D02 No sets logged yet.
 
 Any command can be refused. A "Couldn't …" alert then says why, and the screen stays as it was.
 
@@ -128,17 +129,17 @@ flowchart LR
   S10 -->|pick an Exercise| S09
   S09 -->|its title| S40["S40 Choose Category"]
   S40 -->|pick one, add one, or No category| S09
-  S09 -->|Finish workout| D01{{"D01 Finish workout?"}}
-  S09 -->|Finish workout, nothing logged| D02{{"D02 No sets logged yet"}}
-  S09 -->|Discard workout| D05{{"D05 Discard this workout?"}}
-  D01 -->|Finish: the Workout closes| back(["back"])
-  D02 -->|Discard| back
-  D05 -->|Discard| back
-  S09 -->|⌄ hide| back
+  S09 -->|Finish, once a Set is logged| D01{{"D01 Finish workout?"}}
+  S09 -->|Discard| D05{{"D05 Discard this workout?"}}
+  D01 -->|Finish| S05["S05 Today"]
+  D05 -->|Discard| S05
+  D01 -.->|a backfill| S12["S12 Day"]
+  D05 -.->|a backfill| S12
+  S09 -->|⌄ hide| back(["back"])
   S09 -.->|the first time a Workout starts| D18{{"D18 Notification permission"}}
 ```
 
-S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab, and "back" returns there, or to S05 after S38, whose place the Workout takes. The dotted line is a question that comes up on its own. Nothing is asked after a Workout finishes.
+S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab. Hiding it goes "back" to where it was opened, or to S05 after S38, whose place the Workout takes. Finishing or discarding it closes everything above the tabs and shows S05. A backfilled Workout goes to the S12 it was added to instead, opening it if it isn't underneath. The header's button is Discard until a Set is logged and Finish after. The dotted line to D18 is a question that comes up on its own. Nothing is asked after a Workout finishes.
 
 ### History
 
