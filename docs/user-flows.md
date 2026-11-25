@@ -54,7 +54,7 @@ A screen opened for a record that's gone (a deleted Meal, Rotation or Workout) s
 |---|---|---|---|
 | D01 | Finish workout? | S09, Finish, once a Set is logged | Finish: the Workout finishes and closes onto S05, or a backfilled one onto its S12. Cancel: stays. It says first how many planned Sets were never logged. |
 | D05 | Discard this workout? | S09, Discard | Discard: closes onto S05, or a backfilled one onto its S12. Keep it: stays. |
-| D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Remove exercise: D07, or removed at once with no Sets. |
+| D06 | Exercise actions (bottom sheet) | S09, S11: an Exercise's ⋯ | Swap exercise (before any Set is logged): S10. Rest and rep range: S37. Progress: S22. Remove exercise: D07, or removed at once with no Sets. |
 | D07 | Remove *Exercise* and its *n* sets? | D06, Remove exercise | Remove or Cancel; stays. |
 | D08 | Delete this workout? | S11, Delete workout | Delete: back. |
 | D09 | Delete *Meal*? | S13, Delete meal | Delete: back. |
@@ -126,6 +126,9 @@ flowchart LR
   S09 -->|an Exercise's name, before any Set| S10
   S09 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
+  D06 -->|Rest and rep range| S37["S37 Edit exercise"]
+  S09 -->|the Ready to go heavier pill| S37
+  D06 -->|Progress| S22["S22 Exercise progress"]
   D06 -->|Remove exercise, with Sets| D07{{"D07 Remove and its sets?"}}
   S10 -->|pick an Exercise| S09
   S10 -->|New exercise, or after a search that found nothing| S36["S36 New exercise"]
@@ -167,7 +170,7 @@ flowchart TD
   D08 -->|Delete| S12
 ```
 
-S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05. S10 opened from S11 offers S36 as it does from S09, and S36 then returns to S11.
+S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05. S10 opened from S11 offers S36 as it does from S09, and S36 then returns to S11. D06 opens S37 and S22 from S11 as it does from S09, and "back" from either returns to the Workout it was opened from. The "Ready to go heavier" pill only shows in a Workout in progress.
 
 ### Meals
 

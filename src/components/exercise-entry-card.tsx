@@ -99,10 +99,22 @@ export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Prop
   const swap = () =>
     router.navigate({ pathname: '/workout/choose-exercise', params: { swapEntryId: entry.id } });
 
+  // The Exercise's own screens, a tap from its card: where its rest length and
+  // rep range are kept, and how it has progressed. Back returns here.
+  const openSettings = () =>
+    router.navigate({ pathname: '/exercises/[id]', params: { id: entry.exercise.id } });
+  const openProgress = () =>
+    router.navigate({
+      pathname: '/progress/[exerciseId]',
+      params: { exerciseId: entry.exercise.id },
+    });
+
   const actions: SheetAction[] = [
     ...(canSwap
       ? [{ label: 'Swap exercise', icon: 'swap-horizontal' as const, onPress: swap }]
       : []),
+    { label: 'Rest and rep range', icon: 'timer-outline', onPress: openSettings },
+    { label: 'Progress', icon: 'stats-chart-outline', onPress: openProgress },
     { label: 'Remove exercise', icon: 'trash-outline', destructive: true, onPress: confirmRemove },
   ];
 
@@ -136,7 +148,7 @@ export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Prop
         />
       </View>
       <LastTimeLine entry={entry} />
-      <ReadyToGoHeavierLine entry={entry} />
+      <ReadyToGoHeavierLine entry={entry} onPress={openSettings} />
       {(entry.sets.length > 0 || hasPlanned) && (
         <View style={styles.sets}>
           {entry.sets.map((set, index) =>
@@ -407,18 +419,31 @@ function LastTimeLine({ entry }: { entry: EntryToLog }) {
 }
 
 // Shown when every working Set of the Exercise's last session reached the top
-// of its rep range.
-function ReadyToGoHeavierLine({ entry }: { entry: EntryToLog }) {
+// of its rep range. Tapping it opens the Exercise, where that range is kept
+// and the rule is spelled out, so the hint explains itself.
+function ReadyToGoHeavierLine({ entry, onPress }: { entry: EntryToLog; onPress: () => void }) {
   const { colors } = useAppTheme();
   if (!entry.readyToGoHeavier) return null;
 
   return (
-    <View style={[styles.ready, { backgroundColor: colors.primarySoft }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="Opens this exercise's rep range, which the hint goes by"
+      // Drawn as a pill; touched like a button 48 high.
+      hitSlop={10}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.ready,
+        { backgroundColor: colors.primarySoft },
+        pressed && styles.pressed,
+      ]}
+    >
       <Ionicons name="trending-up" size={16} color={colors.onPrimarySoft} />
       <AppText variant="label" style={{ color: colors.onPrimarySoft }}>
         Ready to go heavier
       </AppText>
-    </View>
+      <Ionicons name="chevron-forward" size={14} color={colors.onPrimarySoft} />
+    </Pressable>
   );
 }
 
