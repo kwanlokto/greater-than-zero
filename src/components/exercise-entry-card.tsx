@@ -29,6 +29,9 @@ import { setLabels } from '@/workout-labels';
 type Props = {
   entry: EntryToLog;
   displayUnit: WeightUnit;
+  // In a finished Workout, opened from History: there it's mostly read, so
+  // the row for another Set waits behind a button.
+  finished?: boolean;
 };
 
 // The key to give each card. Swapping the Exercise starts its card afresh, so
@@ -40,14 +43,15 @@ export function entryCardKey(entry: Pick<EntryToLog, 'id' | 'exercise'>): string
 
 // One Exercise in a Workout: its Sets, each open to correction, the Sets still
 // planned, and a row to log another one.
-export function ExerciseEntryCard({ entry, displayUnit }: Props) {
+export function ExerciseEntryCard({ entry, displayUnit, finished = false }: Props) {
   const router = useRouter();
   const { colors } = useAppTheme();
   const { trackingType } = entry.exercise;
   const [editingSetId, setEditingSetId] = useState<string>();
   const [menuOpen, setMenuOpen] = useState(false);
   // While Sets are still planned, the row for another one waits behind a
-  // button, so a long Workout is less to scroll through.
+  // button, so a long Workout is less to scroll through. In a finished
+  // Workout it waits there too, so a stray tap can't add a Set to History.
   const [addingAnother, setAddingAnother] = useState(false);
   // After logging, the weight and the warm-up mark stay; reps clear, so a stray
   // tap can't log a duplicate Set. "Same as last set" is for repeating one.
@@ -55,6 +59,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
   const labels = setLabels(entry.sets, entry.plannedSets);
   const { hint } = setPresentationFor[trackingType];
   const hasPlanned = entry.plannedSets.length > 0;
+  const rowWaits = (hasPlanned || finished) && !addingAnother;
 
   async function logSet() {
     const { values } = next;
@@ -164,7 +169,7 @@ export function ExerciseEntryCard({ entry, displayUnit }: Props) {
           ))}
         </View>
       )}
-      {hasPlanned && !addingAnother ? (
+      {rowWaits ? (
         <Button
           variant="ghost"
           size="small"

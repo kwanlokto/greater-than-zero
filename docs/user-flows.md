@@ -18,7 +18,7 @@ IDs are permanent. A new screen or dialog takes the next free number, and a remo
 | S08 | Progress tab | `/progress` | `src/app/(tabs)/progress.tsx` |
 | S09 | Workout in progress | `/workout` | `src/app/workout/index.tsx` |
 | S10 | Choose exercise: add to or swap in a Workout | `/workout/choose-exercise` | `src/app/workout/choose-exercise.tsx` |
-| S11 | Past Workout | `/workout/[id]` | `src/app/workout/[id].tsx` |
+| S11 | Past Workout: repeat it, or correct it | `/workout/[id]` | `src/app/workout/[id].tsx` |
 | S12 | Day | `/day/[date]` | `src/app/day/[date].tsx` |
 | S13 | Meal | `/meals/[id]` | `src/app/meals/[id].tsx` |
 | S14 | Add food: choose how | `/meals/choose-food` | `src/app/meals/choose-food.tsx` |
@@ -140,7 +140,7 @@ flowchart LR
   S09 -.->|the first time a Workout starts| D18{{"D18 Notification permission"}}
 ```
 
-S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab. Hiding it goes "back" to where it was opened, or to S05 after S38, whose place the Workout takes. Finishing or discarding it closes everything above the tabs and shows S05. A backfilled Workout goes to the S12 it was added to instead, opening it if it isn't underneath. The header's button is Discard until a Set is logged and Finish after. The dotted line to D18 is a question that comes up on its own. Nothing is asked after a Workout finishes.
+S09 opens from S01, S05, S11, S12, S38 and the Workout bar on any tab. Hiding it goes "back" to where it was opened, or to S05 after S38 or S11: the Workout takes S38's place, and a repeat from S11 closes History's screens before it opens. Finishing or discarding it closes everything above the tabs and shows S05. A backfilled Workout goes to the S12 it was added to instead, opening it if it isn't underneath. The header's button is Discard until a Set is logged and Finish after. The dotted line to D18 is a question that comes up on its own. Nothing is asked after a Workout finishes.
 
 ### History
 
@@ -157,12 +157,15 @@ flowchart TD
   S11 -->|an Exercise's ⋯| D06{{"D06 Exercise actions"}}
   D06 -->|Swap exercise| S10
   S10 -->|pick an Exercise| S11
-  S11 -->|Repeat this workout| S09
+  S11 -->|Repeat this workout: opens over S05| S09
+  S11 -->|Go to the workout in progress| S09
   S11 -->|its title| S40["S40 Choose Category"]
   S40 -->|pick one, add one, or No category| S11
   S11 -->|Delete workout| D08{{"D08 Delete this workout?"}}
   D08 -->|Delete| S12
 ```
+
+S11 also opens from S05's Done card, and a deleted Workout goes back to where it was opened: S12 or S05.
 
 ### Meals
 

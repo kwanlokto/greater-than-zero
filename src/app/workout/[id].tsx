@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Button } from '@/components/button';
+import { Card } from '@/components/card';
 import { EmptyState } from '@/components/empty-state';
 import { ExerciseEntryCard, entryCardKey } from '@/components/exercise-entry-card';
 import { Screen } from '@/components/screen';
@@ -14,9 +15,10 @@ import { useTrackerQuery } from '@/use-tracker-query';
 import { useWorkoutInProgress } from '@/use-workout-in-progress';
 import { finishedWorkoutWhen, workoutName } from '@/workout-labels';
 
-// A finished Workout opened from History, corrected with the same tools as
-// during a Workout. It keeps its date and stays finished; there's no rest. It
-// can be repeated: started again today, with what was logged planned.
+// A finished Workout, opened from History or from Today's Done card. Repeating
+// it comes first: started again today, with what was logged planned. It can
+// also be corrected with the same tools as during a Workout; it keeps its date
+// and stays finished, and there's no rest.
 export default function PastWorkoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -54,7 +56,12 @@ export default function PastWorkoutScreen() {
     const started = await runOrAlert("Couldn't start the workout", () =>
       tracker.startWorkout({ repeatOf: workout.id }),
     );
-    if (started) router.push('/workout');
+    if (!started) return;
+    // The new Workout sits on Today, not on this old one: History's screens
+    // close first, so hiding it never lands back here.
+    router.dismissAll();
+    router.navigate('/');
+    router.push('/workout');
   };
 
   return (
@@ -69,8 +76,29 @@ export default function PastWorkoutScreen() {
       <AppText tone="muted" style={styles.times}>
         {finishedWorkoutWhen(workout)}
       </AppText>
+      {workoutInProgress === null && (
+        <Button icon="repeat" label="Repeat this workout" onPress={repeat} />
+      )}
+      {/* One Workout at a time, so repeating waits for the one in progress.
+          The Workout bar is on the tabs, so this is the way back to it. */}
+      {workoutInProgress && (
+        <Card>
+          <AppText tone="muted">Finish the workout in progress to repeat this one.</AppText>
+          <Button
+            variant="tonal"
+            icon="barbell-outline"
+            label="Go to the workout in progress"
+            onPress={() => router.navigate('/workout')}
+          />
+        </Card>
+      )}
       {workout.entries.map(entry => (
-        <ExerciseEntryCard key={entryCardKey(entry)} entry={entry} displayUnit={displayUnit} />
+        <ExerciseEntryCard
+          key={entryCardKey(entry)}
+          entry={entry}
+          displayUnit={displayUnit}
+          finished
+        />
       ))}
       <Button
         variant="secondary"
@@ -81,15 +109,6 @@ export default function PastWorkoutScreen() {
           router.push({ pathname: '/workout/choose-exercise', params: { workoutId: workout.id } })
         }
       />
-      {/* One Workout at a time, so repeating waits for the one in progress. */}
-      {workoutInProgress === null && (
-        <Button variant="secondary" icon="repeat" label="Repeat this workout" onPress={repeat} />
-      )}
-      {workoutInProgress && (
-        <AppText tone="muted" style={styles.times}>
-          Finish the workout in progress to repeat this one.
-        </AppText>
-      )}
       <Button variant="ghost" destructive label="Delete workout" onPress={confirmDelete} />
     </Screen>
   );
