@@ -5,6 +5,7 @@ import {
   backfillTitle,
   finishedWorkoutWhen,
   lastDone,
+  setLabels,
   workoutExercises,
   workoutName,
 } from './workout-labels';
@@ -62,6 +63,18 @@ describe('Workout labels', () => {
     expect(lastDone('2026-11-02', '2026-11-16')).toBe('2 Nov');
     // Across a change of the clocks, and a month's end.
     expect(lastDone('2026-10-29', '2026-11-04')).toBe('6 days ago');
+  });
+
+  it('marks warm-ups W and numbers working Sets among themselves, planned ones following', () => {
+    const warmUp = { isWarmUp: true };
+    const working = { isWarmUp: false };
+
+    expect(setLabels([warmUp, working, warmUp, working])).toEqual(['W', '1', 'W', '2']);
+    expect(setLabels([warmUp, working], [working, working])).toEqual(['W', '1', '2', '3']);
+    // A repeat brings its warm-ups along as planned Sets.
+    expect(setLabels([], [warmUp, working, working])).toEqual(['W', '1', '2']);
+    expect(setLabels([working], [warmUp, working])).toEqual(['1', 'W', '2']);
+    expect(setLabels([])).toEqual([]);
   });
 
   it('names the day a backfilled Workout is for', () => {

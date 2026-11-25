@@ -9,7 +9,7 @@ import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { Chip } from '@/components/chip';
 import { IconButton } from '@/components/icon-button';
-import { SetFields, setLabels, setPresentationFor, useSetFields } from '@/components/set-fields';
+import { SetFields, setPresentationFor, useSetFields } from '@/components/set-fields';
 import { Toggle } from '@/components/toggle';
 import {
   canSwapExercise,
@@ -24,6 +24,7 @@ import { tracker } from '@/database';
 import { formatLocalDate } from '@/dates';
 import { confirmThenRun, runOrAlert } from '@/run-or-alert';
 import { minTouch, radius, space, useAppTheme } from '@/theme';
+import { setLabels } from '@/workout-labels';
 
 type Props = {
   entry: EntryToLog;

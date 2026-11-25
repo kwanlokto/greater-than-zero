@@ -1,5 +1,17 @@
-import { dayNumberOf, type Workout } from '@/core/tracker';
+import { dayNumberOf, type PlannedSet, type Workout, type WorkoutSet } from '@/core/tracker';
 import { formatLocalDate, formatLocalDateWithWeekday, formatTimeOfDay } from '@/dates';
+
+// The mark at the start of each Set's row: W for a warm-up, and the working
+// Sets numbered among themselves. Any planned Sets follow, numbered on from the
+// logged ones, a planned warm-up marked W too.
+export function setLabels(
+  sets: Pick<WorkoutSet, 'isWarmUp'>[],
+  planned: Pick<PlannedSet, 'isWarmUp'>[] = [],
+): string[] {
+  let working = 0;
+  const label = (set: { isWarmUp: boolean }) => (set.isWarmUp ? 'W' : String(++working));
+  return [...sets.map(label), ...planned.map(label)];
+}
 
 // When a Workout took place, e.g. "6:00 PM – 7:05 PM". A backfilled one's
 // times are only when it was entered, so they aren't shown.

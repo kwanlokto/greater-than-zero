@@ -3,10 +3,9 @@ import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { Card } from '@/components/card';
-import { setLabels } from '@/components/set-fields';
 import { describeSet, type ExerciseEntry, type Workout } from '@/core/tracker';
 import { radius, space, useAppTheme } from '@/theme';
-import { workoutName, workoutTimes } from '@/workout-labels';
+import { setLabels, workoutName, workoutTimes } from '@/workout-labels';
 
 type Props = {
   workout: Workout;
